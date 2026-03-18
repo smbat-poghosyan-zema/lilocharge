@@ -1,0 +1,24 @@
+# Docker ignore for API build
+node_modules
+dist
+.turbo
+*.log
+.env
+.env.*
+!.env.example
+coverage
+*.tsbuildinfo
+.DS_Store
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.git
+.github
+README.md
+jest.config.js
+tsconfig.json
+.eslintrc.json
+.prettierrc.json
+test

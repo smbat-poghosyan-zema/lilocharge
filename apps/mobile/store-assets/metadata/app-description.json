@@ -1,0 +1,33 @@
+{
+  "appName": {
+    "hy": "LiloCharge",
+    "ru": "LiloCharge",
+    "en": "LiloCharge"
+  },
+  "subtitle": {
+    "hy": "Էլեկտրամոբիլի լիցքավորում Հայաստանում",
+    "ru": "Зарядка электромобилей в Армении",
+    "en": "EV Charging in Armenia"
+  },
+  "shortDescription": {
+    "hy": "Գտեք և օգտագործեք էլեկտրական լիցքավորման կայաններ ամբողջ Հայաստանում: Իրական ժամանակում տեղեկություններ կայանների մատչելիության և գների մասին:",
+    "ru": "Найдите и используйте зарядные станции для электромобилей по всей Армении. Информация о доступности станций и ценах в режиме реального времени.",
+    "en": "Find and use EV charging stations across Armenia. Real-time information on station availability and pricing."
+  },
+  "fullDescription": {
+    "hy": "LiloCharge-ը Հայաստանի առաջատար հարթակն է էլեկտրամոբիլների լիցքավորման համար:\n\nՀիմնական հնարավորություններ:\n\n🗺️ Ինտերակտիվ քարտեզ\n• Գտեք մոտակա լիցքավորման կայանները\n• Իրական ժամանակում տեղեկություններ մատչելիության մասին\n• Ֆիլտրեր միակցիչի տիպի, հզորության և ցանցի մատակարարի համար\n\n⚡ Պարզ լիցքավորում\n• Սկանավորեք QR կոդը կայանում\n• Սկսեք և կանգնեցրեք լիցքավորումը հեռախոսից\n• Իրական ժամանակում լիցքավորման նորություններ\n\n💳 Ապահով վճարումներ\n• Ապահով վճարում ArCa և Idram-ի միջոցով\n• Apple Pay և Google Pay աջակցություն\n• Մանրամասն անդոմագրեր բոլոր սեսիաների համար\n\n📊 Լիցքավորման պատմություն\n• Դիտեք ձեր բոլոր լիցքավորումները\n• Վերլուծեք էներգիայի սպառումը\n• Արտահանեք հաշվետվություններ\n\n🔔 Հուշումներ\n• Ծանուցումներ լիցքավորման ավարտի մասին\n• Տեղեկացումներ նոր կայանների մասին\n• Սպասարկման և պլանավորված աշխատանքների թարմացումներ\n\n🌍 Բազմալեզու\n• Հայերեն, Ռուսերեն, Անգլերեն\n\nՇրջակա միջավայրի պահպանում սկսվում է LiloCharge-ից: Ներբեռնեք հիմա և միացեք Հայաստանի էլեկտրական հեղափոխությանը:",
+    "ru": "LiloCharge — ведущая платформа для зарядки электромобилей в Армении.\n\nОсновные функции:\n\n🗺️ Интерактивная карта\n• Найдите ближайшие зарядные станции\n• Информация о доступности в реальном времени\n• Фильтры по типу разъема, мощности и оператору сети\n\n⚡ Простая зарядка\n• Отсканируйте QR-код на станции\n• Запускайте и останавливайте зарядку с телефона\n• Обновления зарядки в реальном времени\n\n💳 Безопасные платежи\n• Безопасная оплата через ArCa и Idram\n• Поддержка Apple Pay и Google Pay\n• Подробные квитанции для всех сеансов\n\n📊 История зарядки\n• Просматривайте все свои сеансы зарядки\n• Анализируйте потребление энергии\n• Экспортируйте отчеты\n\n🔔 Уведомления\n• Оповещения о завершении зарядки\n• Информация о новых станциях\n• Обновления о техобслуживании и запланированных работах\n\n🌍 Многоязычность\n• Армянский, Русский, Английский\n\nЗабота об окружающей среде начинается с LiloCharge. Скачайте сейчас и присоединяйтесь к электрической революции в Армении!",
+    "en": "LiloCharge is Armenia's leading platform for electric vehicle charging.\n\nKey Features:\n\n🗺️ Interactive Map\n• Find nearby charging stations\n• Real-time availability information\n• Filters for connector type, power, and network operator\n\n⚡ Easy Charging\n• Scan QR code at station\n• Start and stop charging from your phone\n• Real-time charging updates\n\n💳 Secure Payments\n• Safe payment via ArCa and Idram\n• Apple Pay and Google Pay support\n• Detailed receipts for all sessions\n\n📊 Charging History\n• View all your charging sessions\n• Analyze energy consumption\n• Export reports\n\n🔔 Notifications\n• Alerts when charging completes\n• Information about new stations\n• Maintenance and scheduled work updates\n\n🌍 Multilingual\n• Armenian, Russian, English\n\nCaring for the environment starts with LiloCharge. Download now and join Armenia's electric revolution!"
+  },
+  "promotionalText": {
+    "hy": "Էլեկտրամոբիլի լիցքավորումը այժմ ավելի հեշտ է Հայաստանում: Միացեք ավելի քան 1000 օգտատերերին:",
+    "ru": "Зарядка электромобиля теперь проще в Армении. Присоединяйтесь к более чем 1000 пользователям!",
+    "en": "EV charging is now easier in Armenia. Join over 1000 users today!"
+  },
+  "whatsNew": {
+    "version": "1.0.0",
+    "hy": "🎉 Առաջին թողարկում!\n\n• Լիցքավորման կայանների ինտերակտիվ քարտեզ\n• Իրական ժամանակում մատչելիության տեղեկություններ\n• QR կոդի սկանավորում արագ սկսելու համար\n• Ապահով վճարումներ ArCa, Idram, Apple Pay և Google Pay-ով\n• Լիցքավորման պատմություն և վերլուծություններ\n• Հուշումներ և ծանուցումներ\n• Հայերեն, Ռուսերեն և Անգլերեն լեզուներ",
+    "ru": "🎉 Первый релиз!\n\n• Интерактивная карта зарядных станций\n• Информация о доступности в реальном времени\n• Сканирование QR-кода для быстрого запуска\n• Безопасные платежи через ArCa, Idram, Apple Pay и Google Pay\n• История зарядки и аналитика\n• Push-уведомления\n• Поддержка армянского, русского и английского языков",
+    "en": "🎉 First Release!\n\n• Interactive charging station map\n• Real-time availability information\n• QR code scanning for quick start\n• Secure payments via ArCa, Idram, Apple Pay, and Google Pay\n• Charging history and analytics\n• Push notifications\n• Armenian, Russian, and English language support"
+  }
+}

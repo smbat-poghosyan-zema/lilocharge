@@ -1,0 +1,14 @@
+{
+  "name": "@lilocharge/shared-utils",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "echo \"No tests yet\"",
+    "lint": "eslint . --ext .ts --max-warnings 0",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist coverage"
+  }
+}

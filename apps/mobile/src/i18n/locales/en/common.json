@@ -1,0 +1,220 @@
+{
+  "tabs": {
+    "stations": {
+      "title": "Stations"
+    },
+    "favorites": {
+      "title": "Favorites"
+    },
+    "profile": {
+      "title": "Profile"
+    }
+  },
+  "favorites": {
+    "title": "Favorite Stations",
+    "subtitle": "Quick access to the stations you use most.",
+    "empty": "You have not saved any favorite stations yet.",
+    "actions": {
+      "remove": "Remove"
+    }
+  },
+  "stations": {
+    "title": "Charging Stations",
+    "subtitle": "Find nearby stations and check availability.",
+    "map": {
+      "loading": "Refreshing stations...",
+      "refreshError": "Failed to refresh station data.",
+      "missingToken": "Map is unavailable. Set the EXPO_PUBLIC_MAPBOX_TOKEN environment variable.",
+      "camera": {
+        "focusSelected": "Selected station",
+        "recenter": "Recenter map"
+      },
+      "offline": {
+        "download": "Download offline map",
+        "idle": "Offline map has not been downloaded yet",
+        "inProgress": "Offline map download in progress...",
+        "success": "Offline map download completed",
+        "error": "Offline map download failed"
+      },
+      "search": {
+        "label": "Station search",
+        "placeholder": "Search stations by name or address",
+        "clear": "Clear"
+      },
+      "filters": {
+        "title": "Filters",
+        "toggle": "Filters",
+        "toggleHide": "Hide Filters",
+        "clear": "Clear",
+        "connectorTypesLabel": "Connector types",
+        "powerLabel": "Power",
+        "powerAny": "Any power",
+        "powerAnyShort": "Any",
+        "powerFrom": "{{value}}+ kW",
+        "availabilityLabel": "Availability",
+        "operatorsLabel": "Operators"
+      },
+      "sheet": {
+        "close": "Close",
+        "operatorLabel": "Operator",
+        "addressLabel": "Address",
+        "distanceLabel": "Distance",
+        "distanceUnavailable": "Not available",
+        "openingHoursLabel": "Hours",
+        "openingHoursUnavailable": "Not available",
+        "connectorsTitle": "Connectors",
+        "reviewsTitle": "Reviews",
+        "detailLoading": "Loading station details...",
+        "detailError": "Failed to load station details.",
+        "noConnectors": "No connectors available",
+        "noPricing": "Pricing not available",
+        "noReviews": "No reviews yet",
+        "reviewWithoutComment": "No comment",
+        "reviewSummary": "{{rating}}/5 · {{count}} reviews",
+        "viewDetails": "Open full details",
+        "saveFavorite": "Save",
+        "removeFavorite": "Remove",
+        "filteredLabel": "Filtered",
+        "pricingPerKwh": "{{amount}}/kWh",
+        "pricingPerMinute": "{{amount}}/min",
+        "pricingSessionFee": "{{amount}} session fee",
+        "pricingIdleFee": "{{amount}} idle fee",
+        "status": {
+          "available": "Available",
+          "occupied": "Occupied",
+          "offline": "Offline",
+          "maintenance": "Maintenance"
+        }
+      }
+    }
+  },
+  "profile": {
+    "title": "Profile",
+    "subtitle": "Manage your preferences and notifications.",
+    "apiBaseUrl": "API: {{url}}"
+  },
+  "onboarding": {
+    "login": {
+      "title": "Welcome back",
+      "subtitle": "Sign in to your LiloCharge account.",
+      "fields": {
+        "email": "Email",
+        "password": "Password"
+      },
+      "actions": {
+        "signIn": "Sign in",
+        "submitting": "Signing in...",
+        "goToRegister": "Don't have an account? Sign up"
+      },
+      "errors": {
+        "invalidEmail": "Enter a valid email address",
+        "passwordRequired": "Enter your password",
+        "loginFailed": "Invalid email or password"
+      }
+    },
+    "registration": {
+      "title": "Create your account",
+      "subtitle": "Register to start charging with LiloCharge.",
+      "fields": {
+        "displayName": "Full name",
+        "email": "Email",
+        "phone": "Phone number",
+        "phonePlaceholder": "+37477123456",
+        "password": "Password"
+      },
+      "actions": {
+        "continue": "Send verification code",
+        "submitting": "Sending...",
+        "goToLogin": "Already have an account? Sign in"
+      },
+      "errors": {
+        "displayNameRequired": "Enter your full name",
+        "invalidEmail": "Enter a valid email address",
+        "invalidPhone": "Enter a valid phone number (+374...)",
+        "passwordTooShort": "Password must be at least 8 characters",
+        "requestFailed": "Failed to send verification code"
+      }
+    },
+    "verifyPhone": {
+      "title": "Verify your phone",
+      "subtitle": "Enter the 6-digit code sent to {{phone}}.",
+      "missingRegistration": "Registration details are missing. Start again.",
+      "fields": {
+        "code": "Verification code",
+        "codePlaceholder": "123456"
+      },
+      "actions": {
+        "verify": "Verify and continue",
+        "submitting": "Verifying...",
+        "backToRegistration": "Back to registration"
+      },
+      "errors": {
+        "invalidCode": "Code must be exactly 6 digits",
+        "verifyFailed": "Failed to verify code"
+      }
+    },
+    "vehicle": {
+      "title": "Add your vehicle",
+      "subtitle": "This helps us match compatible connectors and charging power.",
+      "missingUser": "Account data is missing. Return to registration.",
+      "fields": {
+        "make": "Make (e.g. Kia)",
+        "model": "Model (e.g. EV6)",
+        "year": "Model year",
+        "batteryCapacity": "Battery capacity (kWh)",
+        "maxChargePower": "Max charging power (kW)",
+        "connectorType": "Connector type (optional)"
+      },
+      "actions": {
+        "save": "Save vehicle",
+        "submitting": "Saving...",
+        "skip": "Skip this step",
+        "backToRegistration": "Back to registration"
+      },
+      "errors": {
+        "makeRequired": "Enter your vehicle make",
+        "modelRequired": "Enter your vehicle model",
+        "invalidYear": "Enter a valid year",
+        "invalidBatteryCapacity": "Enter a valid battery capacity",
+        "invalidMaxChargePower": "Enter a valid power value",
+        "createFailed": "Failed to save vehicle"
+      },
+      "connectorTypes": {
+        "CCS": "CCS",
+        "CHADEMO": "CHAdeMO",
+        "TYPE_1": "Type 1",
+        "TYPE_2": "Type 2",
+        "TESLA": "Tesla",
+        "GBT": "GB/T"
+      }
+    },
+    "payment": {
+      "title": "Payment method",
+      "subtitle": "Choose a payment method now or skip and add it later.",
+      "methods": {
+        "ARCA": "ArCa cards",
+        "IDRAM": "Idram wallet",
+        "APPLE_PAY": "Apple Pay",
+        "GOOGLE_PAY": "Google Pay"
+      },
+      "actions": {
+        "finish": "Finish onboarding",
+        "submitting": "Processing...",
+        "skip": "Skip payment setup"
+      },
+      "applePay": {
+        "lineItemLabel": "LiloCharge payment method setup"
+      },
+      "googlePay": {
+        "lineItemLabel": "LiloCharge payment method setup"
+      },
+      "errors": {
+        "applePaySetupFailed": "Failed to activate Apple Pay.",
+        "applePayUnavailable": "Apple Pay is unavailable on this device.",
+        "googlePaySetupFailed": "Failed to activate Google Pay.",
+        "googlePayUnavailable": "Google Pay is unavailable on this device.",
+        "missingUser": "Account data is missing. Return to registration."
+      }
+    }
+  }
+}

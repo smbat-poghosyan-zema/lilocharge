@@ -1,0 +1,219 @@
+{
+  "tabs": {
+    "stations": {
+      "title": "Կայաններ"
+    },
+    "favorites": {
+      "title": "Սիրված"
+    },
+    "profile": {
+      "title": "Անձնական"
+    }
+  },
+  "favorites": {
+    "title": "Սիրված կայաններ",
+    "subtitle": "Արագ մուտք դեպի ձեր հաճախ օգտագործվող կայանները:",
+    "empty": "Դուք դեռ չեք պահպանել սիրելի կայաններ:",
+    "actions": {
+      "remove": "Հեռացնել"
+    }
+  },
+  "stations": {
+    "title": "Լիցքավորման կայաններ",
+    "subtitle": "Գտեք մոտակա կայանները և ստուգեք հասանելիությունը:",
+    "map": {
+      "loading": "Թարմացվում են կայանները...",
+      "refreshError": "Կայանների տվյալների թարմացումը չհաջողվեց:",
+      "missingToken": "Քարտեզը հասանելի չէ: Սահմանեք EXPO_PUBLIC_MAPBOX_TOKEN միջավայրի փոփոխականը։",
+      "camera": {
+        "focusSelected": "Ընտրված կայանը",
+        "recenter": "Վերակենտրոնացնել քարտեզը"
+      },
+      "offline": {
+        "download": "Ներբեռնել offline քարտեզ",
+        "idle": "Offline քարտեզը դեռ չի ներբեռնվել",
+        "inProgress": "Offline քարտեզը ներբեռնվում է...",
+        "success": "Offline քարտեզի ներբեռնումն ավարտված է",
+        "error": "Offline քարտեզի ներբեռնումը ձախողվեց"
+      },
+      "search": {
+        "label": "Կայանի որոնում",
+        "placeholder": "Որոնել կայան՝ անունով կամ հասցեով",
+        "clear": "Մաքրել"
+      },
+      "filters": {
+        "title": "Զտիչներ",
+        "toggle": "Զտիչներ",
+        "toggleHide": "Թաքցնել զտիչները",
+        "connectorTypesLabel": "Միակցիչներ",
+        "powerLabel": "Հզորություն",
+        "powerAny": "Ցանկացած հզորություն",
+        "powerAnyShort": "Բոլորը",
+        "powerFrom": "{{value}}+ kW",
+        "availabilityLabel": "Հասանելիություն",
+        "operatorsLabel": "Օպերատորներ"
+      },
+      "sheet": {
+        "close": "Փակել",
+        "operatorLabel": "Օպերատոր",
+        "addressLabel": "Հասցե",
+        "distanceLabel": "Հեռավորություն",
+        "distanceUnavailable": "Տվյալներ չկան",
+        "openingHoursLabel": "Աշխատաժամեր",
+        "openingHoursUnavailable": "Տվյալներ չկան",
+        "connectorsTitle": "Միակցիչներ",
+        "reviewsTitle": "Կարծիքներ",
+        "detailLoading": "Կայանի մանրամասները բեռնվում են...",
+        "detailError": "Չհաջողվեց բեռնել կայանի մանրամասները",
+        "noConnectors": "Միակցիչներ առկա չեն",
+        "noPricing": "Սակագնային տվյալներ չկան",
+        "noReviews": "Կարծիքներ դեռ չկան",
+        "reviewWithoutComment": "Մեկնաբանություն չկա",
+        "reviewSummary": "{{rating}}/5 · {{count}} կարծիք",
+        "viewDetails": "Բացել ամբողջ էջը",
+        "saveFavorite": "Պահպանել",
+        "removeFavorite": "Հեռացնել",
+        "filteredLabel": "Զտված",
+        "pricingPerKwh": "{{amount}}/kWh",
+        "pricingPerMinute": "{{amount}}/րոպե",
+        "pricingSessionFee": "{{amount}} սեսիայի վճար",
+        "pricingIdleFee": "{{amount}} սպասման վճար",
+        "status": {
+          "available": "Հասանելի",
+          "occupied": "Զբաղված",
+          "offline": "Անհասանելի",
+          "maintenance": "Սպասարկում"
+        }
+      }
+    }
+  },
+  "profile": {
+    "title": "Անձնական հաշիվ",
+    "subtitle": "Կառավարեք նախընտրությունները և ծանուցումները:",
+    "apiBaseUrl": "API: {{url}}"
+  },
+  "onboarding": {
+    "login": {
+      "title": "Բարի վերադարձ",
+      "subtitle": "Մուտք գործեք ձեր LiloCharge հաշիվ:",
+      "fields": {
+        "email": "Էլ. հասցե",
+        "password": "Գաղտնաբառ"
+      },
+      "actions": {
+        "signIn": "Մուտք գործել",
+        "submitting": "Մուտք...",
+        "goToRegister": "Հաշիվ չունե՞ք: Գրանցվեք"
+      },
+      "errors": {
+        "invalidEmail": "Մուտքագրեք վավեր էլ. հասցե",
+        "passwordRequired": "Մուտքագրեք գաղտնաբառը",
+        "loginFailed": "Սխալ էլ. հասցե կամ գաղտնաբառ"
+      }
+    },
+    "registration": {
+      "title": "Ստեղծեք հաշիվ",
+      "subtitle": "Գրանցվեք, որպեսզի սկսեք լիցքավորել LiloCharge-ով:",
+      "fields": {
+        "displayName": "Անուն և ազգանուն",
+        "email": "Էլ. հասցե",
+        "phone": "Հեռախոսահամար",
+        "phonePlaceholder": "+37477123456",
+        "password": "Գաղտնաբառ"
+      },
+      "actions": {
+        "continue": "Ստանալ հաստատման կոդը",
+        "submitting": "Ուղարկվում է...",
+        "goToLogin": "Արդեն հաշիվ ունե՞ք: Մուտք գործեք"
+      },
+      "errors": {
+        "displayNameRequired": "Մուտքագրեք անունը և ազգանունը",
+        "invalidEmail": "Մուտքագրեք վավեր էլ. հասցե",
+        "invalidPhone": "Մուտքագրեք վավեր հեռախոսահամար (+374...)",
+        "passwordTooShort": "Գաղտնաբառը պետք է առնվազն 8 նիշ լինի",
+        "requestFailed": "Չհաջողվեց ուղարկել հաստատման կոդը"
+      }
+    },
+    "verifyPhone": {
+      "title": "Հաստատեք հեռախոսահամարը",
+      "subtitle": "Մուտքագրեք 6 նիշ կոդը, ուղարկված {{phone}} համարին:",
+      "missingRegistration": "Գրանցման տվյալներ չեն գտնվել: Սկսեք սկզբից:",
+      "fields": {
+        "code": "Հաստատման կոդ",
+        "codePlaceholder": "123456"
+      },
+      "actions": {
+        "verify": "Հաստատել և շարունակել",
+        "submitting": "Ստուգվում է...",
+        "backToRegistration": "Վերադառնալ գրանցմանը"
+      },
+      "errors": {
+        "invalidCode": "Կոդը պետք է լինի 6 թվանշան",
+        "verifyFailed": "Չհաջողվեց հաստատել կոդը"
+      }
+    },
+    "vehicle": {
+      "title": "Ավելացրեք մեքենան",
+      "subtitle": "Սա կօգնի առաջարկել ճիշտ միակցիչներ և հզորություն:",
+      "missingUser": "Հաշվի տվյալներ չեն գտնվել: Վերադարձեք գրանցման փուլ:",
+      "fields": {
+        "make": "Մակնիշ (օր.՝ Kia)",
+        "model": "Մոդել (օր.՝ EV6)",
+        "year": "Թողարկման տարեթիվ",
+        "batteryCapacity": "Մարտկոցի տարողություն (kWh)",
+        "maxChargePower": "Առավելագույն լիցքավորման հզորություն (kW)",
+        "connectorType": "Միակցիչի տեսակ (ըստ ցանկության)"
+      },
+      "actions": {
+        "save": "Պահպանել մեքենան",
+        "submitting": "Պահպանվում է...",
+        "skip": "Բաց թողնել այս քայլը",
+        "backToRegistration": "Վերադառնալ գրանցմանը"
+      },
+      "errors": {
+        "makeRequired": "Մուտքագրեք մեքենայի մակնիշը",
+        "modelRequired": "Մուտքագրեք մեքենայի մոդելը",
+        "invalidYear": "Մուտքագրեք վավեր տարեթիվ",
+        "invalidBatteryCapacity": "Մուտքագրեք վավեր մարտկոցի տարողություն",
+        "invalidMaxChargePower": "Մուտքագրեք վավեր հզորություն",
+        "createFailed": "Չհաջողվեց պահպանել մեքենան"
+      },
+      "connectorTypes": {
+        "CCS": "CCS",
+        "CHADEMO": "CHAdeMO",
+        "TYPE_1": "Type 1",
+        "TYPE_2": "Type 2",
+        "TESLA": "Tesla",
+        "GBT": "GB/T"
+      }
+    },
+    "payment": {
+      "title": "Վճարման եղանակ",
+      "subtitle": "Ընտրեք վճարման եղանակ կամ բաց թողեք և ավելացրեք ավելի ուշ:",
+      "methods": {
+        "ARCA": "ArCa քարտեր",
+        "IDRAM": "Idram դրամապանակ",
+        "APPLE_PAY": "Apple Pay",
+        "GOOGLE_PAY": "Google Pay"
+      },
+      "actions": {
+        "finish": "Ավարտել onboarding-ը",
+        "submitting": "Մշակվում է...",
+        "skip": "Բաց թողնել վճարումը"
+      },
+      "applePay": {
+        "lineItemLabel": "LiloCharge վճարման եղանակի ակտիվացում"
+      },
+      "googlePay": {
+        "lineItemLabel": "LiloCharge վճարման եղանակի ակտիվացում"
+      },
+      "errors": {
+        "applePaySetupFailed": "Չհաջողվեց ակտիվացնել Apple Pay-ը:",
+        "applePayUnavailable": "Apple Pay-ը հասանելի չէ այս սարքում:",
+        "googlePaySetupFailed": "Չհաջողվեց ակտիվացնել Google Pay-ը:",
+        "googlePayUnavailable": "Google Pay-ը հասանելի չէ այս սարքում:",
+        "missingUser": "Հաշվի տվյալներ չեն գտնվել: Վերադարձրեք գրանցման փուլը:"
+      }
+    }
+  }
+}

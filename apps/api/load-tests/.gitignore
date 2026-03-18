@@ -1,0 +1,7 @@
+# Load test results
+results/
+*.json
+*.txt
+
+# k6 output
+summary.json

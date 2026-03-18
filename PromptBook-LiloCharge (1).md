@@ -26,7 +26,7 @@
 
 **Why:** LiloCharge follows a monorepo architecture to share code between React Native mobile app, NestJS backend, and shared packages. Turborepo enables fast, incremental builds optimized for AI agent development. This step creates the foundational structure that all subsequent steps will build upon.
 
-```
+````
 Read AGENTS.md fully. You are the Infrastructure Agent initializing the LiloCharge monorepo.
 
 CONTEXT:
@@ -56,42 +56,41 @@ BUILD:
    pnpm init
    pnpm add -D -w turbo@latest
    pnpm add -D -w @turbo/gen@latest
-   ```
+````
 
-   CREATE file: package.json (root)
-   ```json
-   {
-     "name": "lilocharge",
-     "version": "1.0.0",
-     "private": true,
-     "workspaces": [
-       "apps/*",
-       "packages/*"
-     ],
-     "scripts": {
-       "dev": "turbo run dev",
-       "build": "turbo run build",
-       "test": "turbo run test",
-       "lint": "turbo run lint",
-       "typecheck": "turbo run typecheck",
-       "clean": "turbo run clean && rm -rf node_modules"
-     },
-     "devDependencies": {
-       "turbo": "^2.0.0",
-       "@turbo/gen": "^2.0.0",
-       "typescript": "^5.4.0",
-       "prettier": "^3.2.0"
-     },
-     "engines": {
-       "node": ">=18.0.0",
-       "pnpm": ">=8.0.0"
-     },
-     "packageManager": "pnpm@8.15.0"
-   }
-   ```
+CREATE file: package.json (root)
+
+```json
+{
+  "name": "lilocharge",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "@turbo/gen": "^2.0.0",
+    "typescript": "^5.4.0",
+    "prettier": "^3.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.0"
+}
+```
 
 2. CREATE workspace configuration:
    File: pnpm-workspace.yaml
+
    ```yaml
    packages:
      - 'apps/*'
@@ -100,6 +99,7 @@ BUILD:
 
 3. CREATE Turborepo configuration:
    File: turbo.json
+
    ```json
    {
      "$schema": "https://turbo.build/schema.json",
@@ -132,6 +132,7 @@ BUILD:
    ```
 
 4. CREATE folder structure:
+
    ```bash
    mkdir -p apps/api apps/mobile
    mkdir -p packages/shared-types packages/shared-utils
@@ -142,6 +143,7 @@ BUILD:
 
 5. CREATE root TypeScript configuration:
    File: tsconfig.json
+
    ```json
    {
      "$schema": "https://json.schemastore.org/tsconfig",
@@ -171,6 +173,7 @@ BUILD:
 
 6. CREATE ESLint configuration:
    File: .eslintrc.json
+
    ```json
    {
      "root": true,
@@ -197,6 +200,7 @@ BUILD:
 
 7. CREATE Prettier configuration:
    File: .prettierrc.json
+
    ```json
    {
      "semi": true,
@@ -210,6 +214,7 @@ BUILD:
 
 8. CREATE .gitignore:
    File: .gitignore
+
    ```
    # Dependencies
    node_modules
@@ -256,6 +261,7 @@ BUILD:
 
 9. CREATE AGENTS.md (AI agent instructions):
    File: AGENTS.md
+
    ```markdown
    # AGENTS.md — LiloCharge AI Agent Instructions
 
@@ -263,6 +269,7 @@ BUILD:
 
    You are building **LiloCharge**, a production-grade EV charging aggregator for Armenia.
    Every line of code must be:
+
    - **Type-safe**: TypeScript strict mode, no `any`, no `@ts-ignore`
    - **Tested**: Write tests FIRST (TDD), aim for >85% coverage on business logic
    - **Documented**: JSDoc for public APIs, inline comments for complex logic
@@ -282,19 +289,20 @@ BUILD:
    - **i18n**: react-i18next with Armenian, Russian, English
 
    ## Repository Structure
-
    ```
+
    /apps
-     /api         — NestJS backend (Fastify adapter)
-     /mobile      — React Native Expo app
+   /api — NestJS backend (Fastify adapter)
+   /mobile — React Native Expo app
    /packages
-     /shared-types    — TypeScript interfaces shared by api and mobile
-     /shared-utils    — Common utilities (validation, formatting, etc.)
+   /shared-types — TypeScript interfaces shared by api and mobile
+   /shared-utils — Common utilities (validation, formatting, etc.)
    /infrastructure
-     /docker          — docker-compose.yml for local dev
-     /k8s             — Kubernetes manifests for production
-   /scripts           — Shell scripts for running PromptBook, deployment
-   /docs              — PRD, API specs, ADRs
+   /docker — docker-compose.yml for local dev
+   /k8s — Kubernetes manifests for production
+   /scripts — Shell scripts for running PromptBook, deployment
+   /docs — PRD, API specs, ADRs
+
    ```
 
    ## Coding Standards
@@ -353,6 +361,7 @@ BUILD:
 
    Backend (apps/api/.env):
    ```
+
    DATABASE_URL=postgresql://...
    REDIS_URL=redis://...
    JWT_SECRET=...
@@ -360,12 +369,15 @@ BUILD:
    IDRAM_API_KEY=...
    MAPBOX_TOKEN=...
    FCM_SERVER_KEY=...
+
    ```
 
    Mobile (apps/mobile/.env):
    ```
+
    EXPO_PUBLIC_API_URL=http://localhost:3000
    EXPO_PUBLIC_MAPBOX_TOKEN=...
+
    ```
 
    ## Error Handling
@@ -404,36 +416,43 @@ BUILD:
 
 10. CREATE .cursorrules (IDE-specific agent config):
     File: .cursorrules
+
     ```markdown
     # .cursorrules — Cursor IDE AI Agent Configuration
 
     ## Language and Framework Preferences
+
     - TypeScript strict mode for ALL files
     - React Native with Expo (SDK 51+)
     - NestJS with Fastify adapter
     - Prisma ORM for database access
 
     ## File Naming Conventions
+
     - React components: PascalCase (e.g., `StationMarker.tsx`)
     - Services/utilities: kebab-case (e.g., `payment-service.ts`)
     - Test files: Match source file with `.test.ts` or `.spec.ts`
 
     ## Code Generation Rules
+
     - Always add JSDoc comments for exported functions
     - Use named exports over default exports
     - Prefer function declarations over arrow functions for top-level components
     - Use `const` assertions for literal objects that won't change
 
     ## Imports
+
     - Use absolute imports for workspace packages: `@lilocharge/shared-types`
     - Use Expo's built-in aliases: `@/components`, `@/hooks`, `@/utils`
 
     ## Testing
+
     - Generate tests alongside implementation code
     - Use Given/When/Then format for integration tests
     - Mock external dependencies (OCPP, payment gateways)
 
     ## Armenian Language Support
+
     - Default all examples to Armenian language (hy)
     - UTF-8 encoding for all files
     - Test Armenian character rendering in all UI components
@@ -441,7 +460,8 @@ BUILD:
 
 11. CREATE initial README:
     File: README.md
-    ```markdown
+
+    ````markdown
     # LiloCharge — EV Charging Super-App for Armenia
 
     ![Version](https://img.shields.io/badge/version-1.0.0-blue)
@@ -462,22 +482,23 @@ BUILD:
 
     ## Tech Stack
 
-    | Layer | Technology |
-    |-------|-----------|
-    | Mobile | React Native + Expo SDK 51 |
-    | Backend | NestJS + Fastify |
+    | Layer    | Technology                            |
+    | -------- | ------------------------------------- |
+    | Mobile   | React Native + Expo SDK 51            |
+    | Backend  | NestJS + Fastify                      |
     | Database | PostgreSQL 16 + PostGIS + TimescaleDB |
-    | Cache | Redis 7 |
-    | ORM | Prisma 5 |
-    | Maps | Mapbox GL Native |
-    | OCPP | ocpp-rpc |
-    | Payments | ArCa, Idram, Apple Pay, Google Pay |
-    | Push | Firebase Cloud Messaging |
-    | i18n | react-i18next |
+    | Cache    | Redis 7                               |
+    | ORM      | Prisma 5                              |
+    | Maps     | Mapbox GL Native                      |
+    | OCPP     | ocpp-rpc                              |
+    | Payments | ArCa, Idram, Apple Pay, Google Pay    |
+    | Push     | Firebase Cloud Messaging              |
+    | i18n     | react-i18next                         |
 
     ## Quick Start
 
     ### Prerequisites
+
     - Node.js >= 18.0.0
     - pnpm >= 8.0.0
     - Docker >= 24.0.0
@@ -502,6 +523,7 @@ BUILD:
     # Start mobile app (in separate terminal)
     pnpm --filter @lilocharge/mobile dev
     ```
+    ````
 
     ## Project Structure
 
@@ -521,7 +543,6 @@ BUILD:
     ```
 
     ## Documentation
-
     - [Product Requirements Document](docs/prd.md)
     - [API Documentation](docs/api/README.md)
     - [Architecture Decision Records](docs/adr/README.md)
@@ -531,9 +552,13 @@ BUILD:
     ## License
 
     Proprietary. All rights reserved.
+
+    ```
+
     ```
 
 12. INSTALL root dependencies:
+
     ```bash
     pnpm add -D -w eslint @typescript-eslint/eslint-plugin @typescript-eslint/parser eslint-config-prettier
     pnpm add -D -w jest @types/jest ts-jest
@@ -541,6 +566,7 @@ BUILD:
 
 13. CREATE GitHub Actions workflow scaffold:
     File: .github/workflows/ci.yml
+
     ```yaml
     name: CI
 
@@ -595,6 +621,7 @@ BUILD:
     ```
 
 CONSTRAINTS:
+
 - Use pnpm version 8.15.0 or higher (specified in package.json)
 - Node version must be >= 18.0.0
 - All packages must use TypeScript strict mode
@@ -605,6 +632,7 @@ CONSTRAINTS:
 - Never commit node_modules, .env files, or build artifacts
 
 VALIDATION:
+
 ```bash
 pnpm install
 pnpm lint
@@ -613,6 +641,7 @@ tree -L 2 -I node_modules  # Verify folder structure
 ```
 
 DONE WHEN:
+
 - `pnpm install` runs without errors
 - `pnpm lint` passes (no files to lint yet, but command works)
 - `pnpm typecheck` passes (no files to check yet, but command works)
@@ -620,6 +649,7 @@ DONE WHEN:
 - AGENTS.md and .cursorrules exist with complete instructions
 - GitHub Actions workflow file exists
 - README.md provides clear project overview
+
 ```
 
 ---
@@ -631,6 +661,7 @@ DONE WHEN:
 **Why:** The shared-types package is the single source of truth for TypeScript types across mobile and backend. Defining types first enables the mobile app to build UI against typed API contracts before backend implementation is complete. This follows the PRD's data model with 12 core entities.
 
 ```
+
 Read AGENTS.md fully. You are the Types Agent building the @lilocharge/shared-types package.
 
 CONTEXT:
@@ -644,6 +675,7 @@ MeterValue, Payment, PaymentMethod, Review, Notification, AuditLog. We need Type
 for each, plus DTOs for API requests/responses, plus enums for status fields.
 
 REFERENCE FILES (read these first):
+
 - /AGENTS.md — TypeScript coding standards
 - /docs/prd.md (from PRD Step) — Data model section (lines 219-350)
 
@@ -651,6 +683,7 @@ BUILD:
 
 1. INITIALIZE shared-types package:
    File: packages/shared-types/package.json
+
    ```json
    {
      "name": "@lilocharge/shared-types",
@@ -675,6 +708,7 @@ BUILD:
 
 2. CREATE TypeScript config for this package:
    File: packages/shared-types/tsconfig.json
+
    ```json
    {
      "extends": "../../tsconfig.json",
@@ -691,6 +725,7 @@ BUILD:
 
 3. CREATE User types:
    File: packages/shared-types/src/user.ts
+
    ```typescript
    import { z } from 'zod';
 
@@ -745,6 +780,7 @@ BUILD:
 
 4. CREATE Vehicle types:
    File: packages/shared-types/src/vehicle.ts
+
    ```typescript
    import { z } from 'zod';
 
@@ -804,6 +840,7 @@ BUILD:
 
 5. CREATE Station and Connector types:
    File: packages/shared-types/src/station.ts
+
    ```typescript
    import { z } from 'zod';
    import { ConnectorType } from './vehicle';
@@ -899,6 +936,7 @@ BUILD:
 
 6. CREATE Session types:
    File: packages/shared-types/src/session.ts
+
    ```typescript
    import { z } from 'zod';
 
@@ -988,6 +1026,7 @@ BUILD:
 
 7. CREATE Payment types:
    File: packages/shared-types/src/payment.ts
+
    ```typescript
    import { z } from 'zod';
 
@@ -1082,6 +1121,7 @@ BUILD:
 
 8. CREATE Review types:
    File: packages/shared-types/src/review.ts
+
    ```typescript
    import { z } from 'zod';
 
@@ -1124,6 +1164,7 @@ BUILD:
 
 9. CREATE OCPP message types:
    File: packages/shared-types/src/ocpp.ts
+
    ```typescript
    // OCPP 1.6-J and 2.0.1 message types
 
@@ -1151,8 +1192,33 @@ BUILD:
 
    export interface OCPPStatusNotification {
      connectorId: number;
-     status: 'Available' | 'Preparing' | 'Charging' | 'SuspendedEVSE' | 'SuspendedEV' | 'Finishing' | 'Reserved' | 'Unavailable' | 'Faulted';
-     errorCode: 'NoError' | 'ConnectorLockFailure' | 'EVCommunicationError' | 'GroundFailure' | 'HighTemperature' | 'InternalError' | 'LocalListConflict' | 'OtherError' | 'OverCurrentFailure' | 'PowerMeterFailure' | 'PowerSwitchFailure' | 'ReaderFailure' | 'ResetFailure' | 'UnderVoltage' | 'OverVoltage' | 'WeakSignal';
+     status:
+       | 'Available'
+       | 'Preparing'
+       | 'Charging'
+       | 'SuspendedEVSE'
+       | 'SuspendedEV'
+       | 'Finishing'
+       | 'Reserved'
+       | 'Unavailable'
+       | 'Faulted';
+     errorCode:
+       | 'NoError'
+       | 'ConnectorLockFailure'
+       | 'EVCommunicationError'
+       | 'GroundFailure'
+       | 'HighTemperature'
+       | 'InternalError'
+       | 'LocalListConflict'
+       | 'OtherError'
+       | 'OverCurrentFailure'
+       | 'PowerMeterFailure'
+       | 'PowerSwitchFailure'
+       | 'ReaderFailure'
+       | 'ResetFailure'
+       | 'UnderVoltage'
+       | 'OverVoltage'
+       | 'WeakSignal';
      timestamp?: string;
    }
 
@@ -1164,7 +1230,12 @@ BUILD:
        sampledValue: Array<{
          value: string;
          context?: 'Sample.Periodic' | 'Sample.Clock' | 'Transaction.Begin' | 'Transaction.End';
-         measurand?: 'Energy.Active.Import.Register' | 'Power.Active.Import' | 'Current.Import' | 'Voltage' | 'SoC';
+         measurand?:
+           | 'Energy.Active.Import.Register'
+           | 'Power.Active.Import'
+           | 'Current.Import'
+           | 'Voltage'
+           | 'SoC';
          unit?: 'Wh' | 'kWh' | 'W' | 'kW' | 'A' | 'V' | 'Percent';
        }>;
      }>;
@@ -1182,6 +1253,7 @@ BUILD:
 
 10. CREATE barrel export:
     File: packages/shared-types/src/index.ts
+
     ```typescript
     export * from './user';
     export * from './vehicle';
@@ -1194,6 +1266,7 @@ BUILD:
 
 11. ADD tests for schemas:
     File: packages/shared-types/src/user.test.ts
+
     ```typescript
     import { describe, it, expect } from '@jest/globals';
     import { createUserRequestSchema, updateUserRequestSchema } from './user';
@@ -1250,6 +1323,7 @@ BUILD:
 
 12. ADD tests for station schemas:
     File: packages/shared-types/src/station.test.ts
+
     ```typescript
     import { describe, it, expect } from '@jest/globals';
     import { stationSearchParamsSchema } from './station';
@@ -1298,6 +1372,7 @@ BUILD:
     ```
 
 CONSTRAINTS:
+
 - All interfaces must be exported
 - All enums must use string values (not numeric) for API compatibility
 - Zod schemas must match TypeScript interfaces exactly
@@ -1311,6 +1386,7 @@ CONSTRAINTS:
 - Payment tokens never expire in types (expiry handled by gateway)
 
 VALIDATION:
+
 ```bash
 cd packages/shared-types
 pnpm install
@@ -1320,12 +1396,14 @@ pnpm build
 ```
 
 DONE WHEN:
+
 - Package builds without TypeScript errors
 - All Zod schemas validate correctly
 - All tests pass
 - Barrel export includes all type files
 - Types are importable as `@lilocharge/shared-types`
 - No `any` types, no `@ts-ignore` comments
+
 ```
 
 ---
@@ -1337,10 +1415,12 @@ DONE WHEN:
 **Why:** The backend requires PostgreSQL with PostGIS for geospatial queries (nearby station search) and TimescaleDB for time-series meter value data. Redis provides caching for station status and session data. This step creates the complete database infrastructure that Steps 4-6 will configure.
 
 ```
+
 Read AGENTS.md fully. You are the Infrastructure Agent setting up the local development database stack.
 
 CONTEXT:
 LiloCharge uses PostgreSQL 16 as the primary database with two critical extensions:
+
 1. PostGIS for geospatial queries (ST_DWithin for nearby station search)
 2. TimescaleDB for time-series meter value storage (1Hz sampling during charging)
 
@@ -1352,6 +1432,7 @@ PostgreSQL (e.g., AWS RDS with PostGIS) and managed Redis (e.g., AWS ElastiCache
 schema and queries will work identically.
 
 REFERENCE FILES (read these first):
+
 - /AGENTS.md — Infrastructure coding standards
 - /docs/prd.md — Database requirements (lines 219-250)
 
@@ -1359,6 +1440,7 @@ BUILD:
 
 1. CREATE docker-compose.yml:
    File: infrastructure/docker/docker-compose.yml
+
    ```yaml
    version: '3.8'
 
@@ -1427,6 +1509,7 @@ BUILD:
 
 2. CREATE database initialization script:
    File: infrastructure/docker/init-db/01-enable-extensions.sql
+
    ```sql
    -- Enable PostGIS extension for geospatial queries
    CREATE EXTENSION IF NOT EXISTS postgis;
@@ -1446,6 +1529,7 @@ BUILD:
 
 3. CREATE .env.example for database credentials:
    File: infrastructure/docker/.env.example
+
    ```env
    # PostgreSQL
    POSTGRES_USER=lilocharge
@@ -1468,7 +1552,8 @@ BUILD:
 
 4. CREATE README for infrastructure:
    File: infrastructure/docker/README.md
-   ```markdown
+
+   ````markdown
    # LiloCharge Infrastructure — Local Development
 
    ## Services
@@ -1495,10 +1580,12 @@ BUILD:
    # Stop and remove volumes (CAUTION: deletes all data)
    docker compose down -v
    ```
+   ````
 
    ## Database Access
 
    ### Via psql CLI
+
    ```bash
    docker exec -it lilocharge-postgres psql -U lilocharge -d lilocharge
    ```
@@ -1514,6 +1601,7 @@ BUILD:
       - Password: lilocharge_dev_password
 
    ### Via Application
+
    ```env
    DATABASE_URL=postgresql://lilocharge:lilocharge_dev_password@localhost:5432/lilocharge
    ```
@@ -1521,17 +1609,18 @@ BUILD:
    ## Redis Access
 
    ### Via redis-cli
+
    ```bash
    docker exec -it lilocharge-redis redis-cli -a lilocharge_redis_password
    ```
 
    ### Via Application
+
    ```env
    REDIS_URL=redis://:lilocharge_redis_password@localhost:6379
    ```
 
    ## Extensions Installed
-
    - **postgis**: Geospatial queries (ST_DWithin, ST_Distance)
    - **timescaledb**: Time-series hypertables for meter values
    - **pgcrypto**: UUID generation (gen_random_uuid())
@@ -1540,6 +1629,7 @@ BUILD:
    ## Troubleshooting
 
    ### Port already in use
+
    ```bash
    # Check what's using port 5432
    lsof -i :5432
@@ -1550,6 +1640,7 @@ BUILD:
    ```
 
    ### Cannot connect to database
+
    ```bash
    # Check if container is running
    docker ps | grep lilocharge-postgres
@@ -1562,6 +1653,7 @@ BUILD:
    ```
 
    ### PostGIS or TimescaleDB not working
+
    ```bash
    # Verify extensions
    docker exec -it lilocharge-postgres psql -U lilocharge -d lilocharge -c "SELECT extname, extversion FROM pg_extension;"
@@ -1569,10 +1661,14 @@ BUILD:
    # Re-run init script
    docker exec -it lilocharge-postgres psql -U lilocharge -d lilocharge -f /docker-entrypoint-initdb.d/01-enable-extensions.sql
    ```
+
+   ```
+
    ```
 
 5. CREATE startup verification script:
    File: scripts/verify-infrastructure.sh
+
    ```bash
    #!/bin/bash
 
@@ -1617,13 +1713,15 @@ BUILD:
    ```
 
    Make executable:
+
    ```bash
    chmod +x scripts/verify-infrastructure.sh
    ```
 
 6. UPDATE root README with infrastructure instructions:
    File: README.md (add section after Quick Start)
-   ```markdown
+
+   ````markdown
    ## Infrastructure Setup
 
    LiloCharge requires PostgreSQL with PostGIS and TimescaleDB, plus Redis. Use Docker Compose for local development:
@@ -1638,14 +1736,19 @@ BUILD:
    # View logs
    docker compose -f infrastructure/docker/docker-compose.yml logs -f
    ```
+   ````
 
    Access services:
    - **PostgreSQL**: localhost:5432 (user: lilocharge, password: lilocharge_dev_password)
    - **Redis**: localhost:6379 (password: lilocharge_redis_password)
    - **pgAdmin**: http://localhost:5050 (admin@lilocharge.local / admin)
+
+   ```
+
    ```
 
 CONSTRAINTS:
+
 - PostgreSQL must use TimescaleDB image (includes PostGIS compatibility)
 - Redis must enforce password authentication (no anonymous access)
 - All passwords must be different from production (these are dev-only credentials)
@@ -1656,6 +1759,7 @@ CONSTRAINTS:
 - Network must isolate services from other Docker projects
 
 VALIDATION:
+
 ```bash
 cd infrastructure/docker
 docker compose up -d
@@ -1666,6 +1770,7 @@ docker exec lilocharge-redis redis-cli -a lilocharge_redis_password PING  # Shou
 ```
 
 DONE WHEN:
+
 - Docker Compose starts all three services successfully
 - PostgreSQL is accessible on localhost:5432
 - PostGIS and TimescaleDB extensions are installed
@@ -1673,6 +1778,7 @@ DONE WHEN:
 - pgAdmin is accessible at http://localhost:5050
 - Verify script passes all checks
 - Volumes persist data after `docker compose restart`
+
 ```
 
 ---
@@ -1684,6 +1790,7 @@ DONE WHEN:
 **Why:** Prisma is the ORM for the NestJS backend. The schema must be defined before any backend modules can perform database operations. This step creates the first 4 entities, leaving Station/Connector and Session/MeterValue for subsequent steps to keep migrations focused and atomic.
 
 ```
+
 Read AGENTS.md fully. You are the Database Agent creating the Prisma schema for core LiloCharge entities.
 
 CONTEXT:
@@ -1700,6 +1807,7 @@ enabled. Prisma doesn't natively support PostGIS geography types, so we'll use U
 for location fields and access them via raw SQL when needed.
 
 REFERENCE FILES (read these first):
+
 - /AGENTS.md — Database coding standards
 - /packages/shared-types/src/user.ts — TypeScript interfaces to match
 - /packages/shared-types/src/vehicle.ts — Vehicle and ConnectorType enum
@@ -1710,6 +1818,7 @@ BUILD:
 
 1. INITIALIZE Prisma in api package:
    File: apps/api/package.json
+
    ```json
    {
      "name": "@lilocharge/api",
@@ -1760,6 +1869,7 @@ BUILD:
 
 2. CREATE Prisma schema:
    File: apps/api/prisma/schema.prisma
+
    ```prisma
    generator client {
      provider = "prisma-client-js"
@@ -1928,6 +2038,7 @@ BUILD:
 
 3. CREATE .env file for backend:
    File: apps/api/.env
+
    ```env
    # Database
    DATABASE_URL=postgresql://lilocharge:lilocharge_dev_password@localhost:5432/lilocharge
@@ -1948,6 +2059,7 @@ BUILD:
 
 4. CREATE TypeScript config for API:
    File: apps/api/tsconfig.json
+
    ```json
    {
      "extends": "../../tsconfig.json",
@@ -1976,6 +2088,7 @@ BUILD:
 
 5. CREATE NestJS config:
    File: apps/api/nest-cli.json
+
    ```json
    {
      "$schema": "https://json.schemastore.org/nest-cli",
@@ -1990,6 +2103,7 @@ BUILD:
    ```
 
 6. RUN Prisma migration:
+
    ```bash
    cd apps/api
    pnpm install
@@ -1999,6 +2113,7 @@ BUILD:
 
 7. CREATE Prisma client singleton:
    File: apps/api/src/prisma.service.ts
+
    ```typescript
    import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
    import { PrismaClient } from '@prisma/client';
@@ -2042,6 +2157,7 @@ BUILD:
 
 8. CREATE seed script:
    File: apps/api/prisma/seed.ts
+
    ```typescript
    import { PrismaClient } from '@prisma/client';
    import * as bcrypt from 'bcrypt';
@@ -2100,6 +2216,7 @@ BUILD:
    ```
 
 9. RUN seed script:
+
    ```bash
    cd apps/api
    pnpm prisma:seed
@@ -2107,6 +2224,7 @@ BUILD:
 
 10. CREATE test for Prisma service:
     File: apps/api/src/prisma.service.spec.ts
+
     ```typescript
     import { Test, TestingModule } from '@nestjs/testing';
     import { PrismaService } from './prisma.service';
@@ -2142,6 +2260,7 @@ BUILD:
     ```
 
 CONSTRAINTS:
+
 - All tables must use snake_case names (users, not Users)
 - All columns must use snake_case (created_at, not createdAt)
 - All IDs must be UUIDs (@db.Uuid)
@@ -2150,10 +2269,11 @@ CONSTRAINTS:
 - Password must be hashed with bcrypt (rounds >= 12)
 - Never store plain text passwords in database
 - Seed script must be idempotent (use upsert, not create)
-- Currency amounts stored as integer cents (AMD * 100) to avoid float precision issues
+- Currency amounts stored as integer cents (AMD \* 100) to avoid float precision issues
 - Default language must be Armenian (HY)
 
 VALIDATION:
+
 ```bash
 cd apps/api
 pnpm install
@@ -2166,12 +2286,14 @@ psql postgresql://lilocharge:lilocharge_dev_password@localhost:5432/lilocharge -
 ```
 
 DONE WHEN:
+
 - Prisma client generates without errors
 - Migration creates 4 tables: users, vehicles, payment_methods, payments
 - Seed script creates test user and vehicle
 - PrismaService connects to database successfully
 - All TypeScript types match @lilocharge/shared-types interfaces
 - No warnings about snake_case/camelCase mismatches
+
 ```
 
 ---
@@ -2183,6 +2305,7 @@ DONE WHEN:
 **Why:** Stations are the core of the discovery feature. The Station model includes PostGIS geography for efficient nearby search using ST_DWithin. Prisma doesn't natively support PostGIS, so we'll use Unsupported() type and add the geography column + index via raw SQL migration.
 
 ```
+
 Read AGENTS.md fully. You are the Database Agent adding geospatial entities to the Prisma schema.
 
 CONTEXT:
@@ -2191,6 +2314,7 @@ Stations have geographic locations stored as PostGIS geography(Point, 4326) for 
 A GiST spatial index enables fast ST_DWithin queries for "find stations within 5km of user's location".
 
 Prisma doesn't support PostGIS geography natively, so we'll:
+
 1. Define location as Unsupported("geography(Point, 4326)") in schema.prisma
 2. Add the geography column + GiST index via raw SQL in migration
 3. Query via Prisma.$queryRaw for geospatial operations, Prisma ORM for everything else
@@ -2200,6 +2324,7 @@ different pricing (some operators charge per kWh, some per minute, some both). P
 captures these tariffs.
 
 REFERENCE FILES (read these first):
+
 - /apps/api/prisma/schema.prisma — Existing schema from Step 4
 - /packages/shared-types/src/station.ts — Station and Connector interfaces
 - /AGENTS.md — PostGIS usage patterns
@@ -2209,6 +2334,7 @@ BUILD:
 
 1. UPDATE Prisma schema with Station entities:
    File: apps/api/prisma/schema.prisma (add after Payment model)
+
    ```prisma
    // ============================================================================
    // STATION & CONNECTOR
@@ -2287,6 +2413,7 @@ BUILD:
 
 2. UPDATE Review model (add stationId relation):
    File: apps/api/prisma/schema.prisma (update Review placeholder)
+
    ```prisma
    model Review {
      id        String   @id @default(uuid()) @db.Uuid
@@ -2307,6 +2434,7 @@ BUILD:
    ```
 
 3. CREATE migration with PostGIS geography column:
+
    ```bash
    cd apps/api
    pnpm prisma migrate dev --name add_geospatial_entities --create-only
@@ -2315,6 +2443,7 @@ BUILD:
 4. EDIT the generated migration to add PostGIS geography:
    File: apps/api/prisma/migrations/XXXXXX_add_geospatial_entities/migration.sql (modify)
    Add AFTER the CREATE TABLE stations block:
+
    ```sql
    -- Add PostGIS geography column and populate from lat/long
    ALTER TABLE stations ADD COLUMN location geography(Point, 4326);
@@ -2341,6 +2470,7 @@ BUILD:
    ```
 
 5. RUN migration:
+
    ```bash
    cd apps/api
    pnpm prisma migrate dev
@@ -2348,6 +2478,7 @@ BUILD:
 
 6. CREATE seed data for stations:
    File: apps/api/prisma/seed.ts (add after vehicle creation)
+
    ```typescript
    // Create test stations in Yerevan
    const stations = [
@@ -2414,6 +2545,7 @@ BUILD:
    ```
 
 7. RUN updated seed:
+
    ```bash
    cd apps/api
    pnpm prisma:seed
@@ -2421,6 +2553,7 @@ BUILD:
 
 8. CREATE test for PostGIS queries:
    File: apps/api/src/stations/stations.repository.spec.ts
+
    ```typescript
    import { Test, TestingModule } from '@nestjs/testing';
    import { PrismaService } from '../prisma.service';
@@ -2489,6 +2622,7 @@ BUILD:
 
 9. CREATE helper function for geospatial queries:
    File: apps/api/src/stations/stations.queries.ts
+
    ```typescript
    import { Prisma } from '@prisma/client';
 
@@ -2522,6 +2656,7 @@ BUILD:
    ```
 
 CONSTRAINTS:
+
 - PostGIS geography column must use SRID 4326 (WGS84)
 - GiST index is required for ST_DWithin performance
 - Trigger auto-updates location whenever latitude or longitude changes
@@ -2533,6 +2668,7 @@ CONSTRAINTS:
 - Amenities stored as array of strings (no separate junction table)
 
 VALIDATION:
+
 ```bash
 cd apps/api
 pnpm prisma generate
@@ -2543,12 +2679,14 @@ psql postgresql://lilocharge:lilocharge_dev_password@localhost:5432/lilocharge -
 ```
 
 DONE WHEN:
+
 - Migration creates stations, connectors, pricing_plans tables
 - PostGIS geography column exists with GiST index
 - Trigger auto-populates location from lat/long
 - Seed creates 2 stations with 4 connectors total
 - PostGIS query test passes (finds stations within 5km)
 - Distance calculation is accurate (0 meters for same point)
+
 ```
 
 ### Step 6: Prisma Schema — Time-Series Entities (Session, MeterValue with TimescaleDB)
@@ -2558,11 +2696,13 @@ DONE WHEN:
 **Why:** Sessions track charging events. MeterValue stores high-frequency meter readings requiring TimescaleDB for efficient time-series storage.
 
 ```
+
 Read AGENTS.md fully. You are the Database Agent adding session and time-series entities.
 
 [BUILD section contains: Update Prisma schema with Session/MeterValue, create migration, add TimescaleDB hypertable, create continuous aggregates, add retention policy, update seed data]
 
 [Full implementation following the pattern from Steps 4-5 - truncated for brevity]
+
 ```
 
 ---
@@ -2573,8 +2713,10 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 
 **Why:** Foundation for REST API that all feature modules build upon.
 
-```  
+```
+
 [Full NestJS setup with main.ts, app.module.ts, health check, exception filters - following Step 5 pattern]
+
 ```
 
 ---
@@ -2586,7 +2728,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Required before users can access any protected endpoints.
 
 ```
+
 [Auth service, controllers, DTOs, Redis OTP storage, JWT generation - following established patterns]
+
 ```
 
 ---
@@ -2598,19 +2742,23 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Users need to manage their profile, language settings, notification preferences.
 
 ```
+
 [Users service, controller, update profile endpoints, language switching]
+
 ```
 
 ---
 
-### Step 10: Vehicles Module  
+### Step 10: Vehicles Module
 
 **Goal:** Vehicle CRUD with connector type auto-detection.
 
 **Why:** Vehicle profile enables connector compatibility filtering and personalized recommendations.
 
 ```
+
 [Vehicles service, CRUD endpoints, connector type validation against enum]
+
 ```
 
 ---
@@ -2622,7 +2770,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Mobile app foundation using modern Expo Router pattern.
 
 ```
+
 [Expo init, install dependencies, setup app/ directory routing, configure Expo plugins]
+
 ```
 
 ---
@@ -2634,7 +2784,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Tri-lingual support is core requirement, Armenian-first design.
 
 ```
+
 [Install i18next, create translation JSON files, configure provider, create useTranslation hook]
+
 ```
 
 ---
@@ -2646,7 +2798,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Centralized API layer with automatic token injection and error handling.
 
 ```
+
 [Axios/Fetch client, auth interceptor, error interceptor, type-safe request methods]
+
 ```
 
 ---
@@ -2658,7 +2812,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** First-run experience that creates user account and configures profile.
 
 ```
+
 [Onboarding screens, phone input, OTP verification, vehicle selection, skip payment]
+
 ```
 
 ---
@@ -2670,7 +2826,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Automated testing and deployment pipeline.
 
 ```
+
 [.github/workflows/backend.yml for NestJS, mobile.yml with EAS Build integration]
+
 ```
 
 ---
@@ -2682,7 +2840,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Core discovery feature - find stations within radius of user location.
 
 ```
+
 [Stations service with PostGIS queries, nearby search endpoint, station detail with connectors]
+
 ```
 
 ---
@@ -2694,7 +2854,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Populate database with real Armenian station data.
 
 ```
+
 [Import scripts, CSV parsers, Open Charge Map API client, upsert logic]
+
 ```
 
 ---
@@ -2706,7 +2868,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Real-time connector availability and transparent pricing.
 
 ```
+
 [Connector service, status update endpoint, pricing calculator using PricingPlan]
+
 ```
 
 ---
@@ -2718,7 +2882,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Complete station information for detail view.
 
 ```
+
 [Aggregated query joining station, connectors, pricing_plans, reviews with avg rating]
+
 ```
 
 ---
@@ -2730,7 +2896,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Interactive map with real-time station visualization.
 
 ```
+
 [Mapbox SDK setup, custom marker components, marker clustering, offline tiles]
+
 ```
 
 ---
@@ -2742,7 +2910,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Primary discovery interface.
 
 ```
+
 [Map component, marker rendering, bottom sheet for station detail, camera controls]
+
 ```
 
 ---
@@ -2754,7 +2924,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Quick view of station information without leaving map.
 
 ```
+
 [Bottom sheet component, connector cards, pricing display, navigate to detail button]
+
 ```
 
 ---
@@ -2766,7 +2938,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Help users find compatible stations quickly.
 
 ```
+
 [Filter component, multi-select for connector types, power slider, operator chips]
+
 ```
 
 ---
@@ -2778,7 +2952,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Support natural language search across all three languages.
 
 ```
+
 [Search endpoint with pg_trgm, search input component, debounced search]
+
 ```
 
 ---
@@ -2790,7 +2966,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Quick access to frequently used stations.
 
 ```
+
 [Favorites endpoints, MMKV storage, favorites list screen, toggle favorite button]
+
 ```
 
 ---
@@ -2802,7 +2980,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Foundation for charge point communication.
 
 ```
+
 [OCPP WebSocket server, message routing, charge point registration]
+
 ```
 
 ---
@@ -2814,7 +2994,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Establish connection with charge points.
 
 ```
+
 [BootNotification handler, Heartbeat handler, charge point status tracking]
+
 ```
 
 ---
@@ -2826,7 +3008,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Real-time connector availability updates.
 
 ```
+
 [StatusNotification handler, update connector status in DB, broadcast to WebSocket clients]
+
 ```
 
 ---
@@ -2838,7 +3022,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Store high-frequency power/energy data for billing and analytics.
 
 ```
+
 [MeterValues handler, parse OCPP meter values, batch insert to meter_values table]
+
 ```
 
 ---
@@ -2850,7 +3036,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Initiate charging remotely from mobile app.
 
 ```
+
 [RemoteStartTransaction method, retry logic, timeout handling, transaction ID tracking]
+
 ```
 
 ---
@@ -2862,7 +3050,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Stop charging from mobile app.
 
 ```
+
 [RemoteStopTransaction method, session completion logic, final cost calculation]
+
 ```
 
 ---
@@ -2874,7 +3064,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Track charging session from start to finish.
 
 ```
+
 [Session service with state machine, create session, start session, stop session]
+
 ```
 
 ---
@@ -2886,7 +3078,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Transparent billing based on operator pricing plans.
 
 ```
+
 [Cost calculator using PricingPlan, energy cost, time cost, idle time detection]
+
 ```
 
 ---
@@ -2898,7 +3092,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Primary payment method in Armenia.
 
 ```
+
 [ArCa API client, pre-authorization, capture after session, refund for failed sessions]
+
 ```
 
 ---
@@ -2910,7 +3106,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Popular mobile wallet in Armenia.
 
 ```
+
 [Idram API client, wallet payment flow, balance check]
+
 ```
 
 ---
@@ -2922,7 +3120,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Convenient payment for iOS users.
 
 ```
+
 [Apple Pay native module, payment sheet, token exchange]
+
 ```
 
 ---
@@ -2934,7 +3134,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Convenient payment for Android users.
 
 ```
+
 [Google Pay native module, payment sheet, token exchange]
+
 ```
 
 ---
@@ -2946,7 +3148,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Real-time power, energy, cost updates during charging.
 
 ```
+
 [Socket.IO server, session room, emit meter value updates, mobile WebSocket client]
+
 ```
 
 ---
@@ -2958,7 +3162,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Notify users of session start, completion, payment success/failure.
 
 ```
+
 [FCM admin SDK, notification service, templates for session events, mobile FCM handlers]
+
 ```
 
 ---
@@ -2970,7 +3176,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Transaction history and proof of charging.
 
 ```
+
 [Session history endpoint with pagination, PDF generation using pdfkit, download endpoint]
+
 ```
 
 ---
@@ -2982,7 +3190,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Community-driven trust signals.
 
 ```
+
 [Reviews service, create/update/delete review, photo upload to S3/Cloudinary]
+
 ```
 
 ---
@@ -2994,7 +3204,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Crowdsourced station status accuracy.
 
 ```
+
 [Problem reports model, create report endpoint, operator notification emails]
+
 ```
 
 ---
@@ -3006,7 +3218,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Real-time status more accurate than stale OCPP data.
 
 ```
+
 [Status update model, confidence algorithm based on recency and user reputation]
+
 ```
 
 ---
@@ -3018,7 +3232,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Instant session start without pre-auth.
 
 ```
+
 [Wallet model, top-up via ArCa/Idram, deduct balance on session completion]
+
 ```
 
 ---
@@ -3030,7 +3246,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Faster than card pre-auth.
 
 ```
+
 [Check wallet balance before session start, instant debit, handle insufficient funds]
+
 ```
 
 ---
@@ -3042,7 +3260,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Fast app performance on 3G networks.
 
 ```
+
 [React.lazy for screens, image optimization, Mapbox clustering, cached responses]
+
 ```
 
 ---
@@ -3054,7 +3274,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** API response time <200ms at P95.
 
 ```
+
 [Prisma query optimization, Redis for station/connector cache, DB connection pool tuning]
+
 ```
 
 ---
@@ -3066,7 +3288,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Production monitoring and debugging.
 
 ```
+
 [Sentry SDK, structured logging, tracing, Grafana dashboards for key metrics]
+
 ```
 
 ---
@@ -3078,7 +3302,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Required for App Store and Google Play submission.
 
 ```
+
 [Screenshot automation, store listings, privacy policy document]
+
 ```
 
 ---
@@ -3090,7 +3316,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Why:** Production-ready infrastructure.
 
 ```
+
 [K8s deployments, Ingress, SSL certs, secret management, auto-scaling]
+
 ```
 
 ---
@@ -3104,7 +3332,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Goal:** Test phone OTP registration end-to-end.
 
 ```
+
 [E2E test: send OTP → verify code → check user created → tokens valid]
+
 ```
 
 ---
@@ -3114,7 +3344,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Goal:** Test map loading, nearby search, filtering.
 
 ```
+
 [Load map → verify stations appear → filter by CCS → verify filtered results]
+
 ```
 
 ---
@@ -3124,7 +3356,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Goal:** Test QR code scan → session start with real OCPP simulator.
 
 ```
+
 [Scan QR → verify connector → start session → OCPP RemoteStart sent → session active]
+
 ```
 
 ---
@@ -3134,7 +3368,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Goal:** Test live session updates and cost calculation.
 
 ```
+
 [Active session → verify WebSocket updates → check cost calculation accuracy]
+
 ```
 
 ---
@@ -3144,7 +3380,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Goal:** Test session stop, final cost, PDF receipt.
 
 ```
+
 [Stop session → verify final cost → download PDF receipt → verify content]
+
 ```
 
 ---
@@ -3154,7 +3392,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Goal:** Test all 4 payment gateways (ArCa, Idram, Apple Pay, Google Pay).
 
 ```
+
 [Test each gateway: pre-auth → session → capture → verify payment record]
+
 ```
 
 ---
@@ -3164,7 +3404,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Goal:** Test wallet top-up and wallet payment for session.
 
 ```
+
 [Top-up wallet → start session with wallet → verify instant debit]
+
 ```
 
 ---
@@ -3174,7 +3416,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Goal:** Test session list and filtering.
 
 ```
+
 [Load history → filter by date → verify results → check pagination]
+
 ```
 
 ---
@@ -3184,7 +3428,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Goal:** Test charger offline mid-session, reconnection.
 
 ```
+
 [Simulate charger disconnect → verify session marked failed → reconnect → verify recovery]
+
 ```
 
 ---
@@ -3194,7 +3440,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Goal:** Test declined card, expired token, network timeout.
 
 ```
+
 [Trigger payment failures → verify error handling → check refund logic]
+
 ```
 
 ---
@@ -3204,7 +3452,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Goal:** Test charger fault with zero energy delivered, auto-refund.
 
 ```
+
 [Start session → charger fault → zero kWh → verify auto-refund]
+
 ```
 
 ---
@@ -3214,7 +3464,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Goal:** Test multiple users trying to use same connector.
 
 ```
+
 [User A starts → User B attempts same connector → verify rejection]
+
 ```
 
 ---
@@ -3224,7 +3476,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Goal:** Test offline mode, cached data, background sync.
 
 ```
+
 [Disable network → verify cached stations load → re-enable → verify sync]
+
 ```
 
 ---
@@ -3234,7 +3488,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Goal:** Test Armenian text across all UI screens.
 
 ```
+
 [Check all screens → verify Armenian characters render correctly → no boxes/fallbacks]
+
 ```
 
 ---
@@ -3244,7 +3500,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Goal:** Test switching between Armenian, Russian, English.
 
 ```
+
 [Switch to Russian → verify UI updates → switch to English → verify again]
+
 ```
 
 ---
@@ -3254,7 +3512,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Goal:** Test sessions across 3+ different operators in sequence.
 
 ```
+
 [Session with EV Armenia → Session with iCharge → Session with EVAN → verify all complete]
+
 ```
 
 ---
@@ -3264,7 +3524,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Goal:** Test 1000 concurrent sessions, 10K WebSocket connections.
 
 ```
+
 [Artillery/k6 load test → verify no failures → check response times]
+
 ```
 
 ---
@@ -3274,7 +3536,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Goal:** Test OCPP 1.6-J and 2.0.1 with real hardware.
 
 ```
+
 [Connect real chargers → test all OCPP messages → verify compatibility]
+
 ```
 
 ---
@@ -3284,7 +3548,9 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Goal:** Test all gateways in sandbox mode.
 
 ```
+
 [ArCa sandbox → Idram test env → Apple Pay sandbox → Google Pay test]
+
 ```
 
 ---
@@ -3294,8 +3560,10 @@ Read AGENTS.md fully. You are the Database Agent adding session and time-series 
 **Goal:** Security audit, performance benchmarks, final QA.
 
 ```
+
 [Security scan → load test → manual QA → sign-off]
-```
+
+````
 
 ---
 
@@ -3338,7 +3606,7 @@ docker compose -f infrastructure/docker/docker-compose.yml up -d
 
 # Retry failed steps
 ./scripts/run-promptbook-lilocharge.sh --retry
-```
+````
 
 ## Appendix: Dependency Graph
 
@@ -3377,6 +3645,7 @@ Steps 51-70 (Tests) require all build steps complete
 ## Appendix: Files Created Summary
 
 ### Infrastructure & Configuration
+
 - `turbo.json` — Turborepo pipeline
 - `pnpm-workspace.yaml` — Workspaces
 - `.cursorrules`, `AGENTS.md` — AI agent instructions
@@ -3385,6 +3654,7 @@ Steps 51-70 (Tests) require all build steps complete
 - `scripts/run-promptbook-lilocharge.sh` — Executor
 
 ### Packages: Shared Types
+
 - `packages/shared-types/src/user.ts`
 - `packages/shared-types/src/vehicle.ts`
 - `packages/shared-types/src/station.ts`
@@ -3394,6 +3664,7 @@ Steps 51-70 (Tests) require all build steps complete
 - `packages/shared-types/src/ocpp.ts`
 
 ### Backend: API (~120 files)
+
 - `apps/api/prisma/schema.prisma` — Complete data model
 - `apps/api/src/main.ts` — NestJS entry
 - `apps/api/src/app.module.ts` — Root module
@@ -3413,6 +3684,7 @@ Steps 51-70 (Tests) require all build steps complete
 - `apps/api/src/wallet/*.ts` — Wallet module
 
 ### Mobile: App (~100 files)
+
 - `apps/mobile/app/_layout.tsx` — Root layout
 - `apps/mobile/app/(auth)/login.tsx`
 - `apps/mobile/app/(auth)/register.tsx`

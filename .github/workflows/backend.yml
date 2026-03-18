@@ -1,0 +1,80 @@
+name: Backend CI/CD
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'apps/api/**'
+      - 'packages/shared-types/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - '.github/workflows/backend.yml'
+  push:
+    branches: [main, develop]
+    paths:
+      - 'apps/api/**'
+      - 'packages/shared-types/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - '.github/workflows/backend.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Lint, Typecheck, Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared types
+        run: pnpm --filter @lilocharge/shared-types build
+
+      - name: Lint backend
+        run: pnpm --filter @lilocharge/api lint
+
+      - name: Typecheck backend
+        run: pnpm --filter @lilocharge/api typecheck
+
+      - name: Test backend
+        run: pnpm --filter @lilocharge/api test
+
+  deploy:
+    name: Trigger Backend Deployment
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.BACKEND_DEPLOY_WEBHOOK_URL != ''
+    runs-on: ubuntu-latest
+    env:
+      BACKEND_DEPLOY_WEBHOOK_TOKEN: ${{ secrets.BACKEND_DEPLOY_WEBHOOK_TOKEN }}
+      BACKEND_DEPLOY_WEBHOOK_URL: ${{ secrets.BACKEND_DEPLOY_WEBHOOK_URL }}
+    steps:
+      - name: Call backend deployment webhook
+        run: |
+          if [ -n "${BACKEND_DEPLOY_WEBHOOK_TOKEN}" ]; then
+            curl --fail --show-error --silent \
+              -X POST \
+              -H "Authorization: Bearer ${BACKEND_DEPLOY_WEBHOOK_TOKEN}" \
+              "${BACKEND_DEPLOY_WEBHOOK_URL}"
+          else
+            curl --fail --show-error --silent \
+              -X POST \
+              "${BACKEND_DEPLOY_WEBHOOK_URL}"
+          fi

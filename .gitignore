@@ -1,0 +1,50 @@
+# PromptBook runner state
+.promptbook-lilocharge-state.json
+.promptbook-lilocharge-pids
+.promptbook-cache/
+.promptbook-*-state.json
+.promptbook-*-cache/
+logs/
+
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build outputs
+dist
+build
+.next
+.turbo
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+.DS_Store
+
+# Testing
+coverage
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Expo
+.expo
+.expo-shared
+
+# Android
+*.apk
+*.aab
+
+# iOS
+*.ipa

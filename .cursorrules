@@ -1,0 +1,32 @@
+# .cursorrules - Cursor IDE AI Agent Configuration
+
+## Language and Framework Preferences
+- TypeScript strict mode for ALL files
+- React Native with Expo (SDK 51+)
+- NestJS with Fastify adapter
+- Prisma ORM for database access
+
+## File Naming Conventions
+- React components: PascalCase (e.g., `StationMarker.tsx`)
+- Services/utilities: kebab-case (e.g., `payment-service.ts`)
+- Test files: Match source file with `.test.ts` or `.spec.ts`
+
+## Code Generation Rules
+- Always add JSDoc comments for exported functions
+- Use named exports over default exports
+- Prefer function declarations over arrow functions for top-level components
+- Use `const` assertions for literal objects that won't change
+
+## Imports
+- Use absolute imports for workspace packages: `@lilocharge/shared-types`
+- Use Expo's built-in aliases: `@/components`, `@/hooks`, `@/utils`
+
+## Testing
+- Generate tests alongside implementation code
+- Use Given/When/Then format for integration tests
+- Mock external dependencies (OCPP, payment gateways)
+
+## Armenian Language Support
+- Default all examples to Armenian language (hy)
+- UTF-8 encoding for all files
+- Test Armenian character rendering in all UI components

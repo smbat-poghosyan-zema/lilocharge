@@ -1,0 +1,71 @@
+name: lilocharge-infra
+
+services:
+  postgres:
+    image: timescale/timescaledb-ha:pg16
+    container_name: lilocharge-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-lilocharge}
+      POSTGRES_USER: ${POSTGRES_USER:-lilocharge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lilocharge_dev_password}
+      TZ: ${TZ:-Asia/Yerevan}
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres_data:/home/postgres/pgdata/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - lilocharge-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: lilocharge-redis
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - lilocharge-network
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: lilocharge-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-dev@lilocharge.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-dev_password}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    ports:
+      - '${PGADMIN_PORT:-5050}:80'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - lilocharge-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  pgadmin_data:
+
+networks:
+  lilocharge-network:
+    name: lilocharge-network

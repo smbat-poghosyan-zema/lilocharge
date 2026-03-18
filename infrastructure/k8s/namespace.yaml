@@ -1,0 +1,9 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lilocharge
+  labels:
+    name: lilocharge
+    app.kubernetes.io/name: lilocharge
+    app.kubernetes.io/part-of: lilocharge-platform

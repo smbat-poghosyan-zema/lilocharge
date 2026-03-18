@@ -1,0 +1,20 @@
+{
+  "iosKeywords": {
+    "hy": "էլեկտրամոբիլ,լիցքավորում,EV,էլեկտրական,կայան,լիցքավորող,Հայաստան,քարտեզ,էներգիա,էկո,մաքուր,տրանսպորտ,ավտո,մեքենա,Tesla,էլեկտրո",
+    "ru": "электромобиль,зарядка,EV,электрический,станция,зарядная,Армения,карта,энергия,эко,чистый,транспорт,авто,машина,Tesla,электро",
+    "en": "electric vehicle,EV charging,charger,station,Armenia,map,energy,eco,clean,transport,car,Tesla,electric,power"
+  },
+  "androidKeywords": {
+    "hy": "էլեկտրամոբիլ, լիցքավորում, EV, էլեկտրական ավտոմեքենա, լիցքավորման կայան, Հայաստան, Երևան, էլեկտրո, էկո տրանսպորտ, էներգիա, մաքուր էներգիա, Tesla, էլեկտրական մեքենա, լիցքավորող, կանաչ էներգիա",
+    "ru": "электромобиль, зарядка, EV, электрический автомобиль, зарядная станция, Армения, Ереван, электро, эко транспорт, энергия, чистая энергия, Tesla, электрическая машина, зарядное устройство, зеленая энергия",
+    "en": "electric vehicle, EV charging, charger, charging station, Armenia, Yerevan, electric car, eco transport, energy, clean energy, Tesla, electric, power, green energy, sustainable"
+  },
+  "category": {
+    "ios": "Navigation",
+    "android": "Maps & Navigation"
+  },
+  "contentRating": {
+    "ios": "4+",
+    "android": "Everyone"
+  }
+}

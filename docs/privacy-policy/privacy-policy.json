@@ -1,0 +1,67 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2026-02-17",
+  "contact": {
+    "email": "privacy@lilocharge.am",
+    "phone": "+374 XX XXX XXX",
+    "address": {
+      "hy": "Երևան, Հայաստան",
+      "ru": "Ереван, Армения",
+      "en": "Yerevan, Armenia"
+    }
+  },
+  "sections": {
+    "dataCollection": {
+      "personal": ["email", "name", "phone", "payment_tokens", "location", "charging_history"],
+      "technical": ["device_type", "os_version", "app_version", "ip_address", "crash_logs"],
+      "usage": ["map_views", "search_history", "app_interactions"]
+    },
+    "thirdPartyServices": [
+      {
+        "name": "Mapbox",
+        "purpose": "maps_navigation",
+        "dataShared": ["location"],
+        "privacyPolicy": "https://www.mapbox.com/legal/privacy"
+      },
+      {
+        "name": "ArCa",
+        "purpose": "payment_processing",
+        "dataShared": ["payment_tokens"],
+        "privacyPolicy": "https://www.arca.am"
+      },
+      {
+        "name": "Idram",
+        "purpose": "payment_processing",
+        "dataShared": ["payment_tokens"],
+        "privacyPolicy": "https://www.idram.am"
+      },
+      {
+        "name": "Firebase Cloud Messaging",
+        "purpose": "push_notifications",
+        "dataShared": ["device_token"],
+        "privacyPolicy": "https://firebase.google.com/support/privacy"
+      }
+    ],
+    "retention": {
+      "account_data": "until_account_active",
+      "charging_history": "2_years",
+      "payment_transactions": "7_years",
+      "technical_data": "90_days"
+    },
+    "userRights": ["access", "rectification", "deletion", "export", "restriction", "objection"],
+    "security": [
+      "ssl_tls_encryption",
+      "bcrypt_password_hashing",
+      "regular_security_audits",
+      "limited_server_access",
+      "regular_backups"
+    ],
+    "ageRestriction": 16,
+    "availableLanguages": ["hy", "ru", "en"]
+  },
+  "files": {
+    "hy": "privacy-policy-hy.md",
+    "ru": "privacy-policy-ru.md",
+    "en": "privacy-policy-en.md"
+  }
+}

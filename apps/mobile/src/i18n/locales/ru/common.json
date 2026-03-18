@@ -1,0 +1,220 @@
+{
+  "tabs": {
+    "stations": {
+      "title": "Станции"
+    },
+    "favorites": {
+      "title": "Избранное"
+    },
+    "profile": {
+      "title": "Профиль"
+    }
+  },
+  "favorites": {
+    "title": "Избранные станции",
+    "subtitle": "Быстрый доступ к станциям, которыми вы пользуетесь чаще всего.",
+    "empty": "Вы пока не добавили станции в избранное.",
+    "actions": {
+      "remove": "Удалить"
+    }
+  },
+  "stations": {
+    "title": "Зарядные станции",
+    "subtitle": "Найдите ближайшие станции и проверьте доступность.",
+    "map": {
+      "loading": "Обновляем станции...",
+      "refreshError": "Не удалось обновить данные станций.",
+      "missingToken": "Карта недоступна. Укажите переменную окружения EXPO_PUBLIC_MAPBOX_TOKEN.",
+      "camera": {
+        "focusSelected": "Выбранная станция",
+        "recenter": "Центрировать карту"
+      },
+      "offline": {
+        "download": "Скачать offline-карту",
+        "idle": "Offline-карта еще не загружена",
+        "inProgress": "Загрузка offline-карты...",
+        "success": "Загрузка offline-карты завершена",
+        "error": "Не удалось загрузить offline-карту"
+      },
+      "search": {
+        "label": "Поиск станции",
+        "placeholder": "Поиск станции по названию или адресу",
+        "clear": "Сбросить"
+      },
+      "filters": {
+        "title": "Фильтры",
+        "toggle": "Фильтры",
+        "toggleHide": "Скрыть фильтры",
+        "clear": "Сбросить",
+        "connectorTypesLabel": "Типы разъемов",
+        "powerLabel": "Мощность",
+        "powerAny": "Любая мощность",
+        "powerAnyShort": "Любая",
+        "powerFrom": "{{value}}+ кВт",
+        "availabilityLabel": "Доступность",
+        "operatorsLabel": "Операторы"
+      },
+      "sheet": {
+        "close": "Закрыть",
+        "operatorLabel": "Оператор",
+        "addressLabel": "Адрес",
+        "distanceLabel": "Расстояние",
+        "distanceUnavailable": "Нет данных",
+        "openingHoursLabel": "Часы работы",
+        "openingHoursUnavailable": "Нет данных",
+        "connectorsTitle": "Разъемы",
+        "reviewsTitle": "Отзывы",
+        "detailLoading": "Загружаем детали станции...",
+        "detailError": "Не удалось загрузить детали станции.",
+        "noConnectors": "Разъемы отсутствуют",
+        "noPricing": "Тариф недоступен",
+        "noReviews": "Отзывов пока нет",
+        "reviewWithoutComment": "Комментарий отсутствует",
+        "reviewSummary": "{{rating}}/5 · {{count}} отзывов",
+        "viewDetails": "Открыть полный экран",
+        "saveFavorite": "Сохранить",
+        "removeFavorite": "Удалить",
+        "filteredLabel": "Отфильтровано",
+        "pricingPerKwh": "{{amount}}/кВт⋅ч",
+        "pricingPerMinute": "{{amount}}/мин",
+        "pricingSessionFee": "{{amount}} за сессию",
+        "pricingIdleFee": "{{amount}} за простой",
+        "status": {
+          "available": "Доступна",
+          "occupied": "Занята",
+          "offline": "Недоступна",
+          "maintenance": "Обслуживание"
+        }
+      }
+    }
+  },
+  "profile": {
+    "title": "Личный кабинет",
+    "subtitle": "Управляйте настройками и уведомлениями.",
+    "apiBaseUrl": "API: {{url}}"
+  },
+  "onboarding": {
+    "login": {
+      "title": "С возвращением",
+      "subtitle": "Войдите в ваш аккаунт LiloCharge.",
+      "fields": {
+        "email": "Эл. почта",
+        "password": "Пароль"
+      },
+      "actions": {
+        "signIn": "Войти",
+        "submitting": "Вход...",
+        "goToRegister": "Нет аккаунта? Зарегистрироваться"
+      },
+      "errors": {
+        "invalidEmail": "Введите корректный email",
+        "passwordRequired": "Введите пароль",
+        "loginFailed": "Неверный email или пароль"
+      }
+    },
+    "registration": {
+      "title": "Создайте аккаунт",
+      "subtitle": "Зарегистрируйтесь, чтобы начать зарядку с LiloCharge.",
+      "fields": {
+        "displayName": "Имя и фамилия",
+        "email": "Эл. почта",
+        "phone": "Номер телефона",
+        "phonePlaceholder": "+37477123456",
+        "password": "Пароль"
+      },
+      "actions": {
+        "continue": "Отправить код подтверждения",
+        "submitting": "Отправка...",
+        "goToLogin": "Уже есть аккаунт? Войти"
+      },
+      "errors": {
+        "displayNameRequired": "Введите имя и фамилию",
+        "invalidEmail": "Введите корректный email",
+        "invalidPhone": "Введите корректный номер (+374...)",
+        "passwordTooShort": "Пароль должен быть не короче 8 символов",
+        "requestFailed": "Не удалось отправить код подтверждения"
+      }
+    },
+    "verifyPhone": {
+      "title": "Подтвердите номер",
+      "subtitle": "Введите 6-значный код, отправленный на {{phone}}.",
+      "missingRegistration": "Данные регистрации отсутствуют. Начните заново.",
+      "fields": {
+        "code": "Код подтверждения",
+        "codePlaceholder": "123456"
+      },
+      "actions": {
+        "verify": "Подтвердить и продолжить",
+        "submitting": "Проверка...",
+        "backToRegistration": "Вернуться к регистрации"
+      },
+      "errors": {
+        "invalidCode": "Код должен состоять из 6 цифр",
+        "verifyFailed": "Не удалось подтвердить код"
+      }
+    },
+    "vehicle": {
+      "title": "Добавьте автомобиль",
+      "subtitle": "Это поможет подобрать совместимые разъемы и мощность.",
+      "missingUser": "Данные аккаунта отсутствуют. Вернитесь к регистрации.",
+      "fields": {
+        "make": "Марка (например, Kia)",
+        "model": "Модель (например, EV6)",
+        "year": "Год выпуска",
+        "batteryCapacity": "Емкость батареи (кВт⋅ч)",
+        "maxChargePower": "Макс. мощность зарядки (кВт)",
+        "connectorType": "Тип разъема (необязательно)"
+      },
+      "actions": {
+        "save": "Сохранить автомобиль",
+        "submitting": "Сохранение...",
+        "skip": "Пропустить шаг",
+        "backToRegistration": "Вернуться к регистрации"
+      },
+      "errors": {
+        "makeRequired": "Введите марку автомобиля",
+        "modelRequired": "Введите модель автомобиля",
+        "invalidYear": "Введите корректный год",
+        "invalidBatteryCapacity": "Введите корректную емкость батареи",
+        "invalidMaxChargePower": "Введите корректную мощность",
+        "createFailed": "Не удалось сохранить автомобиль"
+      },
+      "connectorTypes": {
+        "CCS": "CCS",
+        "CHADEMO": "CHAdeMO",
+        "TYPE_1": "Type 1",
+        "TYPE_2": "Type 2",
+        "TESLA": "Tesla",
+        "GBT": "GB/T"
+      }
+    },
+    "payment": {
+      "title": "Способ оплаты",
+      "subtitle": "Выберите способ оплаты или пропустите и добавьте позже.",
+      "methods": {
+        "ARCA": "Карты ArCa",
+        "IDRAM": "Кошелек Idram",
+        "APPLE_PAY": "Apple Pay",
+        "GOOGLE_PAY": "Google Pay"
+      },
+      "actions": {
+        "finish": "Завершить onboarding",
+        "submitting": "Обрабатывается...",
+        "skip": "Пропустить оплату"
+      },
+      "applePay": {
+        "lineItemLabel": "Настройка способа оплаты LiloCharge"
+      },
+      "googlePay": {
+        "lineItemLabel": "Настройка способа оплаты LiloCharge"
+      },
+      "errors": {
+        "applePaySetupFailed": "Не удалось активировать Apple Pay.",
+        "applePayUnavailable": "Apple Pay недоступен на этом устройстве.",
+        "googlePaySetupFailed": "Не удалось активировать Google Pay.",
+        "googlePayUnavailable": "Google Pay недоступен на этом устройстве.",
+        "missingUser": "Данные аккаунта отсутствуют. Вернитесь к регистрации."
+      }
+    }
+  }
+}

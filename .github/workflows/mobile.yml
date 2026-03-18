@@ -1,0 +1,122 @@
+name: Mobile CI/CD
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/shared-types/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - '.github/workflows/mobile.yml'
+  push:
+    branches: [main, develop]
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/shared-types/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - '.github/workflows/mobile.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Lint, Typecheck, Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared types
+        run: pnpm --filter @lilocharge/shared-types build
+
+      - name: Lint mobile
+        run: pnpm --filter @lilocharge/mobile lint
+
+      - name: Typecheck mobile
+        run: pnpm --filter @lilocharge/mobile typecheck
+
+      - name: Test mobile
+        run: pnpm --filter @lilocharge/mobile test
+
+  eas_preview:
+    name: EAS Preview Build
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && secrets.EXPO_TOKEN != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Start preview build
+        run: pnpm --filter @lilocharge/mobile exec eas build --platform all --non-interactive --profile preview
+
+  eas_production:
+    name: EAS Production Build
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.EXPO_TOKEN != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Start production build
+        run: pnpm --filter @lilocharge/mobile exec eas build --platform all --non-interactive --profile production

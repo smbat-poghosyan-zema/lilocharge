@@ -1,0 +1,14 @@
+{
+  "name": "@lilocharge/scripts",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "validate:k8s": "ts-node validators/validate-k8s.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.33",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "yaml": "^2.8.2"
+  }
+}

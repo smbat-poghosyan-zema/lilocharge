@@ -1,0 +1,31 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+  namespace: lilocharge
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: lilocharge
+data:
+  # Application settings
+  NODE_ENV: 'production'
+  LOG_LEVEL: 'info'
+
+  # Observability
+  SENTRY_ENABLED: 'true'
+  SENTRY_TRACES_SAMPLE_RATE: '0.1'
+  OTEL_ENABLED: 'true'
+  OTEL_SERVICE_NAME: 'lilocharge-api'
+  OTEL_METRICS_PORT: '9464'
+
+  # Database settings (non-sensitive)
+  POSTGRES_DB: 'lilocharge'
+  POSTGRES_PORT: '5432'
+
+  # Redis settings (non-sensitive)
+  REDIS_PORT: '6379'
+
+  # Timezone
+  TZ: 'Asia/Yerevan'

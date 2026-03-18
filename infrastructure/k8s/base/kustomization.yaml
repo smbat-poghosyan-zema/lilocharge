@@ -1,0 +1,26 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: lilocharge
+
+resources:
+  - ../namespace.yaml
+  - configmap.yaml
+  - secrets.yaml
+  - postgres/init-configmap.yaml
+  - postgres/statefulset.yaml
+  - redis/statefulset.yaml
+  - api/deployment.yaml
+  - api/hpa.yaml
+  - ingress/cert-issuer.yaml
+  - ingress/ingress.yaml
+  - network-policies.yaml
+  - service-monitors.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: lilocharge
+
+images:
+  - name: lilocharge/api
+    newTag: latest

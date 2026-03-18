@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "LiloCharge",
+    "slug": "lilocharge",
+    "scheme": "lilocharge",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": ["expo-router", "@rnmapbox/maps"],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
+    "assetBundlePatterns": ["**/*"]
+  }
+}

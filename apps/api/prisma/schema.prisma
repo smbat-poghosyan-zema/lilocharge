@@ -1,0 +1,458 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// USER & AUTH
+// ============================================================================
+
+model User {
+  id                            String   @id @default(uuid()) @db.Uuid
+  email                         String   @unique
+  passwordHash                  String   @map("password_hash")
+  phone                         String?  @unique
+  displayName                   String   @map("display_name")
+  language                      Language @default(HY)
+  pushNotificationsEnabled      Boolean  @default(true) @map("push_notifications_enabled")
+  marketingNotificationsEnabled Boolean  @default(false) @map("marketing_notifications_enabled")
+  createdAt                     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt                     DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  vehicles       Vehicle[]
+  paymentMethods PaymentMethod[]
+  payments       Payment[]
+  pushTokens     UserPushToken[]
+  sessions       Session[]
+  reviews        Review[]
+  favoriteStations FavoriteStation[]
+  problemReports StationProblemReport[]
+  connectorStatusUpdates ConnectorStatusUpdate[]
+  wallet         Wallet?
+
+  @@map("users")
+}
+
+enum Language {
+  HY
+  RU
+  EN
+}
+
+enum PushTokenPlatform {
+  IOS
+  ANDROID
+  WEB
+}
+
+model UserPushToken {
+  id        String            @id @default(uuid()) @db.Uuid
+  userId    String            @map("user_id") @db.Uuid
+  token     String            @unique
+  platform  PushTokenPlatform
+  isActive  Boolean           @default(true) @map("is_active")
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isActive])
+  @@map("user_push_tokens")
+}
+
+// ============================================================================
+// VEHICLE
+// ============================================================================
+
+model Vehicle {
+  id              String        @id @default(uuid()) @db.Uuid
+  userId          String        @map("user_id") @db.Uuid
+  make            String
+  model           String
+  year            Int
+  connectorType   ConnectorType @map("connector_type")
+  batteryCapacity Float         @map("battery_capacity")
+  maxChargePower  Float         @map("max_charge_power")
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions Session[]
+
+  @@index([userId])
+  @@map("vehicles")
+}
+
+enum ConnectorType {
+  TYPE_1
+  TYPE_2
+  CCS
+  CHADEMO
+  TESLA
+  GBT
+}
+
+// ============================================================================
+// PAYMENT
+// ============================================================================
+
+model PaymentMethod {
+  id          String         @id @default(uuid()) @db.Uuid
+  userId      String         @map("user_id") @db.Uuid
+  gateway     PaymentGateway
+  token       String
+  last4       String?        @db.Char(4)
+  expiryMonth Int?           @map("expiry_month")
+  expiryYear  Int?           @map("expiry_year")
+  isDefault   Boolean        @default(false) @map("is_default")
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments Payment[]
+
+  @@index([userId])
+  @@map("payment_methods")
+}
+
+enum PaymentGateway {
+  ARCA
+  IDRAM
+  APPLE_PAY
+  GOOGLE_PAY
+  WALLET
+}
+
+model Payment {
+  id                   String         @id @default(uuid()) @db.Uuid
+  sessionId            String         @unique @map("session_id") @db.Uuid
+  userId               String         @map("user_id") @db.Uuid
+  paymentMethodId      String         @map("payment_method_id") @db.Uuid
+  gateway              PaymentGateway
+  status               PaymentStatus
+  amount               Int
+  authorizedAmount     Int            @map("authorized_amount")
+  capturedAmount       Int            @map("captured_amount")
+  gatewayTransactionId String?        @map("gateway_transaction_id")
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user          User          @relation(fields: [userId], references: [id])
+  paymentMethod PaymentMethod @relation(fields: [paymentMethodId], references: [id])
+  session       Session       @relation(fields: [sessionId], references: [id])
+
+  @@index([userId])
+  @@index([paymentMethodId])
+  @@map("payments")
+}
+
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  REFUNDED
+}
+
+// ============================================================================
+// STATION & CONNECTOR
+// ============================================================================
+
+model Station {
+  id           String                                 @id @default(uuid()) @db.Uuid
+  operatorId   String                                 @map("operator_id")
+  operatorName String                                 @map("operator_name")
+  name         String
+  address      String
+  city         String
+  latitude     Float
+  longitude    Float
+  location     Unsupported("geography(Point, 4326)")?
+  status       StationStatus                          @default(AVAILABLE)
+  openingHours String?                                @map("opening_hours")
+  amenities    String[]                               @default([])
+  createdAt    DateTime                               @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime                               @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  connectors Connector[]
+  reviews    Review[]
+  favoritedBy FavoriteStation[]
+  problemReports StationProblemReport[]
+
+  @@map("stations")
+}
+
+enum StationStatus {
+  AVAILABLE
+  OCCUPIED
+  OFFLINE
+  MAINTENANCE
+}
+
+model Connector {
+  id               String        @id @default(uuid()) @db.Uuid
+  stationId        String        @map("station_id") @db.Uuid
+  evseId           String        @map("evse_id")
+  connectorType    ConnectorType @map("connector_type")
+  powerKw          Float         @map("power_kw")
+  status           StationStatus @default(AVAILABLE)
+  lastStatusUpdate DateTime      @default(now()) @map("last_status_update") @db.Timestamptz
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  station      Station       @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  pricingPlans PricingPlan[]
+  sessions     Session[]
+  statusUpdates ConnectorStatusUpdate[]
+
+  @@unique([stationId, evseId])
+  @@index([stationId])
+  @@map("connectors")
+}
+
+model PricingPlan {
+  id             String    @id @default(uuid()) @db.Uuid
+  connectorId    String    @map("connector_id") @db.Uuid
+  name           String
+  pricePerKwh    Int?      @map("price_per_kwh")
+  pricePerMinute Int?      @map("price_per_minute")
+  sessionFee     Int?      @map("session_fee")
+  idleFee        Int?      @map("idle_fee")
+  validFrom      DateTime  @map("valid_from") @db.Timestamptz
+  validUntil     DateTime? @map("valid_until") @db.Timestamptz
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  connector Connector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+
+  @@index([connectorId])
+  @@map("pricing_plans")
+}
+
+// ============================================================================
+// SESSION & METER VALUES
+// ============================================================================
+
+enum SessionStatus {
+  PENDING
+  AUTHORIZED
+  ACTIVE
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model Session {
+  id              String        @id @default(uuid()) @db.Uuid
+  userId          String        @map("user_id") @db.Uuid
+  vehicleId       String?       @map("vehicle_id") @db.Uuid
+  connectorId     String?       @map("connector_id") @db.Uuid
+  status          SessionStatus @default(PENDING)
+  startTime       DateTime?     @map("start_time") @db.Timestamptz
+  endTime         DateTime?     @map("end_time") @db.Timestamptz
+  energyDelivered Float         @default(0) @map("energy_delivered")
+  peakPower       Float         @default(0) @map("peak_power")
+  totalCost       Int           @default(0) @map("total_cost")
+  transactionId   String?       @map("transaction_id")
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  user        User         @relation(fields: [userId], references: [id])
+  vehicle     Vehicle?     @relation(fields: [vehicleId], references: [id])
+  connector   Connector?   @relation(fields: [connectorId], references: [id])
+  payment     Payment?
+  meterValues MeterValue[]
+
+  @@index([userId])
+  @@index([vehicleId])
+  @@index([connectorId])
+  @@index([status])
+  @@index([startTime])
+  @@index([createdAt])
+  @@map("sessions")
+}
+
+model MeterValue {
+  id                 String   @default(uuid()) @db.Uuid
+  sessionId          String   @map("session_id") @db.Uuid
+  timestamp          DateTime @map("timestamp") @db.Timestamptz
+  energyActiveImport Float    @map("energy_active_import")
+  powerActiveImport  Float    @map("power_active_import")
+  currentImport      Float    @map("current_import")
+  voltage            Float
+  soc                Float?
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@id([timestamp, id])
+  @@unique([sessionId, timestamp])
+  @@index([timestamp])
+  @@index([sessionId, timestamp])
+  @@map("meter_values")
+}
+
+model FavoriteStation {
+  userId    String   @map("user_id") @db.Uuid
+  stationId String   @map("station_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  station Station @relation(fields: [stationId], references: [id], onDelete: Cascade)
+
+  @@id([userId, stationId])
+  @@index([stationId])
+  @@index([createdAt])
+  @@map("favorite_stations")
+}
+
+// ============================================================================
+// PLACEHOLDERS FOR FUTURE STEPS
+// ============================================================================
+
+model Review {
+  id        String   @id @default(uuid()) @db.Uuid
+  stationId String   @map("station_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  rating    Int      @db.SmallInt
+  comment   String?  @db.Text
+  photos    String[] @default([])
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  station Station @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@index([stationId])
+  @@index([userId])
+  @@map("reviews")
+}
+
+// ============================================================================
+// PROBLEM REPORTS
+// ============================================================================
+
+enum ProblemType {
+  OFFLINE
+  BROKEN_CONNECTOR
+  NO_POWER
+  PAYMENT_ISSUE
+  PHYSICAL_DAMAGE
+  ACCESS_BLOCKED
+  OTHER
+}
+
+enum ProblemReportStatus {
+  PENDING
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+model StationProblemReport {
+  id          String              @id @default(uuid()) @db.Uuid
+  stationId   String              @map("station_id") @db.Uuid
+  userId      String              @map("user_id") @db.Uuid
+  problemType ProblemType         @map("problem_type")
+  description String              @db.Text
+  photos      String[]            @default([])
+  status      ProblemReportStatus @default(PENDING)
+  createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  resolvedAt  DateTime?           @map("resolved_at") @db.Timestamptz
+
+  // Relations
+  station Station @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@index([stationId])
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("station_problem_reports")
+}
+
+// ============================================================================
+// CONNECTOR STATUS UPDATES
+// ============================================================================
+
+model ConnectorStatusUpdate {
+  id              String        @id @default(uuid()) @db.Uuid
+  connectorId     String        @map("connector_id") @db.Uuid
+  userId          String        @map("user_id") @db.Uuid
+  status          StationStatus
+  comment         String?       @db.Text
+  confidenceScore Float         @default(0) @map("confidence_score")
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  connector Connector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@index([connectorId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([confidenceScore])
+  @@map("connector_status_updates")
+}
+
+// ============================================================================
+// WALLET
+// ============================================================================
+
+enum WalletTransactionType {
+  TOP_UP
+  DEDUCTION
+  REFUND
+}
+
+model Wallet {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @map("user_id") @db.Uuid
+  balance   Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+
+  @@index([userId])
+  @@map("wallets")
+}
+
+model WalletTransaction {
+  id                   String                @id @default(uuid()) @db.Uuid
+  walletId             String                @map("wallet_id") @db.Uuid
+  type                 WalletTransactionType
+  amount               Int
+  balanceBefore        Int                   @map("balance_before")
+  balanceAfter         Int                   @map("balance_after")
+  gateway              PaymentGateway?
+  gatewayTransactionId String?               @map("gateway_transaction_id")
+  sessionId            String?               @map("session_id") @db.Uuid
+  description          String?               @db.Text
+  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("wallet_transactions")
+}
+

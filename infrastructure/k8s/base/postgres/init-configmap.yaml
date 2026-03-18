@@ -1,0 +1,24 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-scripts
+  namespace: lilocharge
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: lilocharge
+data:
+  01-init-extensions.sql: |
+    -- Enable PostGIS extension for geographic data
+    CREATE EXTENSION IF NOT EXISTS postgis;
+    CREATE EXTENSION IF NOT EXISTS postgis_topology;
+
+    -- Enable TimescaleDB extension for time-series data
+    CREATE EXTENSION IF NOT EXISTS timescaledb;
+
+    -- Enable pgcrypto for UUID generation
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+    -- Enable pg_stat_statements for query performance monitoring
+    CREATE EXTENSION IF NOT EXISTS pg_stat_statements;

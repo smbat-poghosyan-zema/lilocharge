@@ -1,0 +1,55 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namePrefix: staging-
+
+bases:
+  - ../../base
+
+patches:
+  - target:
+      kind: Deployment
+      name: api
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: api
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 5
+
+  - target:
+      kind: Ingress
+      name: lilocharge-ingress
+    patch: |-
+      - op: replace
+        path: /metadata/annotations/cert-manager.io~1cluster-issuer
+        value: letsencrypt-staging
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: staging-api.lilocharge.am
+      - op: replace
+        path: /spec/rules/0/host
+        value: staging-api.lilocharge.am
+
+configMapGenerator:
+  - name: api-config
+    behavior: merge
+    literals:
+      - NODE_ENV=staging
+      - LOG_LEVEL=info
+      - SENTRY_ENABLED=true
+      - SENTRY_TRACES_SAMPLE_RATE=0.5
+
+images:
+  - name: lilocharge/api
+    newTag: staging

@@ -1,0 +1,31 @@
+{
+  "template": {
+    "hy": "Թարմացում {version}\n\n{features}\n\nԲարելավումներ և սխալների շտկումներ:",
+    "ru": "Обновление {version}\n\n{features}\n\nУлучшения и исправления ошибок:",
+    "en": "Update {version}\n\n{features}\n\nImprovements and bug fixes:"
+  },
+  "examples": {
+    "newFeature": {
+      "hy": "✨ Նոր հնարավորություն",
+      "ru": "✨ Новая функция",
+      "en": "✨ New feature"
+    },
+    "improvement": {
+      "hy": "⚡ Բարելավում",
+      "ru": "⚡ Улучшение",
+      "en": "⚡ Improvement"
+    },
+    "bugfix": {
+      "hy": "🐛 Սխալի շտկում",
+      "ru": "🐛 Исправление ошибки",
+      "en": "🐛 Bug fix"
+    }
+  },
+  "releases": {
+    "1.0.0": {
+      "hy": "🎉 Առաջին թողարկում!\n\n• Լիցքավորման կայանների ինտերակտիվ քարտեզ\n• Իրական ժամանակում մատչելիության տեղեկություններ\n• QR կոդի սկանավորում արագ սկսելու համար\n• Ապահով վճարումներ ArCa, Idram, Apple Pay և Google Pay-ով\n• Լիցքավորման պատմություն և վերլուծություններ\n• Հուշումներ և ծանուցումներ\n• Հայերեն, Ռուսերեն և Անգլերեն լեզուներ",
+      "ru": "🎉 Первый релиз!\n\n• Интерактивная карта зарядных станций\n• Информация о доступности в реальном времени\n• Сканирование QR-кода для быстрого запуска\n• Безопасные платежи через ArCa, Idram, Apple Pay и Google Pay\n• История зарядки и аналитика\n• Push-уведомления\n• Поддержка армянского, русского и английского языков",
+      "en": "🎉 First Release!\n\n• Interactive charging station map\n• Real-time availability information\n• QR code scanning for quick start\n• Secure payments via ArCa, Idram, Apple Pay, and Google Pay\n• Charging history and analytics\n• Push notifications\n• Armenian, Russian, and English language support"
+    }
+  }
+}
