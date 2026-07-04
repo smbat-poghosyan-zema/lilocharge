@@ -3,6 +3,9 @@
     "stations": {
       "title": "Stations"
     },
+    "charge": {
+      "title": "Charge"
+    },
     "favorites": {
       "title": "Favorites"
     },
@@ -93,6 +96,92 @@
     "title": "Profile",
     "subtitle": "Manage your preferences and notifications.",
     "apiBaseUrl": "API: {{url}}"
+  },
+  "sessions": {
+    "actions": {
+      "rescan": "Scan again",
+      "retry": "Try again",
+      "signIn": "Sign in"
+    },
+    "units": {
+      "energy": "{{value}} kWh",
+      "power": "{{value}} kW",
+      "amd": "{{amount}} ֏"
+    },
+    "status": {
+      "PENDING": "Pending",
+      "AUTHORIZED": "Authorized",
+      "ACTIVE": "Charging",
+      "COMPLETED": "Completed",
+      "FAILED": "Failed",
+      "CANCELLED": "Cancelled"
+    },
+    "scan": {
+      "title": "Scan to charge",
+      "subtitle": "Point the camera at the QR code on the charger.",
+      "permission": {
+        "title": "Camera access needed",
+        "message": "Allow camera access to scan charger QR codes.",
+        "grant": "Allow camera"
+      },
+      "manual": {
+        "label": "Or enter the code manually",
+        "placeholder": "Connector code or link",
+        "submit": "Continue"
+      },
+      "errors": {
+        "invalidCode": "This code is not a valid LiloCharge connector code."
+      }
+    },
+    "confirm": {
+      "title": "Confirm charging",
+      "subtitle": "Check the connector details before starting.",
+      "stationLabel": "Station",
+      "stationLoading": "Loading station details...",
+      "stationError": "Failed to load station details.",
+      "connectorLabel": "Connector",
+      "connectorGeneric": "Connector {{connectorId}}",
+      "genericMessage": "Connector details will be confirmed by the charger.",
+      "pricingLabel": "Pricing",
+      "start": "Start charging",
+      "starting": "Starting...",
+      "errors": {
+        "missingConnector": "No connector specified. Scan the QR code again.",
+        "unauthenticated": "Sign in to start charging.",
+        "connectorUnavailable": "This charger is busy or offline. Try again later.",
+        "startFailed": "Failed to start charging."
+      }
+    },
+    "active": {
+      "title": "Charging session",
+      "loading": "Loading session...",
+      "loadError": "Failed to load session.",
+      "energyLabel": "Energy",
+      "powerLabel": "Power",
+      "durationLabel": "Duration",
+      "costLabel": "Current cost",
+      "stop": "Stop charging",
+      "stopping": "Stopping...",
+      "stopConfirm": {
+        "title": "Stop charging?",
+        "message": "Charging will end and the final cost will be calculated.",
+        "confirm": "Stop",
+        "cancel": "Cancel"
+      },
+      "errors": {
+        "stopFailed": "Failed to stop charging."
+      }
+    },
+    "summary": {
+      "title": "Charging summary",
+      "loading": "Loading summary...",
+      "loadError": "Failed to load session summary.",
+      "energyLabel": "Energy delivered",
+      "durationLabel": "Duration",
+      "totalLabel": "Total cost",
+      "receipt": "View receipt (PDF)",
+      "done": "Done"
+    }
   },
   "onboarding": {
     "login": {

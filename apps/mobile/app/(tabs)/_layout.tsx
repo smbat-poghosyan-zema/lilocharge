@@ -23,6 +23,12 @@ export default function TabsLayout(): JSX.Element {
         }}
       />
       <Tabs.Screen
+        name="charge"
+        options={{
+          title: t('tabs.charge.title'),
+        }}
+      />
+      <Tabs.Screen
         name="favorites"
         options={{
           title: t('tabs.favorites.title'),
