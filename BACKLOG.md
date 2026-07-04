@@ -6,9 +6,17 @@ Derived from [AUDIT-REPORT.md](AUDIT-REPORT.md) (2026-07-02). Every NOT DONE and
 **Effort:** S ≤ 1 day · M = 1–5 days · L > 1 week.
 **Category:** fix (defect in existing code) / refactor / implement (missing feature) / test.
 
+> **Status update (2026-07-04):** All eight P0 tasks are implemented on `claude/lilocharge-audit-58jj4m`
+> (commits `ff08519`…`ffe8587`). Verified: API 70 suites / 495 unit tests + live sessions e2e green,
+> mobile 50 suites / 357 tests green, tsc and eslint clean in both apps, `prisma migrate deploy`
+> verified against a fresh database. Remaining caveats now tracked in P1: charger-inbound
+> `StartTransaction` still creates a separate session row instead of linking to the API-created
+> session (reconcile with #15's tracked-remote-start work), and refresh-token rotation on mobile
+> is still out of scope (#3 wired access-token attach + 401 sign-out only).
+
 ---
 
-## P0 — core product & red build
+## P0 — core product & red build — ✅ done
 
 | # | Task | Category | Affected files | Effort |
 |---|---|---|---|---|
