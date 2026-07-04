@@ -1,7 +1,8 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 
 import { ConnectorsModule } from '../connectors/connectors.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { OcppModule } from '../ocpp/ocpp.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { WalletModule } from '../wallet/wallet.module';
@@ -13,7 +14,16 @@ import { SessionsService } from './sessions.service';
 
 /** Feature module providing charging-session lifecycle APIs and state transitions. */
 @Module({
-  imports: [ConnectorsModule, NotificationsModule, PrismaModule, PaymentsModule, WalletModule],
+  imports: [
+    ConnectorsModule,
+    NotificationsModule,
+    // forwardRef breaks the OcppModule <-> SessionsModule import cycle (OCPP transactions need the
+    // cost calculator while session lifecycle APIs dispatch OCPP remote commands).
+    forwardRef(() => OcppModule),
+    PaymentsModule,
+    PrismaModule,
+    WalletModule,
+  ],
   controllers: [SessionsController],
   providers: [
     SessionCostCalculatorService,

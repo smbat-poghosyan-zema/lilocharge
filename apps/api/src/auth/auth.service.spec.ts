@@ -1,11 +1,12 @@
 import type { SupportedLanguageCode } from '@lilocharge/shared-types';
 import type { Language } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
-import { UnauthorizedException } from '@nestjs/common';
+import { ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { hash } from 'bcrypt';
 
 import type { PrismaService } from '../prisma/prisma.service';
 import type { RedisService } from '../redis/redis.service';
+import type { SmsService } from '../sms/sms.service';
 import { AuthService } from './auth.service';
 
 interface UserRecord {
@@ -44,6 +45,13 @@ interface JwtServiceMock {
   >;
 }
 
+interface SmsServiceMock {
+  readonly sendSms: jest.Mock<
+    ReturnType<SmsService['sendSms']>,
+    Parameters<SmsService['sendSms']>
+  >;
+}
+
 const USER_ID = '11111111-1111-1111-1111-111111111111';
 const USER_EMAIL = 'ani@example.com';
 const USER_PHONE = '+37477123456';
@@ -70,6 +78,7 @@ describe('AuthService', () => {
   let prismaMock: PrismaServiceMock;
   let redisMock: RedisServiceMock;
   let jwtMock: JwtServiceMock;
+  let smsMock: SmsServiceMock;
 
   beforeEach(() => {
     process.env.JWT_SECRET = 'test-jwt-secret';
@@ -98,11 +107,17 @@ describe('AuthService', () => {
         .mockResolvedValueOnce('refresh-token'),
       verifyAsync: jest.fn<Promise<Record<string, unknown>>, [string, Record<string, unknown>?]>(),
     };
+    smsMock = {
+      sendSms: jest
+        .fn<ReturnType<SmsService['sendSms']>, Parameters<SmsService['sendSms']>>()
+        .mockResolvedValue(undefined),
+    };
 
     service = new AuthService(
       prismaMock as unknown as PrismaService,
       redisMock as unknown as RedisService,
       jwtMock as unknown as JwtService,
+      smsMock as unknown as SmsService,
     );
   });
 
@@ -116,6 +131,27 @@ describe('AuthService', () => {
     expect(key).toBe(`auth:otp:${USER_PHONE}`);
     expect(ttlSeconds).toBe(180);
     expect(/^\d{6}$/.test(otpCode)).toBe(true);
+  });
+
+  it('delivers the stored OTP code to the requested phone via SMS', async () => {
+    await service.requestPhoneOtp({ phone: USER_PHONE });
+
+    const [[, , otpCode]] = redisMock.setEx.mock.calls;
+    expect(smsMock.sendSms).toHaveBeenCalledTimes(1);
+
+    const [[smsInput]] = smsMock.sendSms.mock.calls;
+    expect(smsInput.to).toBe(USER_PHONE);
+    expect(smsInput.body).toContain(otpCode);
+    expect(smsInput.body).toContain('3 minutes');
+  });
+
+  it('propagates SMS delivery failures instead of claiming the OTP was sent', async () => {
+    smsMock.sendSms.mockRejectedValue(new ServiceUnavailableException('SMS delivery failed'));
+
+    await expect(service.requestPhoneOtp({ phone: USER_PHONE })).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    expect(redisMock.setEx).toHaveBeenCalledTimes(1);
   });
 
   it('verifies OTP, creates a user, and returns access/refresh tokens', async () => {

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 
 import { ConnectorsModule } from '../connectors/connectors.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -17,7 +17,14 @@ import { OcppTransactionsService } from './ocpp.transactions.service';
 
 /** Feature module providing OCPP central-system server, routing, and connection registry services. */
 @Module({
-  imports: [ConnectorsModule, NotificationsModule, PaymentsModule, PrismaModule, SessionsModule],
+  imports: [
+    ConnectorsModule,
+    NotificationsModule,
+    PaymentsModule,
+    PrismaModule,
+    // forwardRef breaks the OcppModule <-> SessionsModule import cycle (see sessions.module.ts).
+    forwardRef(() => SessionsModule),
+  ],
   providers: [
     OcppMeterValuesService,
     OcppRemoteStartService,

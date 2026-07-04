@@ -17,6 +17,7 @@ import { randomInt, randomUUID } from 'node:crypto';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { SmsService } from '../sms/sms.service';
 import { EmailLoginDto } from './dto/email-login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RequestPhoneOtpDto } from './dto/request-phone-otp.dto';
@@ -48,9 +49,10 @@ export class AuthService {
     private readonly prismaService: PrismaService,
     private readonly redisService: RedisService,
     private readonly jwtService: JwtService,
+    private readonly smsService: SmsService,
   ) {}
 
-  /** Requests a phone OTP code and stores it in Redis with an expiry. */
+  /** Requests a phone OTP code, stores it in Redis with an expiry, and delivers it via SMS. */
   public async requestPhoneOtp(dto: RequestPhoneOtpDto): Promise<PhoneOtpRequestResponse> {
     const normalizedPhone = normalizePhone(dto.phone);
     const existingUser = await this.prismaService.user.findUnique({
@@ -64,6 +66,14 @@ export class AuthService {
     const otpCode = generateOtpCode();
 
     await this.redisService.setEx(buildOtpKey(normalizedPhone), otpTtlSeconds, otpCode);
+
+    // Delivery failures propagate as errors so the API never claims an OTP was sent when it
+    // was not. In disabled mode (SMS_ENABLED unset) SmsService no-ops and dev flows keep
+    // reading the OTP from Redis.
+    await this.smsService.sendSms({
+      body: buildOtpSmsBody(otpCode, otpTtlSeconds),
+      to: normalizedPhone,
+    });
 
     return {
       message: 'OTP sent successfully',
@@ -262,6 +272,13 @@ function resolveRefreshSessionTtlSeconds(): number {
 /** Builds the Redis key used to cache OTPs by normalized phone number. */
 function buildOtpKey(phone: string): string {
   return `auth:otp:${phone}`;
+}
+
+/** Builds the SMS text delivering one OTP code with its expiry window. */
+function buildOtpSmsBody(otpCode: string, otpTtlSeconds: number): string {
+  const expiryMinutes = Math.max(1, Math.ceil(otpTtlSeconds / 60));
+
+  return `Your LiloCharge verification code is ${otpCode}. It expires in ${expiryMinutes} minute${expiryMinutes === 1 ? '' : 's'}.`;
 }
 
 /** Builds the Redis key used to track active refresh-token session IDs by user. */

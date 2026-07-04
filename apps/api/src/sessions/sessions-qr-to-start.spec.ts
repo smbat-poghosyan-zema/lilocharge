@@ -10,6 +10,7 @@ import { SessionStatus as PrismaSessionStatus } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OcppRegistryService } from '../ocpp/ocpp.registry.service';
 import { OcppRemoteStartService } from '../ocpp/ocpp.remote-start.service';
+import { OcppRemoteStopService } from '../ocpp/ocpp.remote-stop.service';
 import type {
   OcppRpcCallOptions,
   OcppRpcHandler,
@@ -18,6 +19,7 @@ import type {
 import { PaymentsService } from '../payments/payments.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
+import { SessionCostCalculatorService } from './session-cost-calculator.service';
 import { SessionsService } from './sessions.service';
 
 /**
@@ -104,6 +106,7 @@ describe('SessionsService - QR Scan to Session Start', () => {
   let mockPaymentsService: jest.Mocked<PaymentsService>;
   let mockNotificationsService: jest.Mocked<NotificationsService>;
   let mockWalletService: jest.Mocked<WalletService>;
+  let mockCostCalculatorService: jest.Mocked<SessionCostCalculatorService>;
 
   // Test data IDs
   const testUserId = '11111111-1111-1111-1111-111111111111';
@@ -111,9 +114,14 @@ describe('SessionsService - QR Scan to Session Start', () => {
   const testSessionId = '33333333-3333-3333-3333-333333333333';
   const chargePointId = 'CP-TEST-001';
   const ocppConnectorId = 1;
-  const idTag = 'test-user-rfid-tag';
+
+  afterAll(() => {
+    delete process.env.OCPP_WS_ENABLED;
+  });
 
   beforeEach(() => {
+    process.env.OCPP_WS_ENABLED = 'true';
+
     // Mock Prisma service
     mockPrismaService = {
       user: {
@@ -151,16 +159,29 @@ describe('SessionsService - QR Scan to Session Start', () => {
       deductBalance: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<WalletService>;
 
-    // Create services
+    // Mock SessionCostCalculatorService (no meter data in this flow)
+    mockCostCalculatorService = {
+      calculateSessionCost: jest.fn().mockResolvedValue({
+        chargingDurationMinutes: 0,
+        idleDurationMinutes: 0,
+        totalCost: 0,
+      }),
+    } as unknown as jest.Mocked<SessionCostCalculatorService>;
+
+    // Create real OCPP services backed by an in-memory registry
+    ocppRegistryService = new OcppRegistryService();
+    ocppRemoteStartService = new OcppRemoteStartService(ocppRegistryService);
+    const ocppRemoteStopService = new OcppRemoteStopService(ocppRegistryService);
+
     sessionsService = new SessionsService(
       mockPrismaService as unknown as PrismaService,
       mockPaymentsService,
       mockNotificationsService,
       mockWalletService,
+      mockCostCalculatorService,
+      ocppRemoteStartService,
+      ocppRemoteStopService,
     );
-
-    ocppRegistryService = new OcppRegistryService();
-    ocppRemoteStartService = new OcppRemoteStartService(ocppRegistryService);
 
     // Set up mock OCPP charge point
     mockChargePoint = createMockChargePoint(chargePointId);
@@ -173,7 +194,11 @@ describe('SessionsService - QR Scan to Session Start', () => {
 
     // Default mock implementations
     mockPrismaService.user.findUnique.mockResolvedValue({ id: testUserId });
-    mockPrismaService.connector.findUnique.mockResolvedValue({ id: testConnectorId });
+    mockPrismaService.connector.findUnique.mockResolvedValue({
+      evseId: `${chargePointId}-evse-${ocppConnectorId}`,
+      id: testConnectorId,
+      station: { operatorId: chargePointId },
+    });
     // Mock non-wallet payment method (ARCA) to trigger traditional payment flow
     mockPrismaService.paymentMethod.findFirst.mockResolvedValue(null);
   });
@@ -277,37 +302,17 @@ describe('SessionsService - QR Scan to Session Start', () => {
         userId: testUserId,
       });
 
-      // ===== VERIFY: OCPP RemoteStartTransaction can be called =====
-      // Note: In a real implementation, this would be called by an integration layer
-      // that links sessions to OCPP charge points. For this test, we verify the
-      // OCPP service is available and can send the command.
-
-      const remoteStartResult = await ocppRemoteStartService.remoteStartTransaction({
-        chargePointId,
-        payload: {
-          connectorId: ocppConnectorId,
-          idTag,
-        },
-        maxAttempts: 1,
-        timeoutMs: 5000,
-      });
-
-      expect(remoteStartResult).toMatchObject({
-        chargePointId,
-        status: 'Accepted',
-        attemptCount: 1,
-      });
-      expect(remoteStartResult.trackingId).toEqual(expect.any(String));
-
-      // ===== VERIFY: RemoteStartTransaction was sent to charge point =====
+      // ===== VERIFY: RemoteStartTransaction was sent to the charge point =====
+      // startSession resolves the charge point from the connector's station and dispatches
+      // the OCPP RemoteStartTransaction command itself before activating the session.
       expect(mockChargePoint.callMock).toHaveBeenCalledWith(
         OcppAction.REMOTE_START_TRANSACTION,
         {
           connectorId: ocppConnectorId,
-          idTag,
+          idTag: testUserId,
         },
         expect.objectContaining({
-          callTimeoutMs: 5000,
+          callTimeoutMs: expect.any(Number) as number,
         }),
       );
     });

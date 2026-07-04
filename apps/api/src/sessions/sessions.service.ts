@@ -9,15 +9,27 @@ import type {
   StopSessionRequest,
 } from '@lilocharge/shared-types';
 import { SessionStatus as SharedSessionStatus } from '@lilocharge/shared-types';
-import { BadRequestException, Injectable, NotFoundException, StreamableFile } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  StreamableFile,
+} from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { SessionStatus as PrismaSessionStatus } from '@prisma/client';
 import PDFDocument from 'pdfkit';
 
 import { NotificationsService } from '../notifications/notifications.service';
+import type { OcppRemoteStartResult } from '../ocpp/ocpp.remote-start.service';
+import { OcppRemoteStartService } from '../ocpp/ocpp.remote-start.service';
+import { OcppRemoteStopService } from '../ocpp/ocpp.remote-stop.service';
+import { isOcppServerEnabled } from '../ocpp/ocpp.server.service';
 import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
+import { SessionCostCalculatorService } from './session-cost-calculator.service';
 
 const CONNECTOR_NOT_FOUND_MESSAGE = 'Connector not found';
 const END_TIME_BEFORE_START_TIME_MESSAGE = 'Session end time cannot be before start time';
@@ -29,8 +41,21 @@ const VEHICLE_NOT_FOUND_MESSAGE = 'Vehicle not found';
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
 
+const WATT_HOURS_PER_KILOWATT_HOUR = 1000;
+const WATTS_PER_KILOWATT = 1000;
+
 const CONNECTOR_ID_SELECT = {
   id: true,
+} satisfies Prisma.ConnectorSelect;
+
+const CONNECTOR_CHARGE_POINT_SELECT = {
+  evseId: true,
+  id: true,
+  station: {
+    select: {
+      operatorId: true,
+    },
+  },
 } satisfies Prisma.ConnectorSelect;
 
 const SESSION_SELECT = {
@@ -70,14 +95,32 @@ type SessionRecord = Prisma.SessionGetPayload<{
   select: typeof SESSION_SELECT;
 }>;
 
+/** Resolved OCPP addressing details for the charge point that owns one connector. */
+interface ChargePointBinding {
+  readonly chargePointId: string;
+  readonly ocppConnectorId: number;
+}
+
+/** Finalized billing metrics computed while completing one session server-side. */
+interface SessionFinalization {
+  readonly energyDeliveredKwh: number | null;
+  readonly peakPowerKw: number | null;
+  readonly totalCost: number;
+}
+
 /** Service responsible for charging session lifecycle state transitions and persistence. */
 @Injectable()
 export class SessionsService {
+  private readonly logger: Logger = new Logger(SessionsService.name);
+
   constructor(
     private readonly prismaService: PrismaService,
     private readonly paymentsService: PaymentsService,
     private readonly notificationsService: NotificationsService,
     private readonly walletService: WalletService,
+    private readonly sessionCostCalculatorService: SessionCostCalculatorService,
+    private readonly ocppRemoteStartService: OcppRemoteStartService,
+    private readonly ocppRemoteStopService: OcppRemoteStopService,
   ) {}
 
   /** Creates one pending charging session for a user with optional vehicle and connector links. */
@@ -154,6 +197,8 @@ export class SessionsService {
       });
     }
 
+    await this.dispatchRemoteStartForSession(session);
+
     const activeSession = await this.transitionSessionState(session, PrismaSessionStatus.ACTIVE, {
       startTime: startedAt,
     });
@@ -178,12 +223,26 @@ export class SessionsService {
       throw new BadRequestException(END_TIME_BEFORE_START_TIME_MESSAGE);
     }
 
+    await this.dispatchRemoteStopForSession(session);
+
+    const finalization = await this.resolveSessionFinalization(session, endedAt);
+    const completionData: Prisma.SessionUpdateInput = {
+      endTime: endedAt,
+      totalCost: finalization.totalCost,
+    };
+
+    if (finalization.energyDeliveredKwh !== null) {
+      completionData.energyDelivered = finalization.energyDeliveredKwh;
+    }
+
+    if (finalization.peakPowerKw !== null) {
+      completionData.peakPower = finalization.peakPowerKw;
+    }
+
     const completedSession = await this.transitionSessionState(
       session,
       PrismaSessionStatus.COMPLETED,
-      {
-        endTime: endedAt,
-      },
+      completionData,
     );
     await this.notificationsService.sendSessionCompletedNotification({
       sessionId: completedSession.id,
@@ -309,6 +368,188 @@ export class SessionsService {
   public async getSessionById(userId: string, sessionId: string): Promise<SessionResponse> {
     const session = await this.findUserSessionOrThrow(userId, sessionId);
     return mapSessionRecordToResponse(session);
+  }
+
+  /**
+   * Sends one OCPP RemoteStartTransaction command to the charge point owning the session connector.
+   *
+   * Dispatch is skipped when the OCPP central system is disabled (`OCPP_WS_ENABLED=false`, used by
+   * local development and tests without real chargers) or when the session has no linked connector.
+   * When dispatch runs, a disconnected or rejecting charge point aborts the start flow with a 409
+   * so the session stays AUTHORIZED and the start request can be retried.
+   */
+  private async dispatchRemoteStartForSession(session: SessionRecord): Promise<void> {
+    if (!isOcppServerEnabled(process.env.OCPP_WS_ENABLED)) {
+      this.logger.warn(
+        `Skipping RemoteStartTransaction for session ${session.id}: OCPP server is disabled`,
+      );
+      return;
+    }
+
+    if (session.connectorId === null) {
+      this.logger.warn(
+        `Skipping RemoteStartTransaction for session ${session.id}: session has no connector`,
+      );
+      return;
+    }
+
+    const binding = await this.resolveChargePointBinding(session.connectorId);
+    let result: OcppRemoteStartResult;
+
+    try {
+      result = await this.ocppRemoteStartService.remoteStartTransaction({
+        chargePointId: binding.chargePointId,
+        payload: {
+          connectorId: binding.ocppConnectorId,
+          idTag: session.userId,
+        },
+      });
+    } catch (error: unknown) {
+      if (error instanceof NotFoundException) {
+        throw new ConflictException(
+          `Charge point ${binding.chargePointId} is not connected; cannot start charging for session ${session.id}`,
+        );
+      }
+
+      throw error;
+    }
+
+    if (result.status === 'Rejected') {
+      throw new ConflictException(
+        `Charge point ${binding.chargePointId} rejected the remote start request for session ${session.id}`,
+      );
+    }
+  }
+
+  /**
+   * Sends one OCPP RemoteStopTransaction command for sessions started through OCPP.
+   *
+   * Dispatch only applies when the session carries an OCPP transaction id. Failures (charge point
+   * offline, timeout, or Rejected response) are logged and tolerated so the session can still be
+   * finalized server-side with a computed cost.
+   */
+  private async dispatchRemoteStopForSession(session: SessionRecord): Promise<void> {
+    const transactionId = parseOcppTransactionId(session.transactionId);
+
+    if (transactionId === null) {
+      return;
+    }
+
+    if (!isOcppServerEnabled(process.env.OCPP_WS_ENABLED)) {
+      this.logger.warn(
+        `Skipping RemoteStopTransaction for session ${session.id}: OCPP server is disabled`,
+      );
+      return;
+    }
+
+    if (session.connectorId === null) {
+      return;
+    }
+
+    try {
+      const binding = await this.resolveChargePointBinding(session.connectorId);
+      const result = await this.ocppRemoteStopService.remoteStopTransaction({
+        chargePointId: binding.chargePointId,
+        payload: {
+          transactionId,
+        },
+      });
+
+      if (result.status === 'Rejected') {
+        this.logger.warn(
+          `Charge point ${binding.chargePointId} rejected RemoteStopTransaction for session ${session.id}; finalizing server-side`,
+        );
+      }
+    } catch (error: unknown) {
+      this.logger.warn(
+        `RemoteStopTransaction dispatch failed for session ${session.id}: ${resolveErrorMessage(error)}; finalizing server-side`,
+      );
+    }
+  }
+
+  /** Resolves OCPP charge point addressing for one connector via its owning station. */
+  private async resolveChargePointBinding(connectorId: string): Promise<ChargePointBinding> {
+    const connector = await this.prismaService.connector.findUnique({
+      where: { id: connectorId },
+      select: CONNECTOR_CHARGE_POINT_SELECT,
+    });
+
+    if (connector === null) {
+      throw new NotFoundException(CONNECTOR_NOT_FOUND_MESSAGE);
+    }
+
+    const chargePointId = connector.station.operatorId;
+
+    return {
+      chargePointId,
+      ocppConnectorId: resolveOcppConnectorNumber(chargePointId, connector.evseId),
+    };
+  }
+
+  /**
+   * Computes finalized billing metrics for one API-driven session stop.
+   *
+   * Energy and peak power come from ingested meter values when available; otherwise the session's
+   * previously persisted energy figure is used. The final cost keeps an already-billed non-zero
+   * total (for example, persisted by the OCPP StopTransaction path), and is otherwise computed
+   * from tariffs so an API-driven stop never bills zero for a session that consumed energy.
+   */
+  private async resolveSessionFinalization(
+    session: SessionRecord,
+    endedAt: Date,
+  ): Promise<SessionFinalization> {
+    const meterStats = await this.prismaService.meterValue.aggregate({
+      where: {
+        sessionId: session.id,
+      },
+      _max: {
+        energyActiveImport: true,
+        powerActiveImport: true,
+      },
+      _min: {
+        energyActiveImport: true,
+      },
+    });
+    const energyDeliveredKwh = calculateEnergyDeliveredKwh(
+      meterStats._min.energyActiveImport,
+      meterStats._max.energyActiveImport,
+    );
+    const peakPowerKw = calculatePeakPowerKw(meterStats._max.powerActiveImport);
+    const billableEnergyKwh = energyDeliveredKwh ?? session.energyDelivered;
+
+    if (session.totalCost > 0) {
+      return {
+        energyDeliveredKwh,
+        peakPowerKw,
+        totalCost: session.totalCost,
+      };
+    }
+
+    try {
+      const pricing = await this.sessionCostCalculatorService.calculateSessionCost({
+        connectorId: session.connectorId,
+        energyDeliveredKwh: billableEnergyKwh,
+        sessionId: session.id,
+        startedAt: session.startTime ?? session.createdAt,
+        stoppedAt: endedAt,
+      });
+
+      return {
+        energyDeliveredKwh,
+        peakPowerKw,
+        totalCost: pricing.totalCost,
+      };
+    } catch (error: unknown) {
+      this.logger.warn(
+        `Session ${session.id} cost calculation failed: ${resolveErrorMessage(error)}; keeping persisted total`,
+      );
+
+      return {
+        energyDeliveredKwh,
+        peakPowerKw,
+        totalCost: session.totalCost,
+      };
+    }
   }
 
   /**
@@ -692,6 +933,89 @@ function mapSharedSessionStatusToPrismaEnum(status: SharedSessionStatus): Prisma
     default:
       return PrismaSessionStatus.PENDING;
   }
+}
+
+/**
+ * Resolves the OCPP connector number for one connector by inverting persisted EVSE id formats.
+ *
+ * This mirrors the candidate EVSE id formats used to resolve inbound OCPP messages
+ * (see buildCandidateEvseIds in ocpp.transactions.service.ts): `{chargePointId}-evse-{n}`,
+ * `{chargePointId}-{n}`, or a bare number. Legacy EVSE ids with a trailing numeric segment fall
+ * back to that segment, and connector number 1 is used as the last resort.
+ */
+function resolveOcppConnectorNumber(chargePointId: string, evseId: string): number {
+  const normalizedEvseId = evseId.trim();
+  const prefixes = [`${chargePointId}-evse-`, `${chargePointId}-`];
+
+  for (const prefix of prefixes) {
+    if (normalizedEvseId.startsWith(prefix)) {
+      const candidate = Number(normalizedEvseId.slice(prefix.length));
+      if (Number.isInteger(candidate) && candidate > 0) {
+        return candidate;
+      }
+    }
+  }
+
+  if (/^\d+$/.test(normalizedEvseId)) {
+    const candidate = Number(normalizedEvseId);
+    if (candidate > 0) {
+      return candidate;
+    }
+  }
+
+  const trailingNumberMatch = /-0*(\d+)$/.exec(normalizedEvseId);
+  if (trailingNumberMatch !== null) {
+    const candidate = Number(trailingNumberMatch[1]);
+    if (candidate > 0) {
+      return candidate;
+    }
+  }
+
+  return 1;
+}
+
+/** Parses one persisted OCPP transaction id string into a positive integer, or null when absent. */
+function parseOcppTransactionId(rawTransactionId: string | null): number | null {
+  if (rawTransactionId === null) {
+    return null;
+  }
+
+  const transactionId = Number(rawTransactionId.trim());
+  if (!Number.isInteger(transactionId) || transactionId <= 0) {
+    return null;
+  }
+
+  return transactionId;
+}
+
+/** Calculates delivered energy in kWh from meter-value aggregates, or null without meter data. */
+function calculateEnergyDeliveredKwh(
+  minEnergyWh: number | null,
+  maxEnergyWh: number | null,
+): number | null {
+  if (minEnergyWh === null || maxEnergyWh === null) {
+    return null;
+  }
+
+  return Math.max(0, (maxEnergyWh - minEnergyWh) / WATT_HOURS_PER_KILOWATT_HOUR);
+}
+
+/** Calculates peak power in kW from meter-value aggregates, or null without meter data. */
+function calculatePeakPowerKw(peakPowerWatts: number | null): number | null {
+  if (peakPowerWatts === null) {
+    return null;
+  }
+
+  return Math.max(0, peakPowerWatts / WATTS_PER_KILOWATT);
+}
+
+/** Resolves a safe log/error message from an unknown thrown value. */
+function resolveErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return 'Unknown session error';
 }
 
 /** Maps one selected Prisma session row into a public API session payload. */
