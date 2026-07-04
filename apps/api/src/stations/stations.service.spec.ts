@@ -20,10 +20,12 @@ interface NearbyStationRow {
   readonly address: string;
   readonly amenities: readonly string[];
   readonly city: string;
+  readonly connectorCount: number;
   readonly distanceMeters: number | string;
   readonly id: string;
   readonly latitude: number;
   readonly longitude: number;
+  readonly maxPowerKw: number;
   readonly name: string;
   readonly openingHours: string | null;
   readonly operatorId: string;
@@ -111,10 +113,12 @@ function buildNearbyStationRow(overrides?: Partial<NearbyStationRow>): NearbySta
     address: 'Հյուսիսային պողոտա 10',
     amenities: ['parking', 'cafe'],
     city: 'Yerevan',
+    connectorCount: 2,
     distanceMeters: 1260.45,
     id: STATION_ID,
     latitude: 40.1792,
     longitude: 44.4991,
+    maxPowerKw: 150,
     name: 'LiloCharge Kentron Hub',
     openingHours: '24/7',
     operatorId: 'ev_armenia',
@@ -262,10 +266,12 @@ describe('StationsService', () => {
         address: 'Հյուսիսային պողոտա 10',
         amenities: ['parking', 'cafe'],
         city: 'Yerevan',
+        connectorCount: 2,
         distanceMeters: 1260.45,
         id: STATION_ID,
         latitude: 40.1792,
         longitude: 44.4991,
+        maxPowerKw: 150,
         name: 'LiloCharge Kentron Hub',
         openingHours: '24/7',
         operatorId: 'ev_armenia',
@@ -276,10 +282,12 @@ describe('StationsService', () => {
         address: 'Հյուսիսային պողոտա 10',
         amenities: ['parking', 'cafe'],
         city: 'Yerevan',
+        connectorCount: 2,
         distanceMeters: 1985.7,
         id: '55555555-5555-5555-5555-555555555555',
         latitude: 40.1792,
         longitude: 44.4991,
+        maxPowerKw: 150,
         name: 'LiloCharge Kentron Hub',
         openingHours: '24/7',
         operatorId: 'ev_armenia',
@@ -369,10 +377,12 @@ describe('StationsService', () => {
         address: 'Հյուսիսային պողոտա 10',
         amenities: ['parking', 'cafe'],
         city: 'Yerevan',
+        connectorCount: 2,
         distanceMeters: 1260.45,
         id: '99999999-9999-9999-9999-999999999998',
         latitude: 40.1792,
         longitude: 44.4991,
+        maxPowerKw: 150,
         name: 'Կենտրոն Կայան',
         openingHours: '24/7',
         operatorId: 'ev_armenia',
@@ -383,10 +393,12 @@ describe('StationsService', () => {
         address: 'Հյուսիսային պողոտա 10',
         amenities: ['parking', 'cafe'],
         city: 'Yerevan',
+        connectorCount: 2,
         distanceMeters: 645.12,
         id: '99999999-9999-9999-9999-999999999999',
         latitude: 40.1792,
         longitude: 44.4991,
+        maxPowerKw: 150,
         name: 'Центр Заряд',
         openingHours: '24/7',
         operatorId: 'ev_armenia',

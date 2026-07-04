@@ -32,10 +32,12 @@ interface NearbyStationRawRow {
   readonly address: string;
   readonly amenities: readonly string[];
   readonly city: string;
+  readonly connectorCount: number;
   readonly distanceMeters: number | string;
   readonly id: string;
   readonly latitude: number;
   readonly longitude: number;
+  readonly maxPowerKw: number;
   readonly name: string;
   readonly openingHours: string | null;
   readonly operatorId: string;
@@ -255,10 +257,12 @@ function mapNearbyStationRawRowToResponse(station: NearbyStationRawRow): Station
     address: station.address,
     amenities: station.amenities,
     city: station.city,
+    connectorCount: station.connectorCount,
     distanceMeters: normalizeDistanceMeters(station.distanceMeters),
     id: station.id,
     latitude: station.latitude,
     longitude: station.longitude,
+    maxPowerKw: station.maxPowerKw,
     name: station.name,
     openingHours: station.openingHours,
     operatorId: station.operatorId,
