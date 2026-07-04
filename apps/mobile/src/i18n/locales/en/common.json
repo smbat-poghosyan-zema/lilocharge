@@ -24,6 +24,7 @@
     "map": {
       "loading": "Refreshing stations...",
       "refreshError": "Failed to refresh station data.",
+      "empty": "No charging stations found in this area",
       "missingToken": "Map is unavailable. Set the EXPO_PUBLIC_MAPBOX_TOKEN environment variable.",
       "camera": {
         "focusSelected": "Selected station",

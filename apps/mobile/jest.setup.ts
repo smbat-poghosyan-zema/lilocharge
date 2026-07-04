@@ -22,9 +22,11 @@ jest.mock('@rnmapbox/maps', () => {
   const setAccessToken = jest.fn<Promise<string | null>, [string | null]>(() => {
     return Promise.resolve(null);
   });
+  // Mirrors the metro mock (src/__mocks__/rnmapbox-maps.js): offline tile
+  // packs require the real native Mapbox module, so the mock rejects.
   const offlineManagerLegacy = {
     createPack: jest.fn<Promise<void>, [unknown]>(() => {
-      return Promise.resolve();
+      return Promise.reject(new Error('offline maps unsupported in mock map mode'));
     }),
   };
   const mapboxModule = {

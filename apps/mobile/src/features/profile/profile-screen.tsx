@@ -1,9 +1,9 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { resolveApiBaseUrl } from '../../config/runtime';
+import { getApiBaseUrl } from '../../config/runtime';
 import { useAppTranslation } from '../../i18n/use-app-translation';
 
-const API_BASE_URL = resolveApiBaseUrl(undefined);
+const API_BASE_URL = getApiBaseUrl();
 
 /**
  * Renders the profile landing screen.

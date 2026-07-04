@@ -5,7 +5,7 @@ import type {
   StationNearbyResponse,
   StationSearchQueryRequest,
 } from '@lilocharge/shared-types';
-import { derivePowerTier, StationStatus } from '@lilocharge/shared-types';
+import { derivePowerTier } from '@lilocharge/shared-types';
 import { useRouter } from 'expo-router';
 import Mapbox from '@rnmapbox/maps';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -73,73 +73,6 @@ const CLUSTER_COLOR_EXPRESSION = [
 const CLUSTER_RADIUS_EXPRESSION = ['step', ['get', 'point_count'], 18, 15, 24, 40, 30] as const;
 const CLUSTER_COUNT_EXPRESSION = ['get', 'point_count_abbreviated'] as const;
 
-const FALLBACK_STATIONS: readonly StationNearbyResponse[] = [
-  {
-    address: 'Հյուսիսային պողոտա 10',
-    amenities: ['parking', 'cafe'],
-    city: 'Yerevan',
-    distanceMeters: 380,
-    id: '80000000-0000-0000-0000-000000000001',
-    latitude: 40.1792,
-    longitude: 44.4991,
-    name: 'Kentron Hub',
-    openingHours: '24/7',
-    operatorId: 'lilocharge',
-    connectorCount: 4,
-    maxPowerKw: 50,
-    operatorName: 'LiloCharge',
-    status: StationStatus.AVAILABLE,
-  },
-  {
-    address: 'Թումանյան 19',
-    amenities: ['parking'],
-    city: 'Yerevan',
-    distanceMeters: 640,
-    id: '80000000-0000-0000-0000-000000000002',
-    latitude: 40.1825,
-    longitude: 44.511,
-    name: 'Tumanyan DC',
-    openingHours: '08:00-23:00',
-    operatorId: 'operator-2',
-    connectorCount: 2,
-    maxPowerKw: 100,
-    operatorName: 'Operator 2',
-    status: StationStatus.OCCUPIED,
-  },
-  {
-    address: 'Մաշտոց 35',
-    amenities: ['wc'],
-    city: 'Yerevan',
-    distanceMeters: 1150,
-    id: '80000000-0000-0000-0000-000000000003',
-    latitude: 40.1728,
-    longitude: 44.4895,
-    name: 'Mashtots AC',
-    openingHours: null,
-    operatorId: 'operator-3',
-    connectorCount: 1,
-    maxPowerKw: 22,
-    operatorName: 'Operator 3',
-    status: StationStatus.MAINTENANCE,
-  },
-  {
-    address: 'Աբովյան 3',
-    amenities: ['parking', 'shop'],
-    city: 'Yerevan',
-    distanceMeters: 920,
-    id: '80000000-0000-0000-0000-000000000004',
-    latitude: 40.1905,
-    longitude: 44.5157,
-    name: 'Abovyan Ultra',
-    openingHours: '24/7',
-    operatorId: 'operator-4',
-    connectorCount: 3,
-    maxPowerKw: 150,
-    operatorName: 'Operator 4',
-    status: StationStatus.OFFLINE,
-  },
-];
-
 type OfflineDownloadStatus = 'ERROR' | 'IDLE' | 'IN_PROGRESS' | 'SUCCESS';
 
 interface MapCameraState {
@@ -164,7 +97,7 @@ export function StationsScreen({
   const router = useRouter();
   const { t } = useAppTranslation();
   const resolvedMapboxToken = resolveMapboxAccessToken(mapboxToken);
-  const [stations, setStations] = useState<readonly StationNearbyResponse[]>(FALLBACK_STATIONS);
+  const [stations, setStations] = useState<readonly StationNearbyResponse[]>([]);
   const [isRefreshingStations, setIsRefreshingStations] = useState<boolean>(true);
   const [hasStationLoadError, setHasStationLoadError] = useState<boolean>(false);
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
@@ -221,11 +154,7 @@ export function StationsScreen({
           return;
         }
 
-        setStations(
-          nearbyStations.length > 0 || hasAnyStationFilters(stationFilters) || hasActiveSearchQuery
-            ? nearbyStations
-            : FALLBACK_STATIONS,
-        );
+        setStations(nearbyStations);
         setHasStationLoadError(false);
       } catch {
         if (!isMounted) {
@@ -589,6 +518,11 @@ export function StationsScreen({
                 {t('stations.map.refreshError')}
               </Text>
             ) : null}
+            {!isRefreshingStations && !hasStationLoadError && stations.length === 0 ? (
+              <Text style={styles.statusText} testID="stations-empty-state">
+                {t('stations.map.empty')}
+              </Text>
+            ) : null}
           </View>
           <View style={styles.cameraControlsContainer}>
             <Pressable
@@ -680,18 +614,6 @@ function buildStationSearchQuery(query: string): StationSearchQueryRequest {
  */
 function extractFavoriteStationIds(favorites: readonly FavoriteStation[]): readonly string[] {
   return favorites.map((favorite) => favorite.stationId);
-}
-
-/**
- * Determines whether any station filter is currently active.
- */
-function hasAnyStationFilters(filters: StationFilterState): boolean {
-  return (
-    filters.connectorTypes.length > 0 ||
-    filters.minimumPowerKw !== undefined ||
-    filters.availabilityStatuses.length > 0 ||
-    filters.operatorIds.length > 0
-  );
 }
 
 /**

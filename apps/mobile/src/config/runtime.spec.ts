@@ -1,4 +1,5 @@
 import {
+  getApiBaseUrl,
   resolveApiBaseUrl,
   resolveApplePayMerchantIdentifier,
   resolveGooglePayMerchantIdentifier,
@@ -18,6 +19,19 @@ describe('runtime config', () => {
 
     it('returns configured URL when value is present', () => {
       expect(resolveApiBaseUrl('https://api.lilocharge.am')).toBe('https://api.lilocharge.am');
+    });
+  });
+
+  describe('getApiBaseUrl', () => {
+    // babel-preset-expo statically inlines process.env.EXPO_PUBLIC_* at
+    // transform time, so the value cannot be mutated at runtime in tests.
+    // The env-driven branching itself is covered by resolveApiBaseUrl above.
+    it('resolves the bundle-time EXPO_PUBLIC_API_URL through resolveApiBaseUrl', () => {
+      expect(getApiBaseUrl()).toBe(resolveApiBaseUrl(process.env.EXPO_PUBLIC_API_URL));
+    });
+
+    it('falls back to the default URL when EXPO_PUBLIC_API_URL is unset at bundle time', () => {
+      expect(getApiBaseUrl()).toBe('http://localhost:3000');
     });
   });
 

@@ -10,7 +10,8 @@ import type {
 } from '@lilocharge/shared-types';
 
 import { createApiClient, type ApiClient } from '../../api';
-import { resolveApiBaseUrl } from '../../config/runtime';
+import { getApiBaseUrl } from '../../config/runtime';
+import { clearPersistedSession, getPersistedAccessToken } from './session-storage';
 
 /**
  * Request body used when completing OTP verification and account registration.
@@ -116,9 +117,13 @@ export function createOnboardingApi(apiClient: ApiClient): OnboardingApi {
 }
 
 const defaultOnboardingApiClient = createApiClient({
-  baseUrl: resolveApiBaseUrl(undefined),
+  baseUrl: getApiBaseUrl(),
   defaultHeaders: {
     Accept: 'application/json',
+  },
+  getAccessToken: (): string | null => getPersistedAccessToken(),
+  onUnauthorized: (): void => {
+    clearPersistedSession();
   },
 });
 

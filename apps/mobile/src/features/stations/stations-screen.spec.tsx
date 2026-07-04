@@ -483,4 +483,62 @@ describe('StationsScreen', () => {
     expect(screen.getByTestId('station-shape-source')).toBeTruthy();
     expect(screen.queryByTestId('station-bottom-sheet')).toBeNull();
   });
+
+  it('shows honest empty state instead of fallback stations when API returns no stations', async () => {
+    const stationsApiClient = createStationsApiClientMock();
+    stationsApiClient.getNearbyStations.mockResolvedValue([]);
+
+    render(<StationsScreen mapboxToken="pk.test.token" stationsApiClient={stationsApiClient} />);
+
+    await screen.findByTestId('stations-map');
+
+    expect(await screen.findByTestId('stations-empty-state')).toHaveTextContent(
+      'Այս տարածքում լիցքավորման կայաններ չեն գտնվել',
+    );
+    expect(screen.queryByText('Kentron Hub')).toBeNull();
+    expect(screen.queryByText('Tumanyan DC')).toBeNull();
+  });
+
+  it('does not show the empty state while loading or when refresh fails', async () => {
+    const stationsApiClient = createStationsApiClientMock();
+    stationsApiClient.getNearbyStations.mockRejectedValue(new Error('Network error'));
+
+    render(<StationsScreen mapboxToken="pk.test.token" stationsApiClient={stationsApiClient} />);
+
+    await screen.findByTestId('stations-map');
+
+    expect(await screen.findByTestId('stations-load-error')).toBeTruthy();
+    expect(screen.queryByTestId('stations-empty-state')).toBeNull();
+  });
+
+  it('hides the empty state when the API returns stations', async () => {
+    const stationsApiClient = createStationsApiClientMock();
+
+    render(<StationsScreen mapboxToken="pk.test.token" stationsApiClient={stationsApiClient} />);
+
+    await screen.findByTestId('stations-map');
+
+    await waitFor(() => {
+      expect(stationsApiClient.getNearbyStations).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('stations-loading-indicator')).toBeNull();
+    });
+
+    expect(screen.queryByTestId('stations-empty-state')).toBeNull();
+  });
+
+  it('surfaces an error when the offline map download fails in mock map mode', async () => {
+    const stationsApiClient = createStationsApiClientMock();
+
+    render(<StationsScreen mapboxToken="pk.test.token" stationsApiClient={stationsApiClient} />);
+
+    await screen.findByTestId('stations-map');
+
+    fireEvent.press(screen.getByText('Ներբեռնել offline քարտեզ'));
+
+    expect(await screen.findByText('Offline քարտեզի ներբեռնումը ձախողվեց')).toBeTruthy();
+    expect(screen.queryByText('Offline քարտեզի ներբեռնումն ավարտված է')).toBeNull();
+  });
 });

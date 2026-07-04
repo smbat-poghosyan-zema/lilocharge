@@ -6,6 +6,7 @@ import type {
 import { createContext, useContext, useMemo, useState, type PropsWithChildren } from 'react';
 
 import { extractUserIdFromAccessToken } from './auth-token';
+import { onboardingSessionStorage, type SessionStorage } from './session-storage';
 
 /**
  * Supported payment methods shown in onboarding payment setup.
@@ -39,12 +40,12 @@ export interface OnboardingSessionState {
  * Context actions used by onboarding screens to mutate flow state.
  */
 export interface OnboardingSessionActions {
-  completeOnboarding(): void;
-  resetOnboarding(): void;
-  selectPaymentGateway(gateway: PaymentGatewayOption): void;
-  setAuthTokenPair(tokenPair: AuthTokenPairResponse): void;
-  setRegistrationDraft(draft: RegistrationDraft): void;
-  setVehicle(vehicle: VehicleResponse): void;
+  readonly completeOnboarding: () => void;
+  readonly resetOnboarding: () => void;
+  readonly selectPaymentGateway: (gateway: PaymentGatewayOption) => void;
+  readonly setAuthTokenPair: (tokenPair: AuthTokenPairResponse) => void;
+  readonly setRegistrationDraft: (draft: RegistrationDraft) => void;
+  readonly setVehicle: (vehicle: VehicleResponse) => void;
 }
 
 /**
@@ -65,15 +66,48 @@ const INITIAL_ONBOARDING_STATE: OnboardingSessionState = {
 
 const OnboardingSessionContext = createContext<OnboardingSessionContextValue | null>(null);
 
+interface OnboardingSessionProviderProps {
+  readonly sessionStorage?: SessionStorage;
+}
+
 /**
- * Provides shared in-memory onboarding state to onboarding route screens.
+ * Builds the initial onboarding state by hydrating persisted auth/session fields.
  */
-export function OnboardingSessionProvider({ children }: PropsWithChildren): JSX.Element {
-  const [state, setState] = useState<OnboardingSessionState>(INITIAL_ONBOARDING_STATE);
+function buildInitialOnboardingState(sessionStorage: SessionStorage): OnboardingSessionState {
+  const persistedSession = sessionStorage.readSession();
+  const hasTokenPair =
+    persistedSession.accessToken !== null && persistedSession.refreshToken !== null;
+
+  return {
+    ...INITIAL_ONBOARDING_STATE,
+    isComplete: persistedSession.onboardingComplete,
+    tokenPair: hasTokenPair
+      ? {
+          accessToken: persistedSession.accessToken,
+          refreshToken: persistedSession.refreshToken,
+          tokenType: 'Bearer',
+        }
+      : null,
+    userId: persistedSession.userId,
+  };
+}
+
+/**
+ * Provides shared onboarding state to onboarding route screens, hydrated from
+ * and persisted to MMKV-backed session storage across cold starts.
+ */
+export function OnboardingSessionProvider({
+  children,
+  sessionStorage = onboardingSessionStorage,
+}: PropsWithChildren<OnboardingSessionProviderProps>): JSX.Element {
+  const [state, setState] = useState<OnboardingSessionState>(() => {
+    return buildInitialOnboardingState(sessionStorage);
+  });
 
   const value = useMemo<OnboardingSessionContextValue>(() => {
     return {
       completeOnboarding: (): void => {
+        sessionStorage.setOnboardingComplete(true);
         setState((previousState) => ({
           ...previousState,
           isComplete: true,
@@ -81,6 +115,7 @@ export function OnboardingSessionProvider({ children }: PropsWithChildren): JSX.
       },
 
       resetOnboarding: (): void => {
+        sessionStorage.clearSession();
         setState(INITIAL_ONBOARDING_STATE);
       },
 
@@ -92,10 +127,13 @@ export function OnboardingSessionProvider({ children }: PropsWithChildren): JSX.
       },
 
       setAuthTokenPair: (tokenPair: AuthTokenPairResponse): void => {
+        const userId = extractUserIdFromAccessToken(tokenPair.accessToken);
+
+        sessionStorage.setTokenPair(tokenPair, userId);
         setState((previousState) => ({
           ...previousState,
           tokenPair,
-          userId: extractUserIdFromAccessToken(tokenPair.accessToken),
+          userId,
         }));
       },
 
@@ -115,7 +153,7 @@ export function OnboardingSessionProvider({ children }: PropsWithChildren): JSX.
 
       state,
     };
-  }, [state]);
+  }, [sessionStorage, state]);
 
   return (
     <OnboardingSessionContext.Provider value={value}>{children}</OnboardingSessionContext.Provider>

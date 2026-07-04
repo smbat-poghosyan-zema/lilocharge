@@ -8,8 +8,28 @@ import {
   useOnboardingSession,
   type PaymentGatewayOption,
 } from './onboarding-session';
+import { createSessionStorage, type SessionStorage } from './session-storage';
 
 const ACCESS_TOKEN_WITH_SUB = createAccessTokenWithSub('11111111-1111-1111-1111-111111111111');
+
+/**
+ * Builds an isolated in-memory session storage for provider persistence tests.
+ */
+function createInMemorySessionStorage(): SessionStorage {
+  const valueByKey = new Map<string, string>();
+
+  return createSessionStorage({
+    delete: (key: string): void => {
+      valueByKey.delete(key);
+    },
+    getString: (key: string): string | undefined => {
+      return valueByKey.get(key);
+    },
+    set: (key: string, value: string): void => {
+      valueByKey.set(key, value);
+    },
+  });
+}
 
 function SessionConsumer(): JSX.Element {
   const onboardingSession = useOnboardingSession();
@@ -54,10 +74,35 @@ function SessionConsumer(): JSX.Element {
   );
 }
 
+function StateReader(): JSX.Element {
+  const { state } = useOnboardingSession();
+
+  return (
+    <Text testID="hydrated-state">
+      {JSON.stringify({
+        accessToken: state.tokenPair?.accessToken ?? null,
+        isComplete: state.isComplete,
+        refreshToken: state.tokenPair?.refreshToken ?? null,
+        userId: state.userId,
+      })}
+    </Text>
+  );
+}
+
+function ResetConsumer(): JSX.Element {
+  const { resetOnboarding, state } = useOnboardingSession();
+
+  useEffect(() => {
+    resetOnboarding();
+  }, []);
+
+  return <Text testID="reset-state">{JSON.stringify({ isComplete: state.isComplete })}</Text>;
+}
+
 describe('OnboardingSessionProvider', () => {
   it('tracks onboarding lifecycle state updates', async () => {
     render(
-      <OnboardingSessionProvider>
+      <OnboardingSessionProvider sessionStorage={createInMemorySessionStorage()}>
         <SessionConsumer />
       </OnboardingSessionProvider>,
     );
@@ -71,6 +116,77 @@ describe('OnboardingSessionProvider', () => {
           userId: '11111111-1111-1111-1111-111111111111',
         }),
       );
+    });
+  });
+
+  it('persists tokens and completion to session storage', async () => {
+    const sessionStorage = createInMemorySessionStorage();
+
+    render(
+      <OnboardingSessionProvider sessionStorage={sessionStorage}>
+        <SessionConsumer />
+      </OnboardingSessionProvider>,
+    );
+
+    await waitFor(() => {
+      expect(sessionStorage.readSession()).toEqual({
+        accessToken: ACCESS_TOKEN_WITH_SUB,
+        onboardingComplete: true,
+        refreshToken: 'refresh-token',
+        userId: '11111111-1111-1111-1111-111111111111',
+      });
+    });
+  });
+
+  it('hydrates initial state from persisted session storage', () => {
+    const sessionStorage = createInMemorySessionStorage();
+    sessionStorage.setTokenPair(
+      { accessToken: ACCESS_TOKEN_WITH_SUB, refreshToken: 'refresh-token' },
+      '11111111-1111-1111-1111-111111111111',
+    );
+    sessionStorage.setOnboardingComplete(true);
+
+    render(
+      <OnboardingSessionProvider sessionStorage={sessionStorage}>
+        <StateReader />
+      </OnboardingSessionProvider>,
+    );
+
+    expect(screen.getByTestId('hydrated-state')).toHaveTextContent(
+      JSON.stringify({
+        accessToken: ACCESS_TOKEN_WITH_SUB,
+        isComplete: true,
+        refreshToken: 'refresh-token',
+        userId: '11111111-1111-1111-1111-111111111111',
+      }),
+    );
+  });
+
+  it('clears persisted session when onboarding is reset', async () => {
+    const sessionStorage = createInMemorySessionStorage();
+    sessionStorage.setTokenPair(
+      { accessToken: ACCESS_TOKEN_WITH_SUB, refreshToken: 'refresh-token' },
+      '11111111-1111-1111-1111-111111111111',
+    );
+    sessionStorage.setOnboardingComplete(true);
+
+    render(
+      <OnboardingSessionProvider sessionStorage={sessionStorage}>
+        <ResetConsumer />
+      </OnboardingSessionProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('reset-state')).toHaveTextContent(
+        JSON.stringify({ isComplete: false }),
+      );
+    });
+
+    expect(sessionStorage.readSession()).toEqual({
+      accessToken: null,
+      onboardingComplete: false,
+      refreshToken: null,
+      userId: null,
     });
   });
 });

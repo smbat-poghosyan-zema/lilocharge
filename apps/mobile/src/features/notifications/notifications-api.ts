@@ -4,7 +4,8 @@ import type {
 } from '@lilocharge/shared-types';
 
 import { createApiClient, type ApiClient } from '../../api';
-import { resolveApiBaseUrl } from '../../config/runtime';
+import { getApiBaseUrl } from '../../config/runtime';
+import { clearPersistedSession, getPersistedAccessToken } from '../onboarding/session-storage';
 
 /** Typed API contract for push-token registration operations. */
 export interface NotificationsApi {
@@ -36,9 +37,13 @@ export function createNotificationsApi(apiClient: ApiClient): NotificationsApi {
 }
 
 const defaultNotificationsApiClient = createApiClient({
-  baseUrl: resolveApiBaseUrl(undefined),
+  baseUrl: getApiBaseUrl(),
   defaultHeaders: {
     Accept: 'application/json',
+  },
+  getAccessToken: (): string | null => getPersistedAccessToken(),
+  onUnauthorized: (): void => {
+    clearPersistedSession();
   },
 });
 

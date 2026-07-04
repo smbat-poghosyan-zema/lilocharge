@@ -16,13 +16,25 @@ config.resolver.nodeModulesPaths = [
   path.resolve(workspaceRoot, 'node_modules/.pnpm/node_modules'),
 ];
 
-// Mock native-only modules and their web dependencies for Expo Go / web
+// @rnmapbox/maps ships a native module that cannot run on web. On native
+// platforms the real module is bundled so real Mapbox maps ship in dev/release
+// builds. Set EXPO_PUBLIC_FORCE_MOCK_MAP=1 at bundle time as an explicit
+// escape hatch for Expo Go, which cannot load custom native modules.
+const forceMockMap = Boolean(process.env.EXPO_PUBLIC_FORCE_MOCK_MAP);
+
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  if (moduleName === '@rnmapbox/maps' || moduleName.startsWith('@rnmapbox/maps/')) {
+  const shouldMockMapbox = platform === 'web' || forceMockMap;
+
+  if (
+    shouldMockMapbox &&
+    (moduleName === '@rnmapbox/maps' || moduleName.startsWith('@rnmapbox/maps/'))
+  ) {
     return { filePath: require.resolve('./src/__mocks__/rnmapbox-maps.js'), type: 'sourceFile' };
   }
 
-  if (moduleName === 'mapbox-gl' || moduleName.startsWith('mapbox-gl/')) {
+  // The web mock loads Mapbox GL JS from a CDN (never via the `mapbox-gl`
+  // package), so stub `mapbox-gl` out only for non-web bundles.
+  if (platform !== 'web' && (moduleName === 'mapbox-gl' || moduleName.startsWith('mapbox-gl/'))) {
     return { filePath: require.resolve('./src/__mocks__/empty-module.js'), type: 'sourceFile' };
   }
 

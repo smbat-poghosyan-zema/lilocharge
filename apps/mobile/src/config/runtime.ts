@@ -19,6 +19,16 @@ export function resolveApiBaseUrl(envValue: string | undefined): string {
 }
 
 /**
+ * Returns the API base URL from the EXPO_PUBLIC_API_URL environment variable.
+ *
+ * Expo statically inlines EXPO_PUBLIC_* variables at bundle time, so the
+ * literal `process.env.EXPO_PUBLIC_API_URL` expression must appear here.
+ */
+export function getApiBaseUrl(): string {
+  return resolveApiBaseUrl(process.env.EXPO_PUBLIC_API_URL);
+}
+
+/**
  * Resolves the Mapbox access token from environment configuration.
  */
 export function resolveMapboxAccessToken(envValue: string | undefined): string | null {

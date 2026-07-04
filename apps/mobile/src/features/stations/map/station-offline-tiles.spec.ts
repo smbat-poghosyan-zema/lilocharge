@@ -63,4 +63,24 @@ describe('station offline tiles', () => {
       name: 'yerevan-core',
     });
   });
+
+  it('propagates offline pack manager failures to the caller', async () => {
+    const offlinePackManager: OfflinePackManager = {
+      createPack: jest.fn<Promise<void>, [Parameters<OfflinePackManager['createPack']>[0]]>(() =>
+        Promise.reject(new Error('offline maps unsupported in mock map mode')),
+      ),
+    };
+
+    await expect(downloadOfflineTiles(REGION, offlinePackManager)).rejects.toThrow(
+      'offline maps unsupported in mock map mode',
+    );
+  });
+
+  it('rejects when the default manager is the mock map module (no fake success)', async () => {
+    // jest.setup.ts mocks @rnmapbox/maps the same way the metro mock behaves:
+    // offline downloads must fail instead of pretending to succeed.
+    await expect(downloadOfflineTiles(REGION)).rejects.toThrow(
+      'offline maps unsupported in mock map mode',
+    );
+  });
 });

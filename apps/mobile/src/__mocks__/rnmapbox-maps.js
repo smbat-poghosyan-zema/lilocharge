@@ -309,8 +309,13 @@ const Mapbox = {
     return Promise.resolve(token);
   },
   getAccessToken: () => Promise.resolve(_accessToken),
+  // Offline tile packs require the real native Mapbox module. Fail loudly so
+  // the UI reports an error instead of pretending the download succeeded.
   offlineManagerLegacy: {
-    createPack: () => Promise.resolve(),
+    createPack: () => Promise.reject(new Error('offline maps unsupported in mock map mode')),
+  },
+  offlineManager: {
+    createPack: () => Promise.reject(new Error('offline maps unsupported in mock map mode')),
   },
 };
 

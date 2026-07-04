@@ -178,8 +178,7 @@ describe('A1 — Aggregate status display on map pins', () => {
       ],
     } as never);
 
-    const bottomSheet = await screen.findByTestId('station-bottom-sheet');
-    expect(bottomSheet).toBeTruthy();
+    expect(await screen.findByTestId('station-bottom-sheet')).toBeTruthy();
 
     await waitFor(() => {
       expect(stationsApiClient.getStationDetail).toHaveBeenCalledWith(
