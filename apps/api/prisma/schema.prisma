@@ -105,16 +105,17 @@ enum ConnectorType {
 // ============================================================================
 
 model PaymentMethod {
-  id          String         @id @default(uuid()) @db.Uuid
-  userId      String         @map("user_id") @db.Uuid
-  gateway     PaymentGateway
-  token       String
-  last4       String?        @db.Char(4)
-  expiryMonth Int?           @map("expiry_month")
-  expiryYear  Int?           @map("expiry_year")
-  isDefault   Boolean        @default(false) @map("is_default")
-  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+  id           String         @id @default(uuid()) @db.Uuid
+  userId       String         @map("user_id") @db.Uuid
+  gateway      PaymentGateway
+  token        String
+  last4        String?        @db.Char(4)
+  displayLabel String?        @map("display_label")
+  expiryMonth  Int?           @map("expiry_month")
+  expiryYear   Int?           @map("expiry_year")
+  isDefault    Boolean        @default(false) @map("is_default")
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz
 
   // Relations
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -269,6 +270,7 @@ model Session {
   endTime         DateTime?     @map("end_time") @db.Timestamptz
   energyDelivered Float         @default(0) @map("energy_delivered")
   peakPower       Float         @default(0) @map("peak_power")
+  meterStart      Float?        @map("meter_start")
   totalCost       Int           @default(0) @map("total_cost")
   transactionId   String?       @map("transaction_id")
   createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz

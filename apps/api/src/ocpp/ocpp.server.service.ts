@@ -2,7 +2,9 @@ import { readFileSync } from 'node:fs';
 import type { Server as HttpsServer } from 'node:https';
 
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { SessionStatus } from '@prisma/client';
 
+import { PrismaService } from '../prisma/prisma.service';
 import { evaluateChargePointAuth, resolveOcppAuthConfig } from './ocpp.auth';
 import {
   DEFAULT_OCPP_HOST,
@@ -100,6 +102,7 @@ export class OcppServerService implements OnModuleInit, OnModuleDestroy {
     private readonly routingService: OcppRoutingService,
     private readonly registryService: OcppRegistryService,
     private readonly serverFactory: OcppServerFactory,
+    private readonly prismaService: PrismaService,
   ) {}
 
   /** Starts the OCPP WebSocket server and binds connection, auth, and routing handlers. */
@@ -246,10 +249,57 @@ export class OcppServerService implements OnModuleInit, OnModuleDestroy {
 
       if (wasRemoved) {
         this.logger.log(`Charge point disconnected: ${registration.identity}`);
+        void this.reportActiveSessionsOnDisconnect(registration.identity);
       }
     };
 
     client.on('disconnect', unregisterClient);
     client.on('close', unregisterClient);
+  }
+
+  /**
+   * Surfaces ACTIVE sessions left behind when a charge point drops its WebSocket connection.
+   *
+   * Design decision (deliberately minimal): the charge point is marked disconnected by removing it
+   * from the registry (done by the caller), and any in-flight sessions are logged loudly instead of
+   * being force-failed. Sessions stay ACTIVE so they resolve through one of the existing paths:
+   * - the charge point reconnects (re-registration is automatic on the next handshake) and later
+   *   sends StopTransaction, which finalizes the session with real meter data; or
+   * - the user stops the session via the API, whose remote-stop dispatch already tolerates an
+   *   offline charge point and finalizes the session server-side.
+   * A full offline watchdog (auto-failing sessions after a disconnect grace period, operator
+   * alerting, reconciliation of missed StopTransactions) is intentionally out of scope here and
+   * tracked as follow-up work.
+   */
+  private async reportActiveSessionsOnDisconnect(chargePointId: string): Promise<void> {
+    try {
+      const activeSessions = await this.prismaService.session.findMany({
+        where: {
+          status: SessionStatus.ACTIVE,
+          connector: {
+            station: {
+              operatorId: chargePointId,
+            },
+          },
+        },
+        select: { id: true },
+      });
+
+      if (activeSessions.length === 0) {
+        return;
+      }
+
+      const sessionIds = activeSessions.map((session) => session.id).join(', ');
+      this.logger.warn(
+        `Charge point ${chargePointId} disconnected with ${activeSessions.length} ACTIVE session(s): ` +
+          `${sessionIds}. Sessions remain ACTIVE and will finalize on charge point reconnect ` +
+          '(StopTransaction) or via API stop (server-side finalization).',
+      );
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown lookup error';
+      this.logger.error(
+        `Failed to inspect ACTIVE sessions after ${chargePointId} disconnected: ${message}`,
+      );
+    }
   }
 }

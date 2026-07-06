@@ -5,16 +5,18 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { SessionStatus as PrismaSessionStatus } from '@prisma/client';
+import { Prisma, SessionStatus as PrismaSessionStatus } from '@prisma/client';
 
 import type { NotificationsService } from '../notifications/notifications.service';
 import type {
   OcppRemoteStartResult,
   OcppRemoteStartService,
 } from '../ocpp/ocpp.remote-start.service';
+import type { OcppIdTagService } from '../ocpp/ocpp.id-tag.service';
 import type { OcppRemoteStopResult, OcppRemoteStopService } from '../ocpp/ocpp.remote-stop.service';
 import type { PaymentsService } from '../payments/payments.service';
 import type { PrismaService } from '../prisma/prisma.service';
+import type { WalletService } from '../wallet/wallet.service';
 import type {
   SessionCostCalculationResult,
   SessionCostCalculatorService,
@@ -88,6 +90,7 @@ interface PrismaPaymentMethodDelegateMock {
 }
 
 interface PrismaServiceMock {
+  readonly $transaction: jest.Mock<Promise<unknown>, [(tx: unknown) => Promise<unknown>, unknown?]>;
   readonly connector: PrismaConnectorDelegateMock;
   readonly meterValue: PrismaMeterValueDelegateMock;
   payment?: PrismaPaymentDelegateMock;
@@ -109,6 +112,11 @@ interface OcppRemoteStartServiceMock {
     Promise<OcppRemoteStartResult>,
     Parameters<OcppRemoteStartService['remoteStartTransaction']>
   >;
+}
+
+interface OcppIdTagServiceMock {
+  readonly issueIdTag: jest.Mock<Promise<string>, [string, number?]>;
+  readonly resolveUserId: jest.Mock<Promise<string | null>, [string]>;
 }
 
 interface OcppRemoteStopServiceMock {
@@ -208,6 +216,7 @@ function buildSessionRecord(overrides?: Partial<SessionRecord>): SessionRecord {
 describe('SessionsService', () => {
   let costCalculatorServiceMock: SessionCostCalculatorServiceMock;
   let notificationsServiceMock: NotificationsServiceMock;
+  let ocppIdTagServiceMock: OcppIdTagServiceMock;
   let ocppRemoteStartServiceMock: OcppRemoteStartServiceMock;
   let ocppRemoteStopServiceMock: OcppRemoteStopServiceMock;
   let paymentsServiceMock: PaymentsServiceMock;
@@ -220,10 +229,11 @@ describe('SessionsService', () => {
       prismaMock as unknown as PrismaService,
       paymentsServiceMock as unknown as PaymentsService,
       notificationsServiceMock as unknown as NotificationsService,
-      walletServiceMock as never,
+      walletServiceMock as WalletService,
       costCalculatorServiceMock as unknown as SessionCostCalculatorService,
       ocppRemoteStartServiceMock as unknown as OcppRemoteStartService,
       ocppRemoteStopServiceMock as unknown as OcppRemoteStopService,
+      ocppIdTagServiceMock as unknown as OcppIdTagService,
     );
   }
 
@@ -234,6 +244,9 @@ describe('SessionsService', () => {
   beforeEach(() => {
     process.env.OCPP_WS_ENABLED = 'true';
     prismaMock = {
+      $transaction: jest
+        .fn<Promise<unknown>, [(tx: unknown) => Promise<unknown>, unknown?]>()
+        .mockImplementation(async (callback) => callback(prismaMock)),
       connector: {
         findUnique: jest
           .fn<Promise<ConnectorBindingRecord | null>, [unknown]>()
@@ -299,6 +312,12 @@ describe('SessionsService', () => {
           idleDurationMinutes: 0,
           totalCost: 0,
         }),
+    };
+    ocppIdTagServiceMock = {
+      issueIdTag: jest
+        .fn<Promise<string>, [string, number?]>()
+        .mockResolvedValue('aabbccddeeff00112233'),
+      resolveUserId: jest.fn<Promise<string | null>, [string]>().mockResolvedValue(null),
     };
     ocppRemoteStartServiceMock = {
       remoteStartTransaction: jest
@@ -505,6 +524,7 @@ describe('SessionsService', () => {
   it('stops an active session by transitioning it into completed state', async () => {
     prismaMock.session.findFirst.mockResolvedValue(
       buildSessionRecord({
+        energyDelivered: 12.5,
         startTime: new Date('2026-02-17T12:05:00.000Z'),
         status: PrismaSessionStatus.ACTIVE,
       }),
@@ -512,6 +532,7 @@ describe('SessionsService', () => {
     prismaMock.session.update.mockResolvedValue(
       buildSessionRecord({
         endTime: new Date('2026-02-17T12:35:00.000Z'),
+        energyDelivered: 12.5,
         startTime: new Date('2026-02-17T12:05:00.000Z'),
         status: PrismaSessionStatus.COMPLETED,
       }),
@@ -579,6 +600,170 @@ describe('SessionsService', () => {
     expect(notificationsServiceMock.sendSessionCompletedNotification).not.toHaveBeenCalled();
   });
 
+  describe('connector concurrency guard', () => {
+    it('rejects session creation with 409 when the connector already has a blocking session', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({ id: USER_ID });
+      prismaMock.connector.findUnique.mockResolvedValue(buildConnectorBinding());
+      prismaMock.session.count.mockResolvedValue(1);
+
+      await expect(
+        service.createSession('99999999-9999-9999-9999-999999999999', {
+          connectorId: CONNECTOR_ID,
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(prismaMock.session.count).toHaveBeenCalledWith({
+        where: {
+          connectorId: CONNECTOR_ID,
+          status: {
+            in: [
+              PrismaSessionStatus.PENDING,
+              PrismaSessionStatus.AUTHORIZED,
+              PrismaSessionStatus.ACTIVE,
+            ],
+          },
+        },
+      });
+      expect(prismaMock.session.create).not.toHaveBeenCalled();
+    });
+
+    it('runs the connector guard inside one serializable transaction', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({ id: USER_ID });
+      prismaMock.connector.findUnique.mockResolvedValue(buildConnectorBinding());
+      prismaMock.session.count.mockResolvedValue(0);
+      prismaMock.session.create.mockResolvedValue(buildSessionRecord());
+
+      await service.createSession(USER_ID, { connectorId: CONNECTOR_ID });
+
+      expect(prismaMock.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      });
+      expect(prismaMock.session.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('maps serialization conflicts (P2034) from racing creates to 409', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({ id: USER_ID });
+      prismaMock.connector.findUnique.mockResolvedValue(buildConnectorBinding());
+      prismaMock.$transaction.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('write conflict', {
+          clientVersion: '5.22.0',
+          code: 'P2034',
+        }),
+      );
+
+      await expect(
+        service.createSession(USER_ID, { connectorId: CONNECTOR_ID }),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('skips the connector guard when the session has no connector', async () => {
+      prismaMock.user.findUnique.mockResolvedValue({ id: USER_ID });
+      prismaMock.session.create.mockResolvedValue(buildSessionRecord({ connectorId: null }));
+
+      await service.createSession(USER_ID, {});
+
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+      expect(prismaMock.session.count).not.toHaveBeenCalled();
+    });
+
+    it('rejects session start with 409 when another session holds the connector', async () => {
+      prismaMock.session.findFirst.mockResolvedValue(
+        buildSessionRecord({ status: PrismaSessionStatus.PENDING }),
+      );
+      prismaMock.session.count.mockResolvedValue(1);
+
+      await expect(service.startSession(USER_ID, SESSION_ID, {})).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(prismaMock.session.count).toHaveBeenCalledWith({
+        where: {
+          connectorId: CONNECTOR_ID,
+          id: { not: SESSION_ID },
+          status: {
+            in: [
+              PrismaSessionStatus.PENDING,
+              PrismaSessionStatus.AUTHORIZED,
+              PrismaSessionStatus.ACTIVE,
+            ],
+          },
+        },
+      });
+      expect(prismaMock.session.update).not.toHaveBeenCalled();
+      expect(paymentsServiceMock.preAuthorizeArcaForSession).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('zero-energy session auto-refund', () => {
+    it('refunds the pre-authorization and bills zero when no energy was delivered', async () => {
+      prismaMock.session.findFirst.mockResolvedValue(
+        buildSessionRecord({
+          energyDelivered: 0,
+          startTime: new Date('2026-02-17T12:05:00.000Z'),
+          status: PrismaSessionStatus.ACTIVE,
+        }),
+      );
+      prismaMock.session.update.mockResolvedValue(
+        buildSessionRecord({
+          endTime: new Date('2026-02-17T12:35:00.000Z'),
+          energyDelivered: 0,
+          startTime: new Date('2026-02-17T12:05:00.000Z'),
+          status: PrismaSessionStatus.COMPLETED,
+          totalCost: 0,
+        }),
+      );
+      costCalculatorServiceMock.calculateSessionCost.mockResolvedValue({
+        chargingDurationMinutes: 30,
+        idleDurationMinutes: 0,
+        totalCost: 750,
+      });
+
+      const session = await service.stopSession(USER_ID, SESSION_ID, {
+        endedAt: '2026-02-17T12:35:00.000Z',
+      });
+
+      expect(session.status).toBe(SharedSessionStatus.COMPLETED);
+      expect(prismaMock.session.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            totalCost: 0,
+          }) as Record<string, unknown>,
+        }),
+      );
+      expect(paymentsServiceMock.refundPaymentForSessionFailure).toHaveBeenCalledWith(SESSION_ID);
+      expect(paymentsServiceMock.captureAuthorizedPaymentForSession).not.toHaveBeenCalled();
+    });
+
+    it('does not deduct wallet balance for a zero-energy wallet-funded session', async () => {
+      const walletServiceMock = {
+        checkSufficientBalance: jest.fn(),
+        deductBalance: jest.fn(),
+      };
+      service = buildService(walletServiceMock);
+
+      prismaMock.session.findFirst.mockResolvedValue(
+        buildSessionRecord({
+          energyDelivered: 0,
+          startTime: new Date('2026-02-17T12:05:00.000Z'),
+          status: PrismaSessionStatus.ACTIVE,
+        }),
+      );
+      prismaMock.session.update.mockResolvedValue(
+        buildSessionRecord({
+          endTime: new Date('2026-02-17T12:35:00.000Z'),
+          energyDelivered: 0,
+          startTime: new Date('2026-02-17T12:05:00.000Z'),
+          status: PrismaSessionStatus.COMPLETED,
+          totalCost: 0,
+        }),
+      );
+      prismaMock.paymentMethod.findFirst.mockResolvedValue({ id: 'wallet-pm-id' });
+
+      await service.stopSession(USER_ID, SESSION_ID, {});
+
+      expect(walletServiceMock.deductBalance).not.toHaveBeenCalled();
+      expect(paymentsServiceMock.refundPaymentForSessionFailure).toHaveBeenCalledWith(SESSION_ID);
+    });
+  });
+
   describe('OCPP remote start dispatch', () => {
     beforeEach(() => {
       prismaMock.session.findFirst.mockResolvedValue(
@@ -607,7 +792,7 @@ describe('SessionsService', () => {
         chargePointId: CHARGE_POINT_ID,
         payload: {
           connectorId: 2,
-          idTag: USER_ID,
+          idTag: 'aabbccddeeff00112233',
         },
       });
       expect(session.status).toBe(SharedSessionStatus.ACTIVE);
@@ -667,6 +852,7 @@ describe('SessionsService', () => {
     beforeEach(() => {
       prismaMock.session.findFirst.mockResolvedValue(
         buildSessionRecord({
+          energyDelivered: 18,
           startTime: START_TIME,
           status: PrismaSessionStatus.ACTIVE,
           transactionId: '4242',
@@ -675,6 +861,7 @@ describe('SessionsService', () => {
       prismaMock.session.update.mockResolvedValue(
         buildSessionRecord({
           endTime: new Date('2026-02-17T12:35:00.000Z'),
+          energyDelivered: 18,
           startTime: START_TIME,
           status: PrismaSessionStatus.COMPLETED,
           totalCost: 3500,
@@ -769,6 +956,7 @@ describe('SessionsService', () => {
     it('keeps an already persisted non-zero total cost instead of recomputing it', async () => {
       prismaMock.session.findFirst.mockResolvedValue(
         buildSessionRecord({
+          energyDelivered: 18,
           startTime: START_TIME,
           status: PrismaSessionStatus.ACTIVE,
           totalCost: 9000,
@@ -809,7 +997,7 @@ describe('SessionsService', () => {
       });
 
       prismaMock.user.findUnique.mockResolvedValue({ id: USER_ID });
-      prismaMock.session.findMany.mockResolvedValue([session1, session2] as never);
+      prismaMock.session.findMany.mockResolvedValue([session1, session2]);
       prismaMock.session.count.mockResolvedValue(2);
 
       const result = await service.getSessionHistory(USER_ID, { page: 1, limit: 20 });
@@ -946,7 +1134,7 @@ describe('SessionsService', () => {
         },
       };
 
-      prismaMock.session.findFirst.mockResolvedValue(session as never);
+      prismaMock.session.findFirst.mockResolvedValue(session as unknown as SessionRecord);
 
       const result = await service.generateSessionReceipt(USER_ID, SESSION_ID);
 
@@ -971,7 +1159,7 @@ describe('SessionsService', () => {
         endTime: null,
       };
 
-      prismaMock.session.findFirst.mockResolvedValue(session as never);
+      prismaMock.session.findFirst.mockResolvedValue(session as unknown as SessionRecord);
 
       await expect(service.generateSessionReceipt(USER_ID, SESSION_ID)).rejects.toBeInstanceOf(
         BadRequestException,
@@ -987,7 +1175,7 @@ describe('SessionsService', () => {
         endTime: null,
       };
 
-      prismaMock.session.findFirst.mockResolvedValue(session as never);
+      prismaMock.session.findFirst.mockResolvedValue(session as unknown as SessionRecord);
 
       await expect(service.generateSessionReceipt(USER_ID, SESSION_ID)).rejects.toBeInstanceOf(
         BadRequestException,
@@ -1052,10 +1240,12 @@ describe('SessionsService', () => {
 
     it('should deduct from wallet and create payment record on session stop', async () => {
       const activeSession = buildSessionRecord({
+        energyDelivered: 20,
         status: PrismaSessionStatus.ACTIVE,
         startTime: new Date('2026-02-17T12:00:00.000Z'),
       });
       const completedSession = buildSessionRecord({
+        energyDelivered: 20,
         status: PrismaSessionStatus.COMPLETED,
         startTime: new Date('2026-02-17T12:00:00.000Z'),
         endTime: new Date('2026-02-17T13:00:00.000Z'),

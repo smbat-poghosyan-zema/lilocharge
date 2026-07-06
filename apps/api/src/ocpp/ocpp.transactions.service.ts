@@ -12,6 +12,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionCostCalculatorService } from '../sessions/session-cost-calculator.service';
+import { OcppIdTagService } from './ocpp.id-tag.service';
 import { OcppRemoteStartService } from './ocpp.remote-start.service';
 
 const OCPP_CONNECTOR_LOOKUP_SELECT = {
@@ -26,6 +27,7 @@ const SESSION_STOP_LOOKUP_SELECT = {
   connectorId: true,
   createdAt: true,
   id: true,
+  meterStart: true,
   startTime: true,
   status: true,
   userId: true,
@@ -72,6 +74,7 @@ export class OcppTransactionsService {
     private readonly paymentsService: PaymentsService,
     private readonly notificationsService: NotificationsService,
     private readonly remoteStartService: OcppRemoteStartService,
+    private readonly idTagService: OcppIdTagService,
   ) {}
 
   /**
@@ -109,6 +112,7 @@ export class OcppTransactionsService {
     const createdSession = await this.prismaService.session.create({
       data: {
         connectorId,
+        meterStart: payload.meterStart,
         startTime: startedAt,
         status: SessionStatus.ACTIVE,
         transactionId: String(transactionId),
@@ -206,7 +210,13 @@ export class OcppTransactionsService {
         energyActiveImport: true,
       },
     });
-    const energyDeliveredKwh = calculateEnergyDeliveredKwh(meterStats);
+    // The charger's meterStop - meterStart register delta is the authoritative energy figure
+    // (OCPP 1.6 5.12/5.13); sampled meter values are only a fallback because sparse sampling
+    // (or a single sample) under-counts the delta and under-bills the session.
+    const energyDeliveredKwh = calculateEnergyDeliveredFromRegisters(
+      session.meterStart,
+      payload.meterStop,
+    ) ?? calculateEnergyDeliveredKwh(meterStats);
     const peakPowerKw = calculatePeakPowerKw(meterStats);
     const totalCost = await this.calculateFinalCost({
       connectorId: session.connectorId,
@@ -259,15 +269,21 @@ export class OcppTransactionsService {
     return connector?.id ?? null;
   }
 
-  /** Resolves one existing user id from OCPP idTag value. */
+  /**
+   * Resolves one existing user id from an OCPP idTag value.
+   *
+   * The idTag is normally a short opaque token issued by OcppIdTagService (OCPP 1.6 caps
+   * idTags at 20 characters, so raw user UUIDs cannot travel over the wire); resolved ids
+   * are still verified against the users table before a session is attributed to them.
+   */
   private async resolveUserId(idTag: string): Promise<string | null> {
-    const normalizedIdTag = idTag.trim();
-    if (!isUuid(normalizedIdTag)) {
+    const candidateUserId = await this.idTagService.resolveUserId(idTag);
+    if (candidateUserId === null || !isUuid(candidateUserId)) {
       return null;
     }
 
     const user = await this.prismaService.user.findUnique({
-      where: { id: normalizedIdTag },
+      where: { id: candidateUserId },
       select: USER_LOOKUP_SELECT,
     });
 
@@ -402,6 +418,25 @@ function buildInvalidStartTransactionResponse(): OcppStartTransactionResponse {
   };
 }
 
+/**
+ * Calculates delivered energy in kWh from transaction meter registers, or null when the
+ * session has no recorded meterStart to diff against.
+ */
+function calculateEnergyDeliveredFromRegisters(
+  meterStartWh: number | null | undefined,
+  meterStopWh: number,
+): number | null {
+  if (
+    typeof meterStartWh !== 'number' ||
+    !Number.isFinite(meterStopWh) ||
+    meterStopWh < meterStartWh
+  ) {
+    return null;
+  }
+
+  return (meterStopWh - meterStartWh) / WATT_HOURS_PER_KILOWATT_HOUR;
+}
+
 /** Calculates delivered energy in kWh from session meter-value aggregate snapshots. */
 function calculateEnergyDeliveredKwh(stats: MeterValueEnergyAggregate): number {
   const minEnergy = stats._min.energyActiveImport;
@@ -436,9 +471,9 @@ function resolveErrorMessage(error: unknown): string {
 
 /** Checks whether one raw value is a canonical UUID string. */
 function isUuid(rawValue: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    rawValue,
-  );
+  // Any 8-4-4-4-12 hex shape is accepted: existence is verified against the users table, and
+  // seeded/imported ids do not always carry RFC 4122 version/variant nibbles.
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawValue);
 }
 
 /** Builds deterministic EVSE identifier candidates used to resolve OCPP connector updates. */

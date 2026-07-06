@@ -17,12 +17,17 @@ import {
   NotFoundException,
   StreamableFile,
 } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
-import { SessionStatus as PrismaSessionStatus } from '@prisma/client';
+import {
+  PaymentGateway,
+  PaymentStatus,
+  Prisma,
+  SessionStatus as PrismaSessionStatus,
+} from '@prisma/client';
 import PDFDocument from 'pdfkit';
 
 import { NotificationsService } from '../notifications/notifications.service';
 import type { OcppRemoteStartResult } from '../ocpp/ocpp.remote-start.service';
+import { OcppIdTagService } from '../ocpp/ocpp.id-tag.service';
 import { OcppRemoteStartService } from '../ocpp/ocpp.remote-start.service';
 import { OcppRemoteStopService } from '../ocpp/ocpp.remote-stop.service';
 import { isOcppServerEnabled } from '../ocpp/ocpp.server.service';
@@ -40,6 +45,19 @@ const VEHICLE_NOT_FOUND_MESSAGE = 'Vehicle not found';
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
+
+const CONNECTOR_ALREADY_IN_USE_MESSAGE =
+  'Connector already has a pending or active charging session';
+
+/**
+ * Session lifecycle states that make a connector unavailable for a new session.
+ * A connector may carry at most one session in any of these states at a time.
+ */
+const CONNECTOR_BLOCKING_SESSION_STATUSES: readonly PrismaSessionStatus[] = [
+  PrismaSessionStatus.PENDING,
+  PrismaSessionStatus.AUTHORIZED,
+  PrismaSessionStatus.ACTIVE,
+];
 
 const WATT_HOURS_PER_KILOWATT_HOUR = 1000;
 const WATTS_PER_KILOWATT = 1000;
@@ -121,6 +139,7 @@ export class SessionsService {
     private readonly sessionCostCalculatorService: SessionCostCalculatorService,
     private readonly ocppRemoteStartService: OcppRemoteStartService,
     private readonly ocppRemoteStopService: OcppRemoteStopService,
+    private readonly ocppIdTagService: OcppIdTagService,
   ) {}
 
   /** Creates one pending charging session for a user with optional vehicle and connector links. */
@@ -151,12 +170,62 @@ export class SessionsService {
       data.vehicleId = request.vehicleId;
     }
 
-    const session = await this.prismaService.session.create({
-      data,
-      select: SESSION_SELECT,
-    });
+    if (request.connectorId === undefined) {
+      const session = await this.prismaService.session.create({
+        data,
+        select: SESSION_SELECT,
+      });
+
+      return mapSessionRecordToResponse(session);
+    }
+
+    const session = await this.createSessionWithConnectorGuard(request.connectorId, data);
 
     return mapSessionRecordToResponse(session);
+  }
+
+  /**
+   * Creates one connector-linked session while enforcing the one-session-per-connector invariant.
+   *
+   * The conflict check and the insert run inside one SERIALIZABLE transaction so two concurrent
+   * create requests for the same connector cannot both pass the check: PostgreSQL aborts one of
+   * them with a serialization failure (Prisma error P2034), which is surfaced as the same 409 a
+   * losing sequential request would receive. Sessions without a connector never conflict, and a
+   * session can only gain a connector at creation time, so this guard is the single enforcement
+   * point for the invariant on the API path.
+   */
+  private async createSessionWithConnectorGuard(
+    connectorId: string,
+    data: Prisma.SessionUncheckedCreateInput,
+  ): Promise<SessionRecord> {
+    try {
+      return await this.prismaService.$transaction(
+        async (transaction) => {
+          const conflictingSessionCount = await transaction.session.count({
+            where: {
+              connectorId,
+              status: { in: [...CONNECTOR_BLOCKING_SESSION_STATUSES] },
+            },
+          });
+
+          if (conflictingSessionCount > 0) {
+            throw new ConflictException(CONNECTOR_ALREADY_IN_USE_MESSAGE);
+          }
+
+          return transaction.session.create({
+            data,
+            select: SESSION_SELECT,
+          });
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error: unknown) {
+      if (isSerializationConflictError(error)) {
+        throw new ConflictException(CONNECTOR_ALREADY_IN_USE_MESSAGE);
+      }
+
+      throw error;
+    }
   }
 
   /** Starts one charging session by transitioning pending -> authorized -> active. */
@@ -168,6 +237,7 @@ export class SessionsService {
     const startedAt = parseOptionalIsoTimestamp(request.startedAt, 'startedAt') ?? new Date();
     let session = await this.findUserSessionOrThrow(userId, sessionId);
     assertSessionCanTransitionToActive(session.status);
+    await this.assertConnectorNotHeldByOtherSession(session);
 
     if (session.status === PrismaSessionStatus.PENDING) {
       session = await this.transitionSessionState(session, PrismaSessionStatus.AUTHORIZED);
@@ -226,9 +296,13 @@ export class SessionsService {
     await this.dispatchRemoteStopForSession(session);
 
     const finalization = await this.resolveSessionFinalization(session, endedAt);
+    // Zero-energy sessions (charger fault, cable never engaged, EV rejected charge) must not be
+    // billed: the total is forced to zero and any gateway pre-authorization is released below.
+    const billableEnergyKwh = finalization.energyDeliveredKwh ?? session.energyDelivered;
+    const isZeroEnergySession = billableEnergyKwh <= 0;
     const completionData: Prisma.SessionUpdateInput = {
       endTime: endedAt,
-      totalCost: finalization.totalCost,
+      totalCost: isZeroEnergySession ? 0 : finalization.totalCost,
     };
 
     if (finalization.energyDeliveredKwh !== null) {
@@ -249,6 +323,17 @@ export class SessionsService {
       totalCostAmd: completedSession.totalCost,
       userId: completedSession.userId,
     });
+
+    if (isZeroEnergySession) {
+      // Auto-refund: release the pre-authorized amount instead of capturing anything. Wallet-funded
+      // sessions have no payment record before capture, so the refund call is a safe no-op there.
+      this.logger.warn(
+        `Session ${completedSession.id} completed with zero energy delivered; refunding pre-authorization`,
+      );
+      await this.paymentsService.refundPaymentForSessionFailure(completedSession.id);
+
+      return mapSessionRecordToResponse(completedSession);
+    }
 
     // Check if user has wallet payment method
     const hasWalletPaymentMethod = await this.hasWalletAsDefaultPaymentMethod(userId);
@@ -394,6 +479,9 @@ export class SessionsService {
     }
 
     const binding = await this.resolveChargePointBinding(session.connectorId);
+    // OCPP 1.6 idTags are capped at 20 characters, so the user id travels as a short opaque
+    // token that the charge point echoes back in its StartTransaction message.
+    const idTag = await this.ocppIdTagService.issueIdTag(session.userId);
     let result: OcppRemoteStartResult;
 
     try {
@@ -401,7 +489,7 @@ export class SessionsService {
         chargePointId: binding.chargePointId,
         payload: {
           connectorId: binding.ocppConnectorId,
-          idTag: session.userId,
+          idTag,
         },
       });
     } catch (error: unknown) {
@@ -561,7 +649,7 @@ export class SessionsService {
     const defaultWalletMethod = await this.prismaService.paymentMethod.findFirst({
       where: {
         userId,
-        gateway: 'WALLET' as never,
+        gateway: PaymentGateway.WALLET,
         isDefault: true,
       },
       select: {
@@ -601,7 +689,7 @@ export class SessionsService {
     const walletPaymentMethod = await this.prismaService.paymentMethod.findFirst({
       where: {
         userId: input.userId,
-        gateway: 'WALLET' as never,
+        gateway: PaymentGateway.WALLET,
         isDefault: true,
       },
       select: {
@@ -618,8 +706,8 @@ export class SessionsService {
         userId: input.userId,
         sessionId: input.sessionId,
         paymentMethodId: walletPaymentMethod.id,
-        gateway: 'WALLET' as never,
-        status: 'CAPTURED' as never,
+        gateway: PaymentGateway.WALLET,
+        status: PaymentStatus.CAPTURED,
         amount: input.amount,
         authorizedAmount: input.amount,
         capturedAmount: input.amount,
@@ -791,6 +879,31 @@ export class SessionsService {
 
     if (connector === null) {
       throw new NotFoundException(CONNECTOR_NOT_FOUND_MESSAGE);
+    }
+  }
+
+  /**
+   * Verifies that no other session currently holds this session's connector.
+   *
+   * This is a defense-in-depth re-check on the start path: the create path already enforces the
+   * one-session-per-connector invariant transactionally, but sessions created before that guard
+   * existed (or rows written by non-API paths such as OCPP StartTransaction) could still collide.
+   */
+  private async assertConnectorNotHeldByOtherSession(session: SessionRecord): Promise<void> {
+    if (session.connectorId === null) {
+      return;
+    }
+
+    const conflictingSessionCount = await this.prismaService.session.count({
+      where: {
+        connectorId: session.connectorId,
+        id: { not: session.id },
+        status: { in: [...CONNECTOR_BLOCKING_SESSION_STATUSES] },
+      },
+    });
+
+    if (conflictingSessionCount > 0) {
+      throw new ConflictException(CONNECTOR_ALREADY_IN_USE_MESSAGE);
     }
   }
 
@@ -1007,6 +1120,14 @@ function calculatePeakPowerKw(peakPowerWatts: number | null): number | null {
   }
 
   return Math.max(0, peakPowerWatts / WATTS_PER_KILOWATT);
+}
+
+/**
+ * Detects PostgreSQL serialization conflicts surfaced by Prisma for SERIALIZABLE transactions.
+ * P2034 is Prisma's "transaction failed due to a write conflict or a deadlock" error code.
+ */
+function isSerializationConflictError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
 }
 
 /** Resolves a safe log/error message from an unknown thrown value. */

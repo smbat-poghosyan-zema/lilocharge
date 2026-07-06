@@ -5,6 +5,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { SessionsModule } from '../sessions/sessions.module';
+import { OcppIdTagService } from './ocpp.id-tag.service';
 import { OcppMeterValuesService } from './ocpp.meter-values.service';
 import { OcppRemoteStartService } from './ocpp.remote-start.service';
 import { OcppRemoteStopService } from './ocpp.remote-stop.service';
@@ -26,6 +27,7 @@ import { OcppTransactionsService } from './ocpp.transactions.service';
     forwardRef(() => SessionsModule),
   ],
   providers: [
+    OcppIdTagService,
     OcppMeterValuesService,
     OcppRemoteStartService,
     OcppRemoteStopService,
@@ -37,6 +39,7 @@ import { OcppTransactionsService } from './ocpp.transactions.service';
     OcppTransactionsService,
   ],
   exports: [
+    OcppIdTagService,
     OcppMeterValuesService,
     OcppRemoteStartService,
     OcppRemoteStopService,

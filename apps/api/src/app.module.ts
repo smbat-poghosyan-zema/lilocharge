@@ -17,6 +17,7 @@ import { ProblemReportsModule } from './problem-reports/problem-reports.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { SessionsModule } from './sessions/sessions.module';
 import { StationsModule } from './stations/stations.module';
+import { UploadsModule } from './uploads/uploads.module';
 import { UsersModule } from './users/users.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
 import { WalletModule } from './wallet/wallet.module';
@@ -40,6 +41,7 @@ import { WalletModule } from './wallet/wallet.module';
     ConnectorStatusUpdatesModule,
     FavoritesModule,
     ReviewsModule,
+    UploadsModule,
     ProblemReportsModule,
     OcppModule,
   ],

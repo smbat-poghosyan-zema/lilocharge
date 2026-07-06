@@ -3,6 +3,7 @@ import type { Server as HttpsServer } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { PrismaService } from '../prisma/prisma.service';
 import type { OcppServerAuthCallback, OcppServerClient } from './ocpp.server.types';
 import type { OcppChargePointRegistration } from './ocpp.registry.service';
 import type { OcppRoutingService } from './ocpp.routing.service';
@@ -55,6 +56,12 @@ interface OcppRegistryServiceMock extends Pick<
   readonly unregisterChargePoint: jest.Mock<boolean, [string]>;
 }
 
+interface PrismaServiceMock {
+  readonly session: {
+    readonly findMany: jest.Mock<Promise<{ readonly id: string }[]>, [unknown]>;
+  };
+}
+
 /** Builds a deterministic OCPP registration fixture for server lifecycle tests. */
 function buildRegistration(client: OcppServerClient): OcppChargePointRegistration {
   return {
@@ -97,6 +104,7 @@ describe('OcppServerService', () => {
   let clientEventListeners: Map<string, (...args: unknown[]) => void>;
   let serverEventListeners: Map<string, (...args: unknown[]) => void>;
   let factoryMock: OcppServerFactoryMock;
+  let prismaMock: PrismaServiceMock;
   let registryMock: OcppRegistryServiceMock;
   let routingMock: OcppRoutingServiceMock;
   let serverMock: OcppServerMock;
@@ -142,10 +150,16 @@ describe('OcppServerService', () => {
         .mockImplementation((client: OcppServerClient) => buildRegistration(client)),
       unregisterChargePoint: jest.fn<boolean, [string]>().mockReturnValue(true),
     };
+    prismaMock = {
+      session: {
+        findMany: jest.fn<Promise<{ readonly id: string }[]>, [unknown]>().mockResolvedValue([]),
+      },
+    };
     service = new OcppServerService(
       routingMock as unknown as OcppRoutingService,
       registryMock as unknown as OcppRegistryService,
       factoryMock as unknown as OcppServerFactory,
+      prismaMock as unknown as PrismaService,
     );
   });
 
@@ -279,6 +293,43 @@ describe('OcppServerService', () => {
     expect(registryMock.registerChargePoint).toHaveBeenCalledWith(client);
     expect(routingMock.attachClientHandlers).toHaveBeenCalledWith(client);
     expect(registryMock.unregisterChargePoint).toHaveBeenCalledWith('CP-001');
+  });
+
+  it('looks up ACTIVE sessions for the charge point after a disconnect', async () => {
+    prismaMock.session.findMany.mockResolvedValue([{ id: 'session-1' }, { id: 'session-2' }]);
+    await service.onModuleInit();
+
+    const client: OcppServerClient = {
+      handle: jest.fn<
+        void,
+        [string | ((...args: unknown[]) => unknown), ((...args: unknown[]) => unknown)?]
+      >(),
+      handshake: { endpoint: '/ocpp' },
+      identity: 'CP-001',
+      on: jest
+        .fn<void, [string, (...args: unknown[]) => void]>()
+        .mockImplementation((event: string, listener: (...args: unknown[]) => void) => {
+          clientEventListeners.set(event, listener);
+        }),
+      protocol: 'ocpp1.6',
+      session: {},
+    };
+
+    serverEventListeners.get('client')?.(client);
+    clientEventListeners.get('disconnect')?.({ code: 1006, reason: 'connection lost' });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(prismaMock.session.findMany).toHaveBeenCalledWith({
+      where: {
+        status: 'ACTIVE',
+        connector: {
+          station: {
+            operatorId: 'CP-001',
+          },
+        },
+      },
+      select: { id: true },
+    });
   });
 
   it('closes the OCPP server on module shutdown after startup', async () => {

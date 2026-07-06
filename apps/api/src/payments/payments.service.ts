@@ -5,8 +5,16 @@ import type {
   ExchangeGooglePayTokenRequest,
   PaymentGatewayCode,
   PaymentMethodResponse,
+  RegisterPaymentMethodRequest,
+  TokenizedPaymentGatewayCode,
 } from '@lilocharge/shared-types';
-import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PaymentGateway, PaymentStatus } from '@prisma/client';
 
@@ -50,6 +58,7 @@ const PAYMENT_METHOD_LOOKUP_SELECT = {
 
 const PAYMENT_METHOD_RESPONSE_SELECT = {
   createdAt: true,
+  displayLabel: true,
   expiryMonth: true,
   expiryYear: true,
   gateway: true,
@@ -59,6 +68,10 @@ const PAYMENT_METHOD_RESPONSE_SELECT = {
   updatedAt: true,
   userId: true,
 } satisfies Prisma.PaymentMethodSelect;
+
+const PAYMENT_METHOD_NOT_FOUND_MESSAGE = 'Payment method not found';
+const PAYMENT_METHOD_REFERENCED_MESSAGE =
+  'Payment method is referenced by existing payments and cannot be deleted';
 
 type PaymentLookupRecord = Prisma.PaymentGetPayload<{
   select: typeof PAYMENT_LOOKUP_SELECT;
@@ -209,6 +222,160 @@ export class PaymentsService {
       },
       select: PAYMENT_METHOD_RESPONSE_SELECT,
     });
+
+    return mapPaymentMethodRecordToResponse(updatedMethod);
+  }
+
+  /** Lists all stored payment methods for one user, defaults first; raw tokens are never returned. */
+  public async listPaymentMethods(userId: string): Promise<PaymentMethodResponse[]> {
+    const paymentMethods = await this.prismaService.paymentMethod.findMany({
+      where: {
+        userId,
+      },
+      orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
+      select: PAYMENT_METHOD_RESPONSE_SELECT,
+    });
+
+    return paymentMethods.map((paymentMethod) => mapPaymentMethodRecordToResponse(paymentMethod));
+  }
+
+  /**
+   * Registers one tokenized ArCa/Idram payment method produced by the gateway's
+   * client-side binding flow. The first stored method becomes the user default, and
+   * re-registering an existing token is idempotent.
+   */
+  public async registerPaymentMethod(
+    userId: string,
+    request: RegisterPaymentMethodRequest,
+  ): Promise<PaymentMethodResponse> {
+    const gateway = mapTokenizedGatewayCodeToPaymentGateway(request.gateway);
+    const displayLabel = normalizeDisplayLabel(request.displayLabel);
+
+    const existingMethod = await this.prismaService.paymentMethod.findFirst({
+      where: {
+        gateway,
+        token: request.token,
+        userId,
+      },
+      select: PAYMENT_METHOD_RESPONSE_SELECT,
+    });
+
+    if (existingMethod !== null) {
+      const updatedMethod = await this.prismaService.paymentMethod.update({
+        where: {
+          id: existingMethod.id,
+        },
+        data: {
+          displayLabel: displayLabel ?? existingMethod.displayLabel,
+        },
+        select: PAYMENT_METHOD_RESPONSE_SELECT,
+      });
+
+      return mapPaymentMethodRecordToResponse(updatedMethod);
+    }
+
+    const existingMethodCount = await this.prismaService.paymentMethod.count({
+      where: {
+        userId,
+      },
+    });
+
+    const createdMethod = await this.prismaService.paymentMethod.create({
+      data: {
+        displayLabel,
+        gateway,
+        isDefault: existingMethodCount === 0,
+        token: request.token,
+        userId,
+      },
+      select: PAYMENT_METHOD_RESPONSE_SELECT,
+    });
+
+    return mapPaymentMethodRecordToResponse(createdMethod);
+  }
+
+  /**
+   * Deletes one stored payment method owned by the user. Payments keep an
+   * `ON DELETE RESTRICT` foreign key to payment methods, so methods referenced by any
+   * payment are rejected with 409 instead of failing at the database layer.
+   */
+  public async deletePaymentMethod(userId: string, methodId: string): Promise<void> {
+    const paymentMethod = await this.prismaService.paymentMethod.findFirst({
+      where: {
+        id: methodId,
+        userId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (paymentMethod === null) {
+      throw new NotFoundException(PAYMENT_METHOD_NOT_FOUND_MESSAGE);
+    }
+
+    const referencingPaymentCount = await this.prismaService.payment.count({
+      where: {
+        paymentMethodId: methodId,
+      },
+    });
+
+    if (referencingPaymentCount > 0) {
+      throw new ConflictException(PAYMENT_METHOD_REFERENCED_MESSAGE);
+    }
+
+    await this.prismaService.paymentMethod.delete({
+      where: {
+        id: methodId,
+      },
+      select: {
+        id: true,
+      },
+    });
+  }
+
+  /** Sets one stored payment method as the user default, unsetting others atomically. */
+  public async setDefaultPaymentMethod(
+    userId: string,
+    methodId: string,
+  ): Promise<PaymentMethodResponse> {
+    const paymentMethod = await this.prismaService.paymentMethod.findFirst({
+      where: {
+        id: methodId,
+        userId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (paymentMethod === null) {
+      throw new NotFoundException(PAYMENT_METHOD_NOT_FOUND_MESSAGE);
+    }
+
+    const [, updatedMethod] = await this.prismaService.$transaction([
+      this.prismaService.paymentMethod.updateMany({
+        where: {
+          id: {
+            not: methodId,
+          },
+          isDefault: true,
+          userId,
+        },
+        data: {
+          isDefault: false,
+        },
+      }),
+      this.prismaService.paymentMethod.update({
+        where: {
+          id: methodId,
+        },
+        data: {
+          isDefault: true,
+        },
+        select: PAYMENT_METHOD_RESPONSE_SELECT,
+      }),
+    ]);
 
     return mapPaymentMethodRecordToResponse(updatedMethod);
   }
@@ -754,6 +921,7 @@ function mapPaymentMethodRecordToResponse(
 ): PaymentMethodResponse {
   return {
     createdAt: record.createdAt.toISOString(),
+    displayLabel: record.displayLabel,
     expiryMonth: record.expiryMonth,
     expiryYear: record.expiryYear,
     gateway: mapPaymentGatewayToCode(record.gateway),
@@ -791,6 +959,24 @@ function resolvePreAuthorizationAmountAmd(gateway: PaymentGateway): number {
     process.env.ARCA_PREAUTH_AMOUNT_AMD,
     DEFAULT_ARCA_PREAUTH_AMOUNT_AMD,
   );
+}
+
+/** Maps one tokenized shared-types gateway code onto the Prisma payment-gateway enum. */
+function mapTokenizedGatewayCodeToPaymentGateway(
+  gateway: TokenizedPaymentGatewayCode,
+): PaymentGateway {
+  return gateway === 'ARCA' ? PaymentGateway.ARCA : PaymentGateway.IDRAM;
+}
+
+/** Normalizes optional display labels and returns null for blank input. */
+function normalizeDisplayLabel(displayLabel: string | undefined): string | null {
+  const normalizedValue = displayLabel?.trim();
+
+  if (normalizedValue === undefined || normalizedValue.length === 0) {
+    return null;
+  }
+
+  return normalizedValue;
 }
 
 /** Converts one payment gateway enum into stable user-facing label text. */

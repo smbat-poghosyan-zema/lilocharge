@@ -20,6 +20,9 @@ const REVIEW_NOT_FOUND_MESSAGE = 'Review not found';
 const REVIEW_ALREADY_EXISTS_MESSAGE = 'Review already exists for this station';
 const REVIEW_UPDATE_FORBIDDEN_MESSAGE = 'Cannot update review created by another user';
 const REVIEW_DELETE_FORBIDDEN_MESSAGE = 'Cannot delete review created by another user';
+const MAX_REVIEW_PHOTOS = 5;
+const REVIEW_PHOTO_LIMIT_MESSAGE = `A review can include at most ${MAX_REVIEW_PHOTOS} photos`;
+const REVIEW_PHOTO_HTTPS_MESSAGE = 'Review photo URLs must use https';
 
 const USER_ID_SELECT = {
   id: true,
@@ -80,6 +83,7 @@ export class ReviewsService {
     userId: string,
     data: CreateReviewRequest,
   ): Promise<UserReviewResponse> {
+    assertValidReviewPhotos(data.photos);
     await this.assertUserExists(userId);
     await this.assertStationExists(data.stationId);
 
@@ -115,6 +119,7 @@ export class ReviewsService {
     reviewId: string,
     data: UpdateReviewRequest,
   ): Promise<UserReviewResponse> {
+    assertValidReviewPhotos(data.photos);
     await this.assertUserExists(userId);
 
     const existingReview = await this.prismaService.review.findUnique({
@@ -240,6 +245,33 @@ export class ReviewsService {
 
     if (station === null) {
       throw new NotFoundException(STATION_NOT_FOUND_MESSAGE);
+    }
+  }
+}
+
+/**
+ * Validates review photo URLs: at most 5 photos, each hosted at the configured
+ * uploads public base URL (`UPLOADS_PUBLIC_BASE_URL`), or any https URL when the
+ * uploads storage is not configured.
+ */
+function assertValidReviewPhotos(photos: readonly string[] | undefined): void {
+  if (photos === undefined) {
+    return;
+  }
+
+  if (photos.length > MAX_REVIEW_PHOTOS) {
+    throw new BadRequestException(REVIEW_PHOTO_LIMIT_MESSAGE);
+  }
+
+  const publicBaseUrl = process.env.UPLOADS_PUBLIC_BASE_URL?.replace(/\/+$/, '');
+
+  for (const photo of photos) {
+    if (publicBaseUrl !== undefined && publicBaseUrl.length > 0) {
+      if (!photo.startsWith(`${publicBaseUrl}/`)) {
+        throw new BadRequestException(`Review photos must be hosted at ${publicBaseUrl}`);
+      }
+    } else if (!photo.startsWith('https://')) {
+      throw new BadRequestException(REVIEW_PHOTO_HTTPS_MESSAGE);
     }
   }
 }

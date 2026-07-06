@@ -8,6 +8,7 @@ import { OcppAction, SessionStatus } from '@lilocharge/shared-types';
 import { SessionStatus as PrismaSessionStatus } from '@prisma/client';
 
 import { NotificationsService } from '../notifications/notifications.service';
+import { OcppIdTagService } from '../ocpp/ocpp.id-tag.service';
 import { OcppRegistryService } from '../ocpp/ocpp.registry.service';
 import { OcppRemoteStartService } from '../ocpp/ocpp.remote-start.service';
 import { OcppRemoteStopService } from '../ocpp/ocpp.remote-stop.service';
@@ -33,6 +34,7 @@ interface MockChargePointFixture {
 }
 
 interface PrismaSessionDelegateMock {
+  count: jest.Mock;
   create: jest.Mock;
   findFirst: jest.Mock;
   update: jest.Mock;
@@ -51,6 +53,7 @@ interface PrismaPaymentMethodDelegateMock {
 }
 
 interface PrismaServiceMock {
+  $transaction: jest.Mock;
   connector: PrismaConnectorDelegateMock;
   paymentMethod: PrismaPaymentMethodDelegateMock;
   session: PrismaSessionDelegateMock;
@@ -124,6 +127,11 @@ describe('SessionsService - QR Scan to Session Start', () => {
 
     // Mock Prisma service
     mockPrismaService = {
+      $transaction: jest
+        .fn()
+        .mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) =>
+          callback(mockPrismaService),
+        ),
       user: {
         findUnique: jest.fn(),
       },
@@ -131,6 +139,7 @@ describe('SessionsService - QR Scan to Session Start', () => {
         findUnique: jest.fn(),
       },
       session: {
+        count: jest.fn().mockResolvedValue(0),
         create: jest.fn(),
         findFirst: jest.fn(),
         update: jest.fn(),
@@ -171,6 +180,7 @@ describe('SessionsService - QR Scan to Session Start', () => {
     // Create real OCPP services backed by an in-memory registry
     ocppRegistryService = new OcppRegistryService();
     ocppRemoteStartService = new OcppRemoteStartService(ocppRegistryService);
+    const ocppIdTagService = new OcppIdTagService();
     const ocppRemoteStopService = new OcppRemoteStopService(ocppRegistryService);
 
     sessionsService = new SessionsService(
@@ -181,6 +191,7 @@ describe('SessionsService - QR Scan to Session Start', () => {
       mockCostCalculatorService,
       ocppRemoteStartService,
       ocppRemoteStopService,
+      ocppIdTagService,
     );
 
     // Set up mock OCPP charge point
@@ -309,7 +320,8 @@ describe('SessionsService - QR Scan to Session Start', () => {
         OcppAction.REMOTE_START_TRANSACTION,
         {
           connectorId: ocppConnectorId,
-          idTag: testUserId,
+          // The user id travels as a 20-character opaque idTag (OCPP CiString20Type limit).
+          idTag: expect.stringMatching(/^[0-9a-f]{20}$/) as unknown as string,
         },
         expect.objectContaining({
           callTimeoutMs: expect.any(Number) as number,

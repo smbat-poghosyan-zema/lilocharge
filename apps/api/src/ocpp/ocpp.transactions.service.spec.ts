@@ -11,6 +11,7 @@ import type {
   SessionCostCalculationResult,
   SessionCostCalculatorService,
 } from '../sessions/session-cost-calculator.service';
+import { OcppIdTagService } from './ocpp.id-tag.service';
 import type { OcppRemoteStartService } from './ocpp.remote-start.service';
 import { OcppTransactionsService } from './ocpp.transactions.service';
 
@@ -197,6 +198,7 @@ describe('OcppTransactionsService', () => {
       paymentsServiceMock as unknown as PaymentsService,
       notificationsServiceMock as unknown as NotificationsService,
       remoteStartServiceMock as unknown as OcppRemoteStartService,
+      new OcppIdTagService(),
     );
   });
 
@@ -213,6 +215,7 @@ describe('OcppTransactionsService', () => {
     expect(prismaMock.session.create).toHaveBeenCalledWith({
       data: {
         connectorId: 'connector-1',
+        meterStart: 12800,
         startTime: new Date('2026-02-17T12:00:00.000Z'),
         status: SessionStatus.ACTIVE,
         transactionId: String(response.transactionId),

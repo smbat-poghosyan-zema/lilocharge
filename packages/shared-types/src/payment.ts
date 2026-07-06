@@ -1,9 +1,13 @@
 /** Supported payment gateway identifiers shared across API and mobile clients. */
 export type PaymentGatewayCode = 'APPLE_PAY' | 'ARCA' | 'GOOGLE_PAY' | 'IDRAM' | 'WALLET';
 
+/** Gateways whose client-side tokenization/binding flow produces a storable payment token. */
+export type TokenizedPaymentGatewayCode = 'ARCA' | 'IDRAM';
+
 /** Persisted payment-method payload returned by payment setup endpoints. */
 export interface PaymentMethodResponse {
   readonly createdAt: string;
+  readonly displayLabel?: string | null;
   readonly expiryMonth: number | null;
   readonly expiryYear: number | null;
   readonly gateway: PaymentGatewayCode;
@@ -12,6 +16,17 @@ export interface PaymentMethodResponse {
   readonly last4: string | null;
   readonly updatedAt: string;
   readonly userId: string;
+}
+
+/**
+ * Request payload registering one tokenized ArCa/Idram payment method.
+ * `token` is produced by the gateway's client-side tokenization/binding flow and is
+ * stored server-side; it is never echoed back by any payments endpoint.
+ */
+export interface RegisterPaymentMethodRequest {
+  readonly displayLabel?: string;
+  readonly gateway: TokenizedPaymentGatewayCode;
+  readonly token: string;
 }
 
 /** Request payload used to exchange one Apple Pay token for a storable payment-method token. */

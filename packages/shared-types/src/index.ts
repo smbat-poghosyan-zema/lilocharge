@@ -33,7 +33,15 @@ export type {
   PaymentMethodResponse,
   PaymentWebhookAckResponse,
   PaymentWebhookStatus,
+  RegisterPaymentMethodRequest,
+  TokenizedPaymentGatewayCode,
 } from './payment';
+export type {
+  CreateReviewPhotoUploadRequest,
+  CreateReviewPhotoUploadResponse,
+  ReviewPhotoContentType,
+  ReviewPhotoExtension,
+} from './upload';
 export type {
   CreateReviewRequest,
   ListReviewsQueryRequest,

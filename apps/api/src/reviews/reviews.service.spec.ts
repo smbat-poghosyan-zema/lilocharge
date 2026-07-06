@@ -260,6 +260,107 @@ describe('ReviewsService', () => {
     });
   });
 
+  describe('photo validation', () => {
+    const originalPublicBaseUrl = process.env.UPLOADS_PUBLIC_BASE_URL;
+
+    afterEach(() => {
+      if (originalPublicBaseUrl === undefined) {
+        delete process.env.UPLOADS_PUBLIC_BASE_URL;
+      } else {
+        process.env.UPLOADS_PUBLIC_BASE_URL = originalPublicBaseUrl;
+      }
+    });
+
+    it('rejects create requests with more than 5 photos', async () => {
+      delete process.env.UPLOADS_PUBLIC_BASE_URL;
+      const photos = Array.from(
+        { length: 6 },
+        (_, index) => `https://example.com/photo${index}.jpg`,
+      );
+
+      await expect(
+        service.createReview(USER_ID, { photos, rating: 5, stationId: STATION_ID }),
+      ).rejects.toThrow(new BadRequestException('A review can include at most 5 photos'));
+      expect(prismaMock.review.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects update requests with more than 5 photos', async () => {
+      delete process.env.UPLOADS_PUBLIC_BASE_URL;
+      const photos = Array.from(
+        { length: 6 },
+        (_, index) => `https://example.com/photo${index}.jpg`,
+      );
+
+      await expect(service.updateReview(USER_ID, REVIEW_ID, { photos })).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prismaMock.review.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects non-https photo URLs when uploads storage is not configured', async () => {
+      delete process.env.UPLOADS_PUBLIC_BASE_URL;
+
+      await expect(
+        service.createReview(USER_ID, {
+          photos: ['http://example.com/photo.jpg'],
+          rating: 5,
+          stationId: STATION_ID,
+        }),
+      ).rejects.toThrow(new BadRequestException('Review photo URLs must use https'));
+    });
+
+    it('accepts exactly 5 https photos when uploads storage is not configured', async () => {
+      delete process.env.UPLOADS_PUBLIC_BASE_URL;
+      const photos = Array.from(
+        { length: 5 },
+        (_, index) => `https://example.com/photo${index}.jpg`,
+      );
+      prismaMock.user.findUnique.mockResolvedValue({ id: USER_ID });
+      prismaMock.station.findUnique.mockResolvedValue({ id: STATION_ID });
+      prismaMock.review.findFirst.mockResolvedValue(null);
+      prismaMock.review.create.mockResolvedValue(buildReviewWithStationRecord({ photos }));
+
+      const result = await service.createReview(USER_ID, {
+        photos,
+        rating: 5,
+        stationId: STATION_ID,
+      });
+
+      expect(result.photos).toEqual(photos);
+    });
+
+    it('rejects photos hosted outside UPLOADS_PUBLIC_BASE_URL when it is configured', async () => {
+      process.env.UPLOADS_PUBLIC_BASE_URL = 'https://cdn.lilocharge.am/uploads';
+
+      await expect(
+        service.createReview(USER_ID, {
+          photos: ['https://evil.example.com/photo.jpg'],
+          rating: 5,
+          stationId: STATION_ID,
+        }),
+      ).rejects.toThrow(
+        new BadRequestException(
+          'Review photos must be hosted at https://cdn.lilocharge.am/uploads',
+        ),
+      );
+    });
+
+    it('accepts photos hosted at UPLOADS_PUBLIC_BASE_URL on update', async () => {
+      process.env.UPLOADS_PUBLIC_BASE_URL = 'https://cdn.lilocharge.am/uploads/';
+      const photos = [`https://cdn.lilocharge.am/uploads/review-photos/${USER_ID}/photo.jpg`];
+      prismaMock.user.findUnique.mockResolvedValue({ id: USER_ID });
+      prismaMock.review.findUnique.mockResolvedValue({ id: REVIEW_ID, userId: USER_ID });
+      prismaMock.review.update.mockResolvedValue(buildReviewWithStationRecord({ photos }));
+
+      const result = await service.updateReview(USER_ID, REVIEW_ID, { photos });
+
+      expect(result.photos).toEqual(photos);
+      expect(prismaMock.review.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { photos } }),
+      );
+    });
+  });
+
   describe('getReviewsByStation', () => {
     it('returns paginated reviews for a station', async () => {
       prismaMock.station.findUnique.mockResolvedValue({ id: STATION_ID });
