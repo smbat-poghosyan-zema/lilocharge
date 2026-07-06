@@ -66,7 +66,11 @@ this.sentry.setUser({ id: '123', email: 'user@example.com' });
 
 Auto-instrumentation with:
 
-- Prometheus metrics exporter (pull-based on port 9464)
+- Prometheus metrics exporter (pull-based on port 9464). The exporter is registered with the
+  NodeSDK via `metricReaders`, which installs the global MeterProvider — instruments created
+  through `@opentelemetry/api` (including auto-instrumentation metrics) are actually served
+  from the scrape endpoint. This is verified empirically by
+  `opentelemetry.prometheus.spec.ts`, which boots the real SDK and scrapes the endpoint.
 - HTTP request tracing (ignores /health and /metrics endpoints)
 - File system instrumentation disabled (reduces noise)
 - Graceful shutdown on SIGTERM
@@ -81,7 +85,29 @@ OTEL_METRICS_PORT=9464
 
 **Metrics Endpoint:**
 
-- `http://localhost:9464/metrics` - Prometheus-compatible metrics
+- `http://localhost:9464/metrics` - Prometheus-compatible metrics (includes `target_info`
+  resource metadata plus any instruments recorded via the global meter)
+
+**Trace Export:**
+
+Trace export is gated by the standard OpenTelemetry environment variables. When any of
+`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, or
+`OTEL_TRACES_EXPORTER` is set, the NodeSDK builds span processors from the environment
+(OTLP over HTTP/proto by default; `OTEL_TRACES_EXPORTER` also accepts `console`, `zipkin`,
+or `none`). When none of these variables is set (e.g. local development), a no-op span
+processor is installed: the tracer provider is still registered so trace/span ids propagate
+into logs and outgoing headers, but no spans are exported and no collector connection is
+attempted.
+
+**Production expectation:** set `OTEL_EXPORTER_OTLP_ENDPOINT` to the collector URL
+(e.g. `http://otel-collector:4318`) so spans are exported via OTLP.
+
+```bash
+# Production trace export
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+# Optional: override the exporter kind (otlp | console | zipkin | none)
+OTEL_TRACES_EXPORTER=otlp
+```
 
 ### 4. HTTP Logging Interceptor (`/apps/api/src/observability/http-logging.interceptor.ts`)
 
@@ -134,13 +160,12 @@ All new code has comprehensive unit tests:
 - `logger.service.spec.ts` - Logger functionality tests
 - `sentry.service.spec.ts` - Sentry integration tests (with mocks)
 - `http-logging.interceptor.spec.ts` - HTTP logging tests
-- `opentelemetry.spec.ts` - OpenTelemetry initialization tests
+- `opentelemetry.spec.ts` - OpenTelemetry initialization tests (mocked SDK)
+- `opentelemetry.prometheus.spec.ts` - Real-SDK integration test that scrapes the
+  Prometheus endpoint and asserts `target_info` plus counters recorded through the global
+  `@opentelemetry/api` meter appear in the scrape output
 
-**Test Coverage:**
-
-- 371 tests passing
-- 63 test suites
-- All observability modules fully tested
+Run `npx jest --selectProjects unit --ci src/observability` for the observability suites.
 
 ## Environment Configuration
 
