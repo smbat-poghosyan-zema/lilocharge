@@ -1,4 +1,10 @@
 {
+  "offline": {
+    "banner": "Ինտերնետ կապ չկա"
+  },
+  "notifications": {
+    "androidChannelName": "Ընդհանուր ծանուցումներ"
+  },
   "tabs": {
     "stations": {
       "title": "Կայաններ"
@@ -49,6 +55,7 @@
         "title": "Զտիչներ",
         "toggle": "Զտիչներ",
         "toggleHide": "Թաքցնել զտիչները",
+        "clear": "Մաքրել",
         "connectorTypesLabel": "Միակցիչներ",
         "powerLabel": "Հզորություն",
         "powerAny": "Ցանկացած հզորություն",
@@ -89,12 +96,60 @@
           "maintenance": "Սպասարկում"
         }
       }
+    },
+    "detail": {
+      "loading": "Կայանի մանրամասները բեռնվում են...",
+      "loadError": "Չհաջողվեց բեռնել կայանի մանրամասները:",
+      "retry": "Փորձել կրկին",
+      "notFound": "Կայանը չի գտնվել:",
+      "operatorLabel": "Օպերատոր",
+      "addressLabel": "Հասցե",
+      "openingHoursLabel": "Աշխատաժամեր",
+      "openingHoursUnavailable": "Տվյալներ չկան",
+      "amenitiesTitle": "Հարմարություններ",
+      "amenitiesEmpty": "Հարմարություններ նշված չեն",
+      "connectorsTitle": "Միակցիչներ",
+      "noConnectors": "Միակցիչներ առկա չեն",
+      "chargeHere": "Լիցքավորել այստեղ",
+      "pricingTitle": "Սակագներ",
+      "noPricing": "Սակագնային տվյալներ չկան",
+      "reviewsTitle": "Կարծիքներ",
+      "noReviews": "Կարծիքներ դեռ չկան",
+      "reviewSummary": "{{rating}}/5 · {{count}} կարծիք",
+      "reviewWithoutComment": "Մեկնաբանություն չկա"
+    },
+    "confidence": {
+      "summary": "Համայնքի կարծիքով՝ {{status}} · {{confidence}}% վստահություն · {{timeAgo}}",
+      "minutesAgo": "{{minutes}} րոպե առաջ",
+      "justNow": "հենց նոր"
     }
   },
   "profile": {
     "title": "Անձնական հաշիվ",
     "subtitle": "Կառավարեք նախընտրությունները և ծանուցումները:",
-    "apiBaseUrl": "API: {{url}}"
+    "apiBaseUrl": "API: {{url}}",
+    "loading": "Պրոֆիլը բեռնվում է...",
+    "loadError": "Չհաջողվեց բեռնել պրոֆիլը:",
+    "retry": "Փորձել կրկին",
+    "logout": "Դուրս գալ",
+    "signedOut": {
+      "message": "Մուտք գործեք ձեր հաշիվը և մեքենաները տեսնելու համար:",
+      "signIn": "Մուտք գործել"
+    },
+    "account": {
+      "title": "Հաշիվ",
+      "nameLabel": "Անուն",
+      "emailLabel": "Էլ. հասցե",
+      "phoneLabel": "Հեռախոս",
+      "phoneMissing": "Նշված չէ"
+    },
+    "vehicles": {
+      "title": "Իմ մեքենաները",
+      "empty": "Դուք դեռ մեքենա չեք ավելացրել:"
+    },
+    "language": {
+      "title": "Լեզու"
+    }
   },
   "sessions": {
     "actions": {

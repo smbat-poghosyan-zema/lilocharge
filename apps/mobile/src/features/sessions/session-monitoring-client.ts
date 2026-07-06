@@ -33,6 +33,7 @@ export interface SessionMonitoringSocket {
     event: typeof SESSION_MONITOR_UPDATE_EVENT,
     listener: (payload: SessionMonitorUpdateEvent) => void,
   ): SessionMonitoringSocket;
+  on(event: 'connect', listener: () => void): SessionMonitoringSocket;
   on(
     event: typeof SESSION_MONITOR_UPDATE_EVENT,
     listener: (payload: SessionMonitorUpdateEvent) => void,
@@ -59,6 +60,9 @@ export function createSessionMonitoringClient(
   const socketFactory = input.socketFactory ?? createDefaultSessionMonitoringSocket;
   const socket = socketFactory(apiBaseUrl, {
     autoConnect: false,
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 10000,
     transports: ['websocket'],
   });
 
@@ -75,7 +79,18 @@ function createDefaultSessionMonitoringSocket(
 
 /** Socket.IO implementation of one mobile session-monitoring websocket client. */
 class SocketIoSessionMonitoringClient implements SessionMonitoringClient {
-  constructor(private readonly socket: SessionMonitoringSocket) {}
+  private readonly subscriberCountBySessionId = new Map<string, number>();
+
+  constructor(private readonly socket: SessionMonitoringSocket) {
+    // Socket.IO drops server-side room membership when the connection is lost, and the
+    // 'connect' event fires again after every automatic reconnect. Re-join all active
+    // session rooms so monitoring updates survive connection drops.
+    this.socket.on('connect', (): void => {
+      for (const sessionId of this.subscriberCountBySessionId.keys()) {
+        this.socket.emit(SESSION_MONITOR_SUBSCRIBE_EVENT, { sessionId });
+      }
+    });
+  }
 
   /** Opens the websocket connection if it is not already connected. */
   public connect(): void {
@@ -106,17 +121,51 @@ class SocketIoSessionMonitoringClient implements SessionMonitoringClient {
     };
 
     this.socket.on(SESSION_MONITOR_UPDATE_EVENT, handler);
+    this.trackSubscription(normalizedSessionId);
     this.connect();
     this.socket.emit(SESSION_MONITOR_SUBSCRIBE_EVENT, {
       sessionId: normalizedSessionId,
     });
 
+    let isDisposed = false;
+
     return (): void => {
-      this.socket.emit(SESSION_MONITOR_UNSUBSCRIBE_EVENT, {
-        sessionId: normalizedSessionId,
-      });
+      if (isDisposed) {
+        return;
+      }
+
+      isDisposed = true;
+
+      if (this.releaseSubscription(normalizedSessionId)) {
+        this.socket.emit(SESSION_MONITOR_UNSUBSCRIBE_EVENT, {
+          sessionId: normalizedSessionId,
+        });
+      }
+
       this.socket.off(SESSION_MONITOR_UPDATE_EVENT, handler);
     };
+  }
+
+  /** Registers one additional subscriber for a session room. */
+  private trackSubscription(sessionId: string): void {
+    const subscriberCount = this.subscriberCountBySessionId.get(sessionId) ?? 0;
+
+    this.subscriberCountBySessionId.set(sessionId, subscriberCount + 1);
+  }
+
+  /** Releases one subscriber and reports whether the room has no subscribers left. */
+  private releaseSubscription(sessionId: string): boolean {
+    const subscriberCount = this.subscriberCountBySessionId.get(sessionId) ?? 0;
+
+    if (subscriberCount <= 1) {
+      this.subscriberCountBySessionId.delete(sessionId);
+
+      return true;
+    }
+
+    this.subscriberCountBySessionId.set(sessionId, subscriberCount - 1);
+
+    return false;
   }
 }
 

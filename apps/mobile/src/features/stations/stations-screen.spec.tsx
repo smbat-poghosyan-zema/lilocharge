@@ -8,11 +8,16 @@ import type {
 } from '@lilocharge/shared-types';
 import { ConnectorType, StationStatus } from '@lilocharge/shared-types';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
+import * as Location from 'expo-location';
 
 import { StationsScreen } from './stations-screen';
 import type { FavoritesStorage } from '../favorites/favorites-storage';
 
 const mockPush = jest.fn<void, [string]>();
+const requestForegroundPermissionsAsyncMock = jest.mocked(
+  Location.requestForegroundPermissionsAsync,
+);
+const getCurrentPositionAsyncMock = jest.mocked(Location.getCurrentPositionAsync);
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({
@@ -162,6 +167,36 @@ function createFavoritesStorageMock(
   };
 }
 
+/**
+ * Builds one foreground location-permission response fixture with the provided grant flag.
+ */
+function buildLocationPermission(granted: boolean): Location.LocationPermissionResponse {
+  return {
+    canAskAgain: true,
+    expires: 'never',
+    granted,
+    status: granted ? 'granted' : 'denied',
+  } as Location.LocationPermissionResponse;
+}
+
+/**
+ * Builds one minimal device-position fixture for the provided coordinates.
+ */
+function buildLocationPosition(latitude: number, longitude: number): Location.LocationObject {
+  return {
+    coords: {
+      accuracy: 10,
+      altitude: null,
+      altitudeAccuracy: null,
+      heading: null,
+      latitude,
+      longitude,
+      speed: null,
+    },
+    timestamp: Date.now(),
+  } as Location.LocationObject;
+}
+
 /** Builds one favorite-station fixture for favorites toggle behavior tests. */
 function buildFavoriteStation(): FavoriteStation {
   return {
@@ -186,6 +221,8 @@ function buildFavoriteStation(): FavoriteStation {
 describe('StationsScreen', () => {
   beforeEach(() => {
     mockPush.mockReset();
+    requestForegroundPermissionsAsyncMock.mockResolvedValue(buildLocationPermission(false));
+    getCurrentPositionAsyncMock.mockRejectedValue(new Error('location unavailable in tests'));
   });
 
   it('renders Armenian map title and subtitle', () => {
@@ -527,6 +564,84 @@ describe('StationsScreen', () => {
     });
 
     expect(screen.queryByTestId('stations-empty-state')).toBeNull();
+  });
+
+  it('queries nearby stations with device coordinates when location permission is granted', async () => {
+    requestForegroundPermissionsAsyncMock.mockResolvedValue(buildLocationPermission(true));
+    getCurrentPositionAsyncMock.mockResolvedValue(buildLocationPosition(41.0138, 44.9871));
+    const stationsApiClient = createStationsApiClientMock();
+
+    render(<StationsScreen mapboxToken="pk.test.token" stationsApiClient={stationsApiClient} />);
+
+    await screen.findByTestId('stations-map');
+
+    await waitFor(() => {
+      expect(stationsApiClient.getNearbyStations).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          latitude: 41.0138,
+          longitude: 44.9871,
+        }),
+      );
+    });
+  });
+
+  it('falls back to the Yerevan center when location permission is denied', async () => {
+    requestForegroundPermissionsAsyncMock.mockResolvedValue(buildLocationPermission(false));
+    const stationsApiClient = createStationsApiClientMock();
+
+    render(<StationsScreen mapboxToken="pk.test.token" stationsApiClient={stationsApiClient} />);
+
+    await screen.findByTestId('stations-map');
+
+    await waitFor(() => {
+      expect(stationsApiClient.getNearbyStations).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          latitude: 40.1792,
+          longitude: 44.4991,
+        }),
+      );
+    });
+    expect(getCurrentPositionAsyncMock).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the Yerevan center when resolving the device position fails', async () => {
+    requestForegroundPermissionsAsyncMock.mockResolvedValue(buildLocationPermission(true));
+    getCurrentPositionAsyncMock.mockRejectedValue(new Error('GPS unavailable'));
+    const stationsApiClient = createStationsApiClientMock();
+
+    render(<StationsScreen mapboxToken="pk.test.token" stationsApiClient={stationsApiClient} />);
+
+    await screen.findByTestId('stations-map');
+
+    await waitFor(() => {
+      expect(getCurrentPositionAsyncMock).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(stationsApiClient.getNearbyStations).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          latitude: 40.1792,
+          longitude: 44.4991,
+        }),
+      );
+    });
+  });
+
+  it('recenters the map camera on the device position once location resolves', async () => {
+    requestForegroundPermissionsAsyncMock.mockResolvedValue(buildLocationPermission(true));
+    getCurrentPositionAsyncMock.mockResolvedValue(buildLocationPosition(41.0138, 44.9871));
+    const stationsApiClient = createStationsApiClientMock();
+    const rendered = render(
+      <StationsScreen mapboxToken="pk.test.token" stationsApiClient={stationsApiClient} />,
+    );
+
+    await screen.findByTestId('stations-map');
+
+    await waitFor(() => {
+      expect(rendered.UNSAFE_getByProps({ zoomLevel: 12 })).toHaveProp(
+        'centerCoordinate',
+        [44.9871, 41.0138],
+      );
+    });
   });
 
   it('surfaces an error when the offline map download fails in mock map mode', async () => {

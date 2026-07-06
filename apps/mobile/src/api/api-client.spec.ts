@@ -166,6 +166,125 @@ describe('api client', () => {
     });
   });
 
+  it('retries an idempotent GET once after a network-level failure', async () => {
+    const fetchMock = jest
+      .fn<ReturnType<FetchFunction>, Parameters<FetchFunction>>()
+      .mockRejectedValueOnce(new Error('ECONNRESET'))
+      .mockResolvedValueOnce(
+        createMockResponse({
+          body: '{"service":"api","status":"ok","timestamp":"2026-02-17T12:00:00.000Z","uptimeSeconds":42}',
+          headers: { 'content-type': 'application/json' },
+          status: 200,
+        }),
+      );
+
+    const client = createApiClient({
+      baseUrl: 'https://api.lilocharge.am',
+      fetchFn: fetchMock,
+      networkRetryDelayMs: 0,
+    });
+
+    const response = await client.get<ApiHealthResponse>(REQUEST_PATH);
+
+    expect(response.status).toBe('ok');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry non-GET requests after a network-level failure', async () => {
+    const fetchMock = jest.fn<ReturnType<FetchFunction>, Parameters<FetchFunction>>(() =>
+      Promise.reject(new Error('ECONNREFUSED')),
+    );
+
+    const client = createApiClient({
+      baseUrl: 'https://api.lilocharge.am',
+      fetchFn: fetchMock,
+      networkRetryDelayMs: 0,
+    });
+
+    await expect(
+      client.post('/sessions', { body: { connectorId: 'connector-1' } }),
+    ).rejects.toMatchObject({
+      code: 'NETWORK_ERROR',
+      statusCode: 0,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retry GET requests that fail with HTTP errors', async () => {
+    const fetchMock = createFetchMock([
+      createMockResponse({
+        body: '{"message":"Server error","path":"/health","statusCode":500,"timestamp":"2026-02-17T12:00:00.000Z"}',
+        headers: { 'content-type': 'application/json' },
+        status: 500,
+      }),
+    ]);
+
+    const client = createApiClient({
+      baseUrl: 'https://api.lilocharge.am',
+      fetchFn: fetchMock,
+      networkRetryDelayMs: 0,
+    });
+
+    await expect(client.get(REQUEST_PATH)).rejects.toMatchObject({
+      code: 'HTTP_ERROR',
+      statusCode: 500,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('serves the cached GET response when the network keeps failing', async () => {
+    const fetchMock = jest
+      .fn<ReturnType<FetchFunction>, Parameters<FetchFunction>>()
+      .mockResolvedValueOnce(
+        createMockResponse({
+          body: '{"service":"api","status":"ok","timestamp":"2026-02-17T12:00:00.000Z","uptimeSeconds":42}',
+          headers: { 'content-type': 'application/json' },
+          status: 200,
+        }),
+      )
+      .mockRejectedValue(new Error('offline'));
+
+    const client = createApiClient({
+      baseUrl: 'https://api.lilocharge.am',
+      fetchFn: fetchMock,
+      networkRetryDelayMs: 0,
+    });
+
+    const onlineResponse = await client.get<ApiHealthResponse>(REQUEST_PATH);
+    const offlineResponse = await client.get<ApiHealthResponse>(REQUEST_PATH);
+
+    expect(onlineResponse.status).toBe('ok');
+    expect(offlineResponse).toEqual(onlineResponse);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('propagates network errors when caching is disabled', async () => {
+    const fetchMock = jest
+      .fn<ReturnType<FetchFunction>, Parameters<FetchFunction>>()
+      .mockResolvedValueOnce(
+        createMockResponse({
+          body: '{"service":"api","status":"ok","timestamp":"2026-02-17T12:00:00.000Z","uptimeSeconds":42}',
+          headers: { 'content-type': 'application/json' },
+          status: 200,
+        }),
+      )
+      .mockRejectedValue(new Error('offline'));
+
+    const client = createApiClient({
+      baseUrl: 'https://api.lilocharge.am',
+      cache: false,
+      fetchFn: fetchMock,
+      networkRetryDelayMs: 0,
+    });
+
+    await client.get<ApiHealthResponse>(REQUEST_PATH);
+
+    await expect(client.get<ApiHealthResponse>(REQUEST_PATH)).rejects.toMatchObject({
+      code: 'NETWORK_ERROR',
+      statusCode: 0,
+    });
+  });
+
   it('creates auth interceptor that preserves existing Authorization header', async () => {
     const interceptor = createAuthInterceptor(() => 'access-token-456');
 

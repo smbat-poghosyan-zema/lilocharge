@@ -22,6 +22,13 @@ const DEFAULT_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const CACHE_KEY_PREFIX = 'api_cache:';
 
 /**
+ * Creates the default MMKV storage instance backing the shared API response cache.
+ */
+export function createApiCacheStorage(): MMKV {
+  return new MMKV({ id: 'api-cache' });
+}
+
+/**
  * Creates a cache interceptor that stores API responses in MMKV storage.
  */
 export function createCacheInterceptor(config: CacheConfig = {}): ApiResponseInterceptor {

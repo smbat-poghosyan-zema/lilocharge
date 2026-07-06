@@ -7,6 +7,7 @@ import type {
 } from '@lilocharge/shared-types';
 import { derivePowerTier } from '@lilocharge/shared-types';
 import { useRouter } from 'expo-router';
+import * as Location from 'expo-location';
 import Mapbox from '@rnmapbox/maps';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -80,6 +81,12 @@ interface MapCameraState {
   readonly zoomLevel: number;
 }
 
+/** Geographic coordinates used to anchor nearby/search station queries. */
+interface StationQueryCoordinates {
+  readonly latitude: number;
+  readonly longitude: number;
+}
+
 interface StationsScreenProps {
   readonly favoritesStorageClient?: FavoritesStorage;
   readonly mapboxToken?: string;
@@ -120,6 +127,57 @@ export function StationsScreen({
   const [favoriteStationIds, setFavoriteStationIds] = useState<readonly string[]>(() => {
     return extractFavoriteStationIds(favoritesStorageClient.listFavoriteStations());
   });
+  const [deviceCoordinates, setDeviceCoordinates] = useState<StationQueryCoordinates | null>(null);
+  const queryCoordinates = useMemo<StationQueryCoordinates>(() => {
+    return (
+      deviceCoordinates ?? {
+        latitude: DEFAULT_NEARBY_STATIONS_QUERY.latitude,
+        longitude: DEFAULT_NEARBY_STATIONS_QUERY.longitude,
+      }
+    );
+  }, [deviceCoordinates]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    /**
+     * Requests foreground location permission and resolves the current device position,
+     * silently keeping the default Yerevan center when denied or unavailable.
+     */
+    async function resolveDeviceCoordinates(): Promise<void> {
+      try {
+        const permission = await Location.requestForegroundPermissionsAsync();
+
+        if (!isMounted || !permission.granted) {
+          return;
+        }
+
+        const position = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+
+        if (!isMounted) {
+          return;
+        }
+
+        const coordinates: StationQueryCoordinates = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        };
+
+        setDeviceCoordinates(coordinates);
+        setCameraState(buildDefaultMapCameraState(coordinates));
+      } catch {
+        // Location unavailable (denied, disabled, or unsupported) — keep Yerevan default.
+      }
+    }
+
+    void resolveDeviceCoordinates();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     setFavoriteStationIds(extractFavoriteStationIds(favoritesStorageClient.listFavoriteStations()));
@@ -147,8 +205,12 @@ export function StationsScreen({
         const normalizedSearchQuery = normalizeStationSearchQuery(debouncedSearchQuery);
         const hasActiveSearchQuery = normalizedSearchQuery.length > 0;
         const nearbyStations = hasActiveSearchQuery
-          ? await stationsApiClient.searchStations(buildStationSearchQuery(normalizedSearchQuery))
-          : await stationsApiClient.getNearbyStations(buildNearbyStationsQuery(stationFilters));
+          ? await stationsApiClient.searchStations(
+              buildStationSearchQuery(normalizedSearchQuery, queryCoordinates),
+            )
+          : await stationsApiClient.getNearbyStations(
+              buildNearbyStationsQuery(stationFilters, queryCoordinates),
+            );
 
         if (!isMounted) {
           return;
@@ -178,7 +240,7 @@ export function StationsScreen({
       isMounted = false;
       clearInterval(refreshTimer);
     };
-  }, [debouncedSearchQuery, stationFilters, stationsApiClient]);
+  }, [debouncedSearchQuery, queryCoordinates, stationFilters, stationsApiClient]);
 
   useEffect(() => {
     if (selectedStationId === null) {
@@ -233,8 +295,8 @@ export function StationsScreen({
         const stationDetail = await stationsApiClient.getStationDetail(selectedStationIdSnapshot, {
           connectorTypes:
             stationFilters.connectorTypes.length > 0 ? stationFilters.connectorTypes : undefined,
-          latitude: DEFAULT_NEARBY_STATIONS_QUERY.latitude,
-          longitude: DEFAULT_NEARBY_STATIONS_QUERY.longitude,
+          latitude: queryCoordinates.latitude,
+          longitude: queryCoordinates.longitude,
           minimumPowerKw: stationFilters.minimumPowerKw,
         });
 
@@ -262,7 +324,7 @@ export function StationsScreen({
     return () => {
       isMounted = false;
     };
-  }, [selectedStationId, stationFilters, stationsApiClient]);
+  }, [queryCoordinates, selectedStationId, stationFilters, stationsApiClient]);
 
   const stationStatusColorExpression = useMemo(() => {
     return buildStationMarkerColorExpression();
@@ -287,7 +349,7 @@ export function StationsScreen({
   };
 
   const handleRecenterMapPress = (): void => {
-    setCameraState(buildDefaultMapCameraState());
+    setCameraState(buildDefaultMapCameraState(deviceCoordinates));
   };
 
   const handleFocusSelectedStationPress = (): void => {
@@ -583,14 +645,17 @@ function normalizeStationSearchQuery(value: string): string {
 /**
  * Builds the nearby-stations request payload with optional active filter fields.
  */
-function buildNearbyStationsQuery(filters: StationFilterState): NearbyStationsQueryRequest {
+function buildNearbyStationsQuery(
+  filters: StationFilterState,
+  coordinates: StationQueryCoordinates,
+): NearbyStationsQueryRequest {
   return {
     availabilityStatuses:
       filters.availabilityStatuses.length > 0 ? filters.availabilityStatuses : undefined,
     connectorTypes: filters.connectorTypes.length > 0 ? filters.connectorTypes : undefined,
-    latitude: DEFAULT_NEARBY_STATIONS_QUERY.latitude,
+    latitude: coordinates.latitude,
     limit: DEFAULT_NEARBY_STATIONS_QUERY.limit,
-    longitude: DEFAULT_NEARBY_STATIONS_QUERY.longitude,
+    longitude: coordinates.longitude,
     minimumPowerKw: filters.minimumPowerKw,
     operatorIds: filters.operatorIds.length > 0 ? filters.operatorIds : undefined,
     radiusMeters: DEFAULT_NEARBY_STATIONS_QUERY.radiusMeters,
@@ -598,13 +663,17 @@ function buildNearbyStationsQuery(filters: StationFilterState): NearbyStationsQu
 }
 
 /**
- * Builds a station search query payload anchored to the default Yerevan map center.
+ * Builds a station search query payload anchored to the device position when available,
+ * falling back to the default Yerevan map center.
  */
-function buildStationSearchQuery(query: string): StationSearchQueryRequest {
+function buildStationSearchQuery(
+  query: string,
+  coordinates: StationQueryCoordinates,
+): StationSearchQueryRequest {
   return {
-    latitude: DEFAULT_NEARBY_STATIONS_QUERY.latitude,
+    latitude: coordinates.latitude,
     limit: DEFAULT_STATION_SEARCH_LIMIT,
-    longitude: DEFAULT_NEARBY_STATIONS_QUERY.longitude,
+    longitude: coordinates.longitude,
     query,
   };
 }
@@ -694,11 +763,16 @@ function resolveOfflineStatusLabel(
 }
 
 /**
- * Builds the default map camera state centered on Yerevan.
+ * Builds the default map camera state centered on the device position when available,
+ * falling back to the Yerevan city center.
  */
-function buildDefaultMapCameraState(): MapCameraState {
+function buildDefaultMapCameraState(
+  coordinates: StationQueryCoordinates | null = null,
+): MapCameraState {
   return {
-    centerCoordinate: DEFAULT_CAMERA_CENTER,
+    centerCoordinate: coordinates
+      ? [coordinates.longitude, coordinates.latitude]
+      : DEFAULT_CAMERA_CENTER,
     zoomLevel: DEFAULT_CAMERA_ZOOM_LEVEL,
   };
 }

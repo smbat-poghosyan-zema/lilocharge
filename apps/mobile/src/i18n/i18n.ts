@@ -1,12 +1,14 @@
 import i18next, { type i18n as I18nInstance } from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
+import { readPersistedLanguage } from './language-preference';
 import { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, TRANSLATION_RESOURCES } from './resources';
 
 const DEFAULT_NAMESPACE = 'common';
 
 /**
- * Initializes the singleton i18next instance for the mobile app.
+ * Initializes the singleton i18next instance for the mobile app, restoring the
+ * persisted language preference and falling back to Armenian by default.
  */
 export function initializeI18n(): I18nInstance {
   if (!i18next.isInitialized) {
@@ -16,7 +18,7 @@ export function initializeI18n(): I18nInstance {
       interpolation: {
         escapeValue: false,
       },
-      lng: DEFAULT_LANGUAGE,
+      lng: readPersistedLanguage() ?? DEFAULT_LANGUAGE,
       ns: [DEFAULT_NAMESPACE],
       react: {
         useSuspense: false,

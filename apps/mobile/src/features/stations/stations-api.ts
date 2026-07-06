@@ -1,4 +1,5 @@
 import type {
+  MostConfidentStatusResponse,
   NearbyStationsQueryRequest,
   StationDetailQueryRequest,
   StationDetailResponse,
@@ -23,9 +24,18 @@ export interface StationsApi {
 }
 
 /**
+ * Station discovery API surface extended with community-reported connector
+ * status lookups. Kept as an additive extension so existing StationsApi
+ * consumers and test doubles remain compatible.
+ */
+export interface CommunityStationsApi extends StationsApi {
+  getConnectorCommunityStatus(connectorId: string): Promise<MostConfidentStatusResponse | null>;
+}
+
+/**
  * Creates station discovery API helpers backed by the shared typed ApiClient.
  */
-export function createStationsApi(apiClient: ApiClient): StationsApi {
+export function createStationsApi(apiClient: ApiClient): CommunityStationsApi {
   return {
     getNearbyStations: (query: NearbyStationsQueryRequest): Promise<StationNearbyResponse[]> => {
       return apiClient.get<StationNearbyResponse[]>('/stations/nearby', {
@@ -54,6 +64,13 @@ export function createStationsApi(apiClient: ApiClient): StationsApi {
           minimumPowerKw: query.minimumPowerKw,
         },
       });
+    },
+    getConnectorCommunityStatus: (
+      connectorId: string,
+    ): Promise<MostConfidentStatusResponse | null> => {
+      return apiClient.get<MostConfidentStatusResponse | null>(
+        `/connectors/${connectorId}/most-confident-status`,
+      );
     },
   };
 }

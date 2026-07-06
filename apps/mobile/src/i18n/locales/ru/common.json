@@ -1,4 +1,10 @@
 {
+  "offline": {
+    "banner": "Нет подключения к интернету"
+  },
+  "notifications": {
+    "androidChannelName": "Общие уведомления"
+  },
   "tabs": {
     "stations": {
       "title": "Станции"
@@ -90,12 +96,60 @@
           "maintenance": "Обслуживание"
         }
       }
+    },
+    "detail": {
+      "loading": "Загружаем детали станции...",
+      "loadError": "Не удалось загрузить детали станции.",
+      "retry": "Повторить",
+      "notFound": "Станция не найдена.",
+      "operatorLabel": "Оператор",
+      "addressLabel": "Адрес",
+      "openingHoursLabel": "Часы работы",
+      "openingHoursUnavailable": "Нет данных",
+      "amenitiesTitle": "Удобства",
+      "amenitiesEmpty": "Удобства не указаны",
+      "connectorsTitle": "Разъемы",
+      "noConnectors": "Разъемы отсутствуют",
+      "chargeHere": "Зарядиться здесь",
+      "pricingTitle": "Тарифы",
+      "noPricing": "Тариф недоступен",
+      "reviewsTitle": "Отзывы",
+      "noReviews": "Отзывов пока нет",
+      "reviewSummary": "{{rating}}/5 · {{count}} отзывов",
+      "reviewWithoutComment": "Комментарий отсутствует"
+    },
+    "confidence": {
+      "summary": "По данным сообщества: {{status}} · {{confidence}}% уверенности · {{timeAgo}}",
+      "minutesAgo": "{{minutes}} мин назад",
+      "justNow": "только что"
     }
   },
   "profile": {
     "title": "Личный кабинет",
     "subtitle": "Управляйте настройками и уведомлениями.",
-    "apiBaseUrl": "API: {{url}}"
+    "apiBaseUrl": "API: {{url}}",
+    "loading": "Загрузка профиля...",
+    "loadError": "Не удалось загрузить профиль.",
+    "retry": "Повторить",
+    "logout": "Выйти",
+    "signedOut": {
+      "message": "Войдите, чтобы увидеть свой аккаунт и автомобили.",
+      "signIn": "Войти"
+    },
+    "account": {
+      "title": "Аккаунт",
+      "nameLabel": "Имя",
+      "emailLabel": "Эл. почта",
+      "phoneLabel": "Телефон",
+      "phoneMissing": "Не указан"
+    },
+    "vehicles": {
+      "title": "Мои автомобили",
+      "empty": "Вы еще не добавили автомобиль."
+    },
+    "language": {
+      "title": "Язык"
+    }
   },
   "sessions": {
     "actions": {

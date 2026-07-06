@@ -11,8 +11,10 @@ import {
   type SessionMonitoringSocketFactory,
 } from './session-monitoring-client';
 
+type SocketListener = ((payload: SessionMonitorUpdateEvent) => void) | (() => void);
+
 interface SocketListenerMap {
-  [event: string]: ((payload: SessionMonitorUpdateEvent) => void) | undefined;
+  [event: string]: SocketListener | undefined;
 }
 
 interface SessionMonitoringSocketMock extends SessionMonitoringSocket {
@@ -86,7 +88,7 @@ describe('session-monitoring-client', () => {
       .mockReturnValue(socketMock);
   });
 
-  it('creates one socket connection with websocket-only transport settings', () => {
+  it('creates one socket connection with websocket transport and reconnection enabled', () => {
     createSessionMonitoringClient({
       apiBaseUrl: 'https://api.lilocharge.am',
       socketFactory: socketFactoryMock,
@@ -94,6 +96,9 @@ describe('session-monitoring-client', () => {
 
     expect(socketFactoryMock).toHaveBeenCalledWith('https://api.lilocharge.am', {
       autoConnect: false,
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 10000,
       transports: ['websocket'],
     });
   });
@@ -106,7 +111,9 @@ describe('session-monitoring-client', () => {
     });
 
     const unsubscribe = client.subscribeToSession('session-1', handleUpdate);
-    const listener = listenerByEvent[SESSION_MONITOR_UPDATE_EVENT];
+    const listener = listenerByEvent[SESSION_MONITOR_UPDATE_EVENT] as
+      | ((payload: SessionMonitorUpdateEvent) => void)
+      | undefined;
 
     listener?.({
       connectorId: 'connector-1',
@@ -153,6 +160,74 @@ describe('session-monitoring-client', () => {
 
     expect(socketMock.connect).toHaveBeenCalledTimes(1);
     expect(socketMock.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('resubscribes active session rooms when the socket reconnects', () => {
+    const client = createSessionMonitoringClient({
+      apiBaseUrl: 'https://api.lilocharge.am',
+      socketFactory: socketFactoryMock,
+    });
+
+    client.subscribeToSession('session-1', jest.fn<void, [SessionMonitorUpdateEvent]>());
+    socketMock.emit.mockClear();
+
+    const connectListener = listenerByEvent.connect as (() => void) | undefined;
+    connectListener?.();
+
+    expect(socketMock.emit).toHaveBeenCalledTimes(1);
+    expect(socketMock.emit).toHaveBeenCalledWith(SESSION_MONITOR_SUBSCRIBE_EVENT, {
+      sessionId: 'session-1',
+    });
+  });
+
+  it('stops resubscribing session rooms after they are unsubscribed', () => {
+    const client = createSessionMonitoringClient({
+      apiBaseUrl: 'https://api.lilocharge.am',
+      socketFactory: socketFactoryMock,
+    });
+
+    const unsubscribe = client.subscribeToSession(
+      'session-1',
+      jest.fn<void, [SessionMonitorUpdateEvent]>(),
+    );
+
+    unsubscribe();
+    socketMock.emit.mockClear();
+
+    const connectListener = listenerByEvent.connect as (() => void) | undefined;
+    connectListener?.();
+
+    expect(socketMock.emit).not.toHaveBeenCalled();
+  });
+
+  it('leaves the session room only when the last subscriber unsubscribes', () => {
+    const client = createSessionMonitoringClient({
+      apiBaseUrl: 'https://api.lilocharge.am',
+      socketFactory: socketFactoryMock,
+    });
+
+    const unsubscribeFirst = client.subscribeToSession(
+      'session-1',
+      jest.fn<void, [SessionMonitorUpdateEvent]>(),
+    );
+    const unsubscribeSecond = client.subscribeToSession(
+      'session-1',
+      jest.fn<void, [SessionMonitorUpdateEvent]>(),
+    );
+
+    socketMock.emit.mockClear();
+    unsubscribeFirst();
+    unsubscribeFirst();
+
+    expect(socketMock.emit).not.toHaveBeenCalledWith(SESSION_MONITOR_UNSUBSCRIBE_EVENT, {
+      sessionId: 'session-1',
+    });
+
+    unsubscribeSecond();
+
+    expect(socketMock.emit).toHaveBeenCalledWith(SESSION_MONITOR_UNSUBSCRIBE_EVENT, {
+      sessionId: 'session-1',
+    });
   });
 
   it('throws for blank session subscription requests', () => {

@@ -1,4 +1,5 @@
 import type {
+  MostConfidentStatusResponse,
   StationConnectorResponse,
   StationDetailResponse,
   StationNearbyResponse,
@@ -10,12 +11,19 @@ import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-n
 
 import { useAppTranslation } from '../../i18n/use-app-translation';
 import { isJestRuntime } from '../../utils/is-jest-runtime';
+import {
+  formatCommunityStatusHint,
+  useConnectorCommunityStatuses,
+  type ConnectorCommunityStatusClient,
+} from './connector-community-status';
+import { stationsApi } from './stations-api';
 
 const SHEET_SLIDE_DURATION_MS = 220;
 const SHEET_SLIDE_TRANSLATE_Y = 280;
 const REVIEW_PREVIEW_LIMIT = 2;
 
 interface StationBottomSheetProps {
+  readonly communityStatusClient?: ConnectorCommunityStatusClient;
   readonly hasActiveConnectorFilters: boolean;
   readonly hasDetailLoadError: boolean;
   readonly isFavorite: boolean;
@@ -28,6 +36,7 @@ interface StationBottomSheetProps {
 }
 
 interface StationConnectorCardProps {
+  readonly communityStatus: MostConfidentStatusResponse | null;
   readonly connector: StationConnectorResponse;
   readonly pricingPlan: StationPricingPlanResponse | null;
 }
@@ -36,6 +45,7 @@ interface StationConnectorCardProps {
  * Renders the map station bottom sheet with connectors, pricing preview, and review summary.
  */
 export function StationBottomSheet({
+  communityStatusClient = stationsApi,
   hasActiveConnectorFilters,
   hasDetailLoadError,
   isFavorite,
@@ -68,6 +78,11 @@ export function StationBottomSheet({
   const reviewPreview = useMemo(() => {
     return reviews.slice(0, REVIEW_PREVIEW_LIMIT);
   }, [reviews]);
+
+  const connectorIds = useMemo((): readonly string[] => {
+    return connectors.map((connector) => connector.id);
+  }, [connectors]);
+  const communityStatuses = useConnectorCommunityStatuses(connectorIds, communityStatusClient);
 
   return (
     <Animated.View
@@ -159,6 +174,7 @@ export function StationBottomSheet({
         {!isLoadingDetail && !hasDetailLoadError
           ? connectors.map((connector) => (
               <StationConnectorCard
+                communityStatus={communityStatuses[connector.id] ?? null}
                 connector={connector}
                 key={connector.id}
                 pricingPlan={findPricingPlanByConnectorId(connector.id, pricingPlans)}
@@ -214,9 +230,14 @@ export function StationBottomSheet({
 }
 
 /**
- * Renders one connector summary card with status and pricing information.
+ * Renders one connector summary card with status, pricing, and an optional
+ * community-reported confidence hint.
  */
-function StationConnectorCard({ connector, pricingPlan }: StationConnectorCardProps): JSX.Element {
+function StationConnectorCard({
+  communityStatus,
+  connector,
+  pricingPlan,
+}: StationConnectorCardProps): JSX.Element {
   const { t } = useAppTranslation();
 
   return (
@@ -231,6 +252,18 @@ function StationConnectorCard({ connector, pricingPlan }: StationConnectorCardPr
         {pricingPlan?.name ?? t('stations.map.sheet.noPricing')}
       </Text>
       <Text style={styles.pricingText}>{formatPricingDetails(pricingPlan, t)}</Text>
+      {communityStatus !== null ? (
+        <Text
+          style={styles.communityStatusText}
+          testID={`station-connector-community-status-${connector.id}`}
+        >
+          {formatCommunityStatusHint(
+            communityStatus,
+            resolveStationStatusLabel(communityStatus.status, t),
+            t,
+          )}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -452,6 +485,12 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontSize: 18,
     fontWeight: '700',
+  },
+  communityStatusText: {
+    color: '#6D28D9',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 4,
   },
   connectorCard: {
     backgroundColor: '#F9FAFB',

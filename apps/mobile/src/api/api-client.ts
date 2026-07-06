@@ -1,4 +1,12 @@
 import type { ApiErrorResponse } from '@lilocharge/shared-types';
+import type { MMKV } from 'react-native-mmkv';
+
+import {
+  createApiCacheStorage,
+  createCacheInterceptor,
+  getCachedResponse,
+  type CacheConfig,
+} from './cache-interceptor';
 
 export type ApiRequestMethod = 'DELETE' | 'GET' | 'PATCH' | 'POST' | 'PUT';
 export type ApiErrorCode = 'HTTP_ERROR' | 'NETWORK_ERROR' | 'PARSING_ERROR';
@@ -47,10 +55,19 @@ export interface ApiRequestOptions<TBody = undefined, TResponse = unknown> {
  */
 export interface ApiClientConfig {
   baseUrl: string;
+  /**
+   * Offline GET-response caching. Enabled by default (MMKV-backed, 5 minute TTL):
+   * successful GET responses are cached and served as a fallback when an idempotent
+   * GET keeps failing with a network error. Pass `false` to disable, or a
+   * {@link CacheConfig} to customize storage/TTL.
+   */
+  cache?: CacheConfig | boolean;
   defaultHeaders?: Readonly<Record<string, string>>;
   errorInterceptors?: readonly ApiErrorInterceptor[];
   fetchFn?: FetchFunction;
   getAccessToken?: AccessTokenProvider;
+  /** Delay before the single automatic retry of a GET that failed with a network error. */
+  networkRetryDelayMs?: number;
   onUnauthorized?: (error: ApiClientError) => void;
   requestInterceptors?: readonly ApiRequestInterceptor[];
   responseInterceptors?: readonly ApiResponseInterceptor[];
@@ -190,21 +207,30 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
  */
 class FetchApiClient implements ApiClient {
   private readonly baseUrl: string;
+  private readonly cacheStorage: MMKV | null;
   private readonly defaultHeaders: Readonly<Record<string, string>>;
   private readonly errorInterceptors: readonly ApiErrorInterceptor[];
   private readonly fetchFn: FetchFunction;
+  private readonly networkRetryDelayMs: number;
   private readonly requestInterceptors: readonly ApiRequestInterceptor[];
   private readonly responseInterceptors: readonly ApiResponseInterceptor[];
 
   constructor(config: ApiClientConfig) {
+    const cacheSettings = resolveCacheSettings(config.cache);
+
     this.baseUrl = normalizeBaseUrl(config.baseUrl);
+    this.cacheStorage = cacheSettings?.storage ?? null;
     this.defaultHeaders = config.defaultHeaders ?? {};
     this.fetchFn = config.fetchFn ?? fetch.bind(globalThis);
+    this.networkRetryDelayMs = config.networkRetryDelayMs ?? DEFAULT_NETWORK_RETRY_DELAY_MS;
     this.requestInterceptors = [
       ...(config.getAccessToken ? [createAuthInterceptor(config.getAccessToken)] : []),
       ...(config.requestInterceptors ?? []),
     ];
-    this.responseInterceptors = config.responseInterceptors ?? [];
+    this.responseInterceptors = [
+      ...(config.responseInterceptors ?? []),
+      ...(cacheSettings ? [cacheSettings.interceptor] : []),
+    ];
     this.errorInterceptors = [
       ...(config.onUnauthorized ? [createUnauthorizedErrorInterceptor(config.onUnauthorized)] : []),
       ...(config.errorInterceptors ?? []),
@@ -232,36 +258,90 @@ class FetchApiClient implements ApiClient {
         url: buildRequestUrl(this.baseUrl, path, options?.query),
       };
       const requestContext = await runRequestInterceptors(this.requestInterceptors, baseContext);
-      const { body: requestBody, headers } = transformRequestPayload(
-        requestContext.body,
-        requestContext.headers,
-      );
-      const response = await this.fetchFn(requestContext.url, {
-        body: requestBody,
-        headers,
-        method: requestContext.method,
-        signal: requestContext.signal,
-      });
-      const data = await parseResponseData(response, requestContext.path);
-
-      if (!response.ok) {
-        throw mapErrorResponse(response.status, response.statusText, requestContext.path, data);
-      }
-
-      const responseContext = await runResponseInterceptors(this.responseInterceptors, {
-        data,
-        request: requestContext,
-        response,
-      });
+      const responseData = await this.dispatchWithRetryAndCacheFallback(requestContext);
 
       if (options?.responseTransformer) {
-        return options.responseTransformer(responseContext.data);
+        return options.responseTransformer(responseData);
       }
 
-      return responseContext.data as TResponse;
+      return responseData as TResponse;
     } catch (error: unknown) {
       throw await runErrorInterceptors(this.errorInterceptors, mapToApiClientError(error, path));
     }
+  }
+
+  /**
+   * Dispatches one request, retrying idempotent GETs once after a network-level failure
+   * and finally falling back to the offline response cache when the retry also fails.
+   */
+  private async dispatchWithRetryAndCacheFallback(
+    requestContext: ApiRequestContext<unknown>,
+  ): Promise<unknown> {
+    try {
+      return await this.dispatchRequest(requestContext);
+    } catch (error: unknown) {
+      if (!isRetriableNetworkFailure(error, requestContext)) {
+        throw error;
+      }
+
+      try {
+        await delay(this.networkRetryDelayMs);
+
+        return await this.dispatchRequest(requestContext);
+      } catch (retryError: unknown) {
+        if (!isRetriableNetworkFailure(retryError, requestContext)) {
+          throw retryError;
+        }
+
+        const cachedData = this.readCachedResponse(requestContext);
+
+        if (cachedData !== null) {
+          return cachedData;
+        }
+
+        throw retryError;
+      }
+    }
+  }
+
+  /**
+   * Sends one prepared request through fetch and normalizes response/error payloads.
+   */
+  private async dispatchRequest(requestContext: ApiRequestContext<unknown>): Promise<unknown> {
+    const { body: requestBody, headers } = transformRequestPayload(
+      requestContext.body,
+      requestContext.headers,
+    );
+    const response = await this.fetchFn(requestContext.url, {
+      body: requestBody,
+      headers,
+      method: requestContext.method,
+      signal: requestContext.signal,
+    });
+    const data = await parseResponseData(response, requestContext.path);
+
+    if (!response.ok) {
+      throw mapErrorResponse(response.status, response.statusText, requestContext.path, data);
+    }
+
+    const responseContext = await runResponseInterceptors(this.responseInterceptors, {
+      data,
+      request: requestContext,
+      response,
+    });
+
+    return responseContext.data;
+  }
+
+  /**
+   * Reads one non-expired cached GET response for the request, when caching is enabled.
+   */
+  private readCachedResponse(requestContext: ApiRequestContext<unknown>): unknown {
+    if (this.cacheStorage === null) {
+      return null;
+    }
+
+    return getCachedResponse(requestContext.path, requestContext.url, this.cacheStorage);
   }
 
   /**
@@ -313,6 +393,76 @@ class FetchApiClient implements ApiClient {
   ): Promise<TResponse> {
     return this.request<TResponse>('DELETE', path, options);
   }
+}
+
+const DEFAULT_NETWORK_RETRY_DELAY_MS = 250;
+
+/** Resolved offline-cache wiring shared by the write interceptor and fallback reads. */
+interface ResolvedCacheSettings {
+  readonly interceptor: ApiResponseInterceptor;
+  readonly storage: MMKV;
+}
+
+/**
+ * Resolves the cache option (enabled by default) into interceptor plus shared storage.
+ */
+function resolveCacheSettings(
+  cache: ApiClientConfig['cache'],
+): ResolvedCacheSettings | null {
+  if (cache === false) {
+    return null;
+  }
+
+  const cacheConfig: CacheConfig = typeof cache === 'object' ? cache : {};
+
+  if (cacheConfig.enabled === false) {
+    return null;
+  }
+
+  const storage = cacheConfig.storage ?? createApiCacheStorage();
+
+  return {
+    interceptor: createCacheInterceptor({ ...cacheConfig, storage }),
+    storage,
+  };
+}
+
+/**
+ * Resolves whether a request failure is a retriable network-level GET failure.
+ *
+ * HTTP and parsing errors are never retried, and aborted requests are surfaced as-is.
+ */
+function isRetriableNetworkFailure(
+  error: unknown,
+  requestContext: ApiRequestContext<unknown>,
+): boolean {
+  if (requestContext.method !== 'GET') {
+    return false;
+  }
+
+  if (requestContext.signal?.aborted) {
+    return false;
+  }
+
+  if (error instanceof ApiClientError) {
+    return error.code === 'NETWORK_ERROR';
+  }
+
+  // Raw fetch rejections (DNS failures, refused connections, offline) are network errors.
+  return true;
+}
+
+/**
+ * Waits for the provided duration before resolving.
+ */
+function delay(durationMs: number): Promise<void> {
+  if (durationMs <= 0) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve: () => void): void => {
+    setTimeout(resolve, durationMs);
+  });
 }
 
 /**

@@ -50,6 +50,78 @@ jest.mock('@rnmapbox/maps', () => {
   };
 });
 
+jest.mock('expo-location', () => ({
+  Accuracy: {
+    Balanced: 3,
+    High: 4,
+    Highest: 5,
+    Low: 2,
+    Lowest: 1,
+  },
+  getCurrentPositionAsync: jest.fn(() => {
+    return Promise.reject(new Error('location unavailable in tests'));
+  }),
+  requestForegroundPermissionsAsync: jest.fn(() => {
+    return Promise.resolve({
+      canAskAgain: true,
+      expires: 'never',
+      granted: false,
+      status: 'denied',
+    });
+  }),
+}));
+
+jest.mock('expo-notifications', () => ({
+  AndroidImportance: {
+    DEFAULT: 3,
+    HIGH: 4,
+    LOW: 2,
+    MAX: 5,
+    MIN: 1,
+  },
+  addNotificationReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+  addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+  addPushTokenListener: jest.fn(() => ({ remove: jest.fn() })),
+  getDevicePushTokenAsync: jest.fn(() => {
+    return Promise.resolve({ data: 'device-push-token', type: 'android' });
+  }),
+  getLastNotificationResponseAsync: jest.fn(() => Promise.resolve(null)),
+  getPermissionsAsync: jest.fn(() => {
+    return Promise.resolve({
+      canAskAgain: true,
+      expires: 'never',
+      granted: false,
+      status: 'undetermined',
+    });
+  }),
+  requestPermissionsAsync: jest.fn(() => {
+    return Promise.resolve({
+      canAskAgain: false,
+      expires: 'never',
+      granted: false,
+      status: 'denied',
+    });
+  }),
+  setNotificationChannelAsync: jest.fn(() => Promise.resolve(null)),
+}));
+
+jest.mock('@react-native-community/netinfo', () => {
+  const addEventListener = jest.fn(() => jest.fn());
+  const fetchState = jest.fn(() => {
+    return Promise.resolve({ isConnected: true, isInternetReachable: true });
+  });
+  const netInfoModule = {
+    addEventListener,
+    fetch: fetchState,
+  };
+
+  return {
+    __esModule: true,
+    ...netInfoModule,
+    default: netInfoModule,
+  };
+});
+
 jest.mock('react-native-mmkv', () => {
   class MMKV {
     private readonly valueByKey: Map<string, string> = new Map<string, string>();

@@ -1,8 +1,56 @@
-import type { StationDetailResponse, StationNearbyResponse } from '@lilocharge/shared-types';
+import type {
+  MostConfidentStatusResponse,
+  StationDetailResponse,
+  StationNearbyResponse,
+} from '@lilocharge/shared-types';
 import { ConnectorType, StationStatus } from '@lilocharge/shared-types';
-import { fireEvent, render, screen, within } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 
 import { StationBottomSheet } from './station-bottom-sheet';
+
+/**
+ * Builds a community status client stub that reports no community data.
+ */
+function createCommunityStatusClientMock(): {
+  readonly getConnectorCommunityStatus: jest.Mock<
+    Promise<MostConfidentStatusResponse | null>,
+    [string]
+  >;
+} {
+  return {
+    getConnectorCommunityStatus: jest.fn<Promise<MostConfidentStatusResponse | null>, [string]>(
+      () => {
+        return Promise.resolve(null);
+      },
+    ),
+  };
+}
+
+/**
+ * Builds a community-reported status fixture for one connector.
+ */
+function buildCommunityStatus(
+  connectorId: string,
+  reportedAgoMs: number,
+): MostConfidentStatusResponse {
+  const reportedAt = new Date(Date.now() - reportedAgoMs).toISOString();
+
+  return {
+    confidenceScore: 0.87,
+    connectorId,
+    latestUpdate: {
+      comment: null,
+      confidenceScore: 0.95,
+      connectorId,
+      createdAt: reportedAt,
+      id: '77777777-7777-7777-7777-777777777777',
+      status: StationStatus.OCCUPIED,
+      updatedAt: reportedAt,
+      userId: 'user-9',
+    },
+    status: StationStatus.OCCUPIED,
+  };
+}
 
 const STATION: StationNearbyResponse = {
   address: 'Arami 6',
@@ -105,6 +153,7 @@ describe('StationBottomSheet', () => {
   it('renders station details, connector cards, pricing, and reviews', () => {
     render(
       <StationBottomSheet
+        communityStatusClient={createCommunityStatusClientMock()}
         hasActiveConnectorFilters={false}
         hasDetailLoadError={false}
         isFavorite={false}
@@ -139,6 +188,7 @@ describe('StationBottomSheet', () => {
 
     render(
       <StationBottomSheet
+        communityStatusClient={createCommunityStatusClientMock()}
         hasActiveConnectorFilters={false}
         hasDetailLoadError={false}
         isFavorite={false}
@@ -224,5 +274,50 @@ describe('StationBottomSheet', () => {
     expect(screen.getByTestId('station-bottom-sheet')).toBeTruthy();
     expect(screen.getByText('Միակցիչներ առկա չեն')).toBeTruthy();
     expect(screen.getAllByText(/Կարծիքներ դեռ չկան/).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('shows a community-reported confidence hint for connectors that have one', async () => {
+    const reportedConnectorId = '22222222-2222-2222-2222-222222222222';
+    const communityStatus = buildCommunityStatus(reportedConnectorId, 5 * 60_000);
+    const communityStatusClient = {
+      getConnectorCommunityStatus: jest.fn<Promise<MostConfidentStatusResponse | null>, [string]>(
+        (connectorId: string) => {
+          return Promise.resolve(connectorId === reportedConnectorId ? communityStatus : null);
+        },
+      ),
+    };
+
+    render(
+      <StationBottomSheet
+        communityStatusClient={communityStatusClient}
+        hasActiveConnectorFilters={false}
+        hasDetailLoadError={false}
+        isFavorite={false}
+        isLoadingDetail={false}
+        station={STATION}
+        stationDetail={STATION_DETAIL}
+        onClose={jest.fn()}
+        onNavigateToDetail={jest.fn()}
+        onToggleFavorite={jest.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId(`station-connector-community-status-${reportedConnectorId}`),
+      ).toBeTruthy();
+    });
+
+    const hintText = screen.getByTestId(
+      `station-connector-community-status-${reportedConnectorId}`,
+    );
+
+    expect(hintText).toHaveTextContent(/Զբաղված/);
+    expect(hintText).toHaveTextContent(/87%/);
+    expect(hintText).toHaveTextContent(/5 րոպե առաջ/);
+    expect(communityStatusClient.getConnectorCommunityStatus).toHaveBeenCalledTimes(2);
+    expect(
+      screen.queryByTestId('station-connector-community-status-33333333-3333-3333-3333-333333333333'),
+    ).toBeNull();
   });
 });

@@ -22,9 +22,12 @@
   },
   "dependencies": {
     "@lilocharge/shared-types": "workspace:*",
+    "@react-native-community/netinfo": "11.3.1",
     "@rnmapbox/maps": "^10.1.36",
     "expo": "~51.0.39",
     "expo-camera": "~15.0.16",
+    "expo-location": "~17.0.1",
+    "expo-notifications": "~0.28.19",
     "expo-router": "~3.5.23",
     "expo-status-bar": "~1.12.1",
     "i18next": "^25.8.10",

@@ -1,4 +1,5 @@
 import type {
+  MostConfidentStatusResponse,
   NearbyStationsQueryRequest,
   StationDetailQueryRequest,
   StationDetailResponse,
@@ -208,5 +209,53 @@ describe('stations api', () => {
         query: 'tuman',
       },
     });
+  });
+
+  it('requests the most confident community connector status through the typed API client', async () => {
+    const connectorId = '22222222-2222-2222-2222-222222222222';
+    const communityStatus: MostConfidentStatusResponse = {
+      confidenceScore: 0.82,
+      connectorId,
+      latestUpdate: {
+        comment: 'Charger is busy right now',
+        confidenceScore: 0.9,
+        connectorId,
+        createdAt: '2026-07-06T10:00:00.000Z',
+        id: '77777777-7777-7777-7777-777777777777',
+        status: StationStatus.OCCUPIED,
+        updatedAt: '2026-07-06T10:00:00.000Z',
+        userId: '88888888-8888-8888-8888-888888888888',
+      },
+      status: StationStatus.OCCUPIED,
+    };
+    const apiClientMock = {
+      get: jest.fn<Promise<MostConfidentStatusResponse | null>, [string]>(() => {
+        return Promise.resolve(communityStatus);
+      }),
+    };
+
+    const stationsApi = createStationsApi(apiClientMock as never);
+
+    await expect(stationsApi.getConnectorCommunityStatus(connectorId)).resolves.toEqual(
+      communityStatus,
+    );
+
+    expect(apiClientMock.get).toHaveBeenCalledWith(
+      `/connectors/${connectorId}/most-confident-status`,
+    );
+  });
+
+  it('returns null when a connector has no community status reports', async () => {
+    const apiClientMock = {
+      get: jest.fn<Promise<MostConfidentStatusResponse | null>, [string]>(() => {
+        return Promise.resolve(null);
+      }),
+    };
+
+    const stationsApi = createStationsApi(apiClientMock as never);
+
+    await expect(
+      stationsApi.getConnectorCommunityStatus('22222222-2222-2222-2222-222222222222'),
+    ).resolves.toBeNull();
   });
 });

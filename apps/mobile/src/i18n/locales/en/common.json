@@ -1,4 +1,10 @@
 {
+  "offline": {
+    "banner": "No internet connection"
+  },
+  "notifications": {
+    "androidChannelName": "General notifications"
+  },
   "tabs": {
     "stations": {
       "title": "Stations"
@@ -90,12 +96,60 @@
           "maintenance": "Maintenance"
         }
       }
+    },
+    "detail": {
+      "loading": "Loading station details...",
+      "loadError": "Failed to load station details.",
+      "retry": "Try again",
+      "notFound": "Station not found.",
+      "operatorLabel": "Operator",
+      "addressLabel": "Address",
+      "openingHoursLabel": "Hours",
+      "openingHoursUnavailable": "Not available",
+      "amenitiesTitle": "Amenities",
+      "amenitiesEmpty": "No amenities listed",
+      "connectorsTitle": "Connectors",
+      "noConnectors": "No connectors available",
+      "chargeHere": "Charge here",
+      "pricingTitle": "Pricing plans",
+      "noPricing": "Pricing not available",
+      "reviewsTitle": "Reviews",
+      "noReviews": "No reviews yet",
+      "reviewSummary": "{{rating}}/5 · {{count}} reviews",
+      "reviewWithoutComment": "No comment"
+    },
+    "confidence": {
+      "summary": "Community reported: {{status}} · {{confidence}}% confidence · {{timeAgo}}",
+      "minutesAgo": "{{minutes}} min ago",
+      "justNow": "just now"
     }
   },
   "profile": {
     "title": "Profile",
     "subtitle": "Manage your preferences and notifications.",
-    "apiBaseUrl": "API: {{url}}"
+    "apiBaseUrl": "API: {{url}}",
+    "loading": "Loading profile...",
+    "loadError": "Failed to load profile.",
+    "retry": "Try again",
+    "logout": "Log out",
+    "signedOut": {
+      "message": "Sign in to see your account and vehicles.",
+      "signIn": "Sign in"
+    },
+    "account": {
+      "title": "Account",
+      "nameLabel": "Name",
+      "emailLabel": "Email",
+      "phoneLabel": "Phone",
+      "phoneMissing": "Not set"
+    },
+    "vehicles": {
+      "title": "My vehicles",
+      "empty": "You have not added a vehicle yet."
+    },
+    "language": {
+      "title": "Language"
+    }
   },
   "sessions": {
     "actions": {
