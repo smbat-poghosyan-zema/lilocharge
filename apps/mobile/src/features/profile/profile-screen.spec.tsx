@@ -187,6 +187,22 @@ describe('ProfileScreen', () => {
     expect(mockReplace).toHaveBeenCalledWith('/onboarding/login');
   });
 
+  it('navigates to the payment methods screen from the navigation row', () => {
+    render(<ProfileScreen profileApiClient={createProfileApiClientMock()} />);
+
+    fireEvent.press(screen.getByTestId('profile-payment-methods'));
+
+    expect(mockPush).toHaveBeenCalledWith('/payment-methods');
+  });
+
+  it('navigates to the wallet screen from the navigation row', () => {
+    render(<ProfileScreen profileApiClient={createProfileApiClientMock()} />);
+
+    fireEvent.press(screen.getByTestId('profile-wallet'));
+
+    expect(mockPush).toHaveBeenCalledWith('/wallet');
+  });
+
   it('clears the session and navigates to onboarding on logout', async () => {
     const profileApiClient = createProfileApiClientMock();
 

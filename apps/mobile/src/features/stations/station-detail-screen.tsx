@@ -11,11 +11,19 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 
 import { ApiClientError } from '../../api';
 import { useAppTranslation } from '../../i18n/use-app-translation';
+import { useOnboardingSession } from '../onboarding/onboarding-session';
 import {
   formatCommunityStatusHint,
   useConnectorCommunityStatuses,
 } from './connector-community-status';
 import { stationsApi, type CommunityStationsApi } from './stations-api';
+
+const REPORTABLE_STATUSES: readonly StationStatus[] = [
+  StationStatus.AVAILABLE,
+  StationStatus.OCCUPIED,
+  StationStatus.OFFLINE,
+  StationStatus.MAINTENANCE,
+];
 
 type StationDetailState =
   | { readonly status: 'error' }
@@ -26,15 +34,19 @@ type StationDetailState =
 interface StationDetailScreenProps {
   readonly stationsApiClient?: Pick<
     CommunityStationsApi,
-    'getConnectorCommunityStatus' | 'getStationDetail'
+    'getConnectorCommunityStatus' | 'getStationDetail' | 'reportConnectorStatus'
   >;
 }
+
+type ConnectorReportFeedback = 'error' | 'signedOut' | 'success';
 
 interface StationConnectorRowProps {
   readonly communityStatus: MostConfidentStatusResponse | null;
   readonly connector: StationConnectorResponse;
+  readonly isSignedIn: boolean;
   readonly pricingPlan: StationPricingPlanResponse | null;
   readonly onChargeHere: (connectorId: string) => void;
+  readonly onReportStatus: (connectorId: string, status: StationStatus) => Promise<void>;
 }
 
 const EMPTY_CONNECTOR_IDS: readonly string[] = [];
@@ -50,6 +62,8 @@ export function StationDetailScreen({
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
   const stationId = normalizeRouteParam(params.id);
+  const { state: sessionState } = useOnboardingSession();
+  const userId = sessionState.userId;
   const [detailState, setDetailState] = useState<StationDetailState>({ status: 'loading' });
   const [reloadToken, setReloadToken] = useState(0);
 
@@ -99,6 +113,17 @@ export function StationDetailScreen({
       router.push(`/charge/confirm?connectorId=${connectorId}&stationId=${stationId ?? ''}`);
     },
     [router, stationId],
+  );
+
+  const handleReportConnectorStatus = useCallback(
+    async (connectorId: string, status: StationStatus): Promise<void> => {
+      if (userId === null) {
+        throw new Error('Sign-in is required to report connector status');
+      }
+
+      await stationsApiClient.reportConnectorStatus(userId, { connectorId, status });
+    },
+    [stationsApiClient, userId],
   );
 
   if (detailState.status === 'loading') {
@@ -165,6 +190,36 @@ export function StationDetailScreen({
           {t('stations.detail.openingHoursLabel')}:{' '}
           {detail.openingHours ?? t('stations.detail.openingHoursUnavailable')}
         </Text>
+        <View style={styles.communityActionsRow}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={(): void => {
+              router.push(`/stations/${detail.id}/review`);
+            }}
+            style={({ pressed }) => {
+              return [styles.communityActionButton, pressed ? styles.buttonPressed : null];
+            }}
+            testID="station-detail-write-review"
+          >
+            <Text style={styles.communityActionButtonText}>
+              {t('stations.detail.writeReview')}
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={(): void => {
+              router.push(`/stations/${detail.id}/report`);
+            }}
+            style={({ pressed }) => {
+              return [styles.communityActionButton, pressed ? styles.buttonPressed : null];
+            }}
+            testID="station-detail-report-problem"
+          >
+            <Text style={styles.communityActionButtonText}>
+              {t('stations.detail.reportProblem')}
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.sectionCard}>
@@ -187,8 +242,10 @@ export function StationDetailScreen({
           <StationConnectorRow
             communityStatus={communityStatuses[connector.id] ?? null}
             connector={connector}
+            isSignedIn={userId !== null}
             key={connector.id}
             onChargeHere={handleChargeHere}
+            onReportStatus={handleReportConnectorStatus}
             pricingPlan={findPricingPlanByConnectorId(connector.id, detail.pricingPlans)}
           />
         ))}
@@ -242,10 +299,42 @@ export function StationDetailScreen({
 function StationConnectorRow({
   communityStatus,
   connector,
+  isSignedIn,
   pricingPlan,
   onChargeHere,
+  onReportStatus,
 }: StationConnectorRowProps): JSX.Element {
   const { t } = useAppTranslation();
+  const [isStatusPickerVisible, setIsStatusPickerVisible] = useState(false);
+  const [reportFeedback, setReportFeedback] = useState<ConnectorReportFeedback | null>(null);
+
+  /**
+   * Toggles the inline community status picker, gating on authentication.
+   */
+  const handleToggleStatusPicker = (): void => {
+    if (!isSignedIn) {
+      setReportFeedback('signedOut');
+
+      return;
+    }
+
+    setReportFeedback(null);
+    setIsStatusPickerVisible((previousVisibility) => !previousVisibility);
+  };
+
+  /**
+   * Submits one community status report for this connector.
+   */
+  const handleSelectStatus = (status: StationStatus): void => {
+    setIsStatusPickerVisible(false);
+    onReportStatus(connector.id, status)
+      .then((): void => {
+        setReportFeedback('success');
+      })
+      .catch((): void => {
+        setReportFeedback('error');
+      });
+  };
 
   return (
     <View style={styles.rowCard} testID={`station-detail-connector-${connector.id}`}>
@@ -290,8 +379,70 @@ function StationConnectorRow({
       >
         <Text style={styles.chargeButtonText}>{t('stations.detail.chargeHere')}</Text>
       </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        onPress={handleToggleStatusPicker}
+        style={({ pressed }) => {
+          return [styles.reportStatusButton, pressed ? styles.buttonPressed : null];
+        }}
+        testID={`station-detail-report-status-${connector.id}`}
+      >
+        <Text style={styles.reportStatusButtonText}>
+          {t('stations.detail.communityReport.action')}
+        </Text>
+      </Pressable>
+      {isStatusPickerVisible ? (
+        <View testID={`station-detail-report-status-picker-${connector.id}`}>
+          <Text style={styles.mutedText}>{t('stations.detail.communityReport.prompt')}</Text>
+          <View style={styles.reportStatusOptionsRow}>
+            {REPORTABLE_STATUSES.map((reportableStatus) => (
+              <Pressable
+                accessibilityRole="button"
+                key={reportableStatus}
+                onPress={(): void => {
+                  handleSelectStatus(reportableStatus);
+                }}
+                style={({ pressed }) => {
+                  return [styles.reportStatusOption, pressed ? styles.buttonPressed : null];
+                }}
+                testID={`station-detail-report-status-option-${connector.id}-${reportableStatus}`}
+              >
+                <Text style={styles.reportStatusOptionText}>
+                  {resolveStationStatusLabel(reportableStatus, t)}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : null}
+      {reportFeedback !== null ? (
+        <Text
+          style={reportFeedback === 'success' ? styles.reportFeedbackSuccess : styles.errorText}
+          testID={`station-detail-report-status-feedback-${connector.id}`}
+        >
+          {resolveReportFeedbackLabel(reportFeedback, t)}
+        </Text>
+      ) : null}
     </View>
   );
+}
+
+/**
+ * Maps community status-report feedback states onto localized labels.
+ */
+function resolveReportFeedbackLabel(
+  feedback: ConnectorReportFeedback,
+  t: (key: string) => string,
+): string {
+  switch (feedback) {
+    case 'success':
+      return t('stations.detail.communityReport.success');
+    case 'signedOut':
+      return t('stations.detail.communityReport.signInRequired');
+    case 'error':
+    default:
+      return t('stations.detail.communityReport.error');
+  }
 }
 
 /**
@@ -455,6 +606,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
+  communityActionButton: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#0F766E',
+    borderRadius: 999,
+    borderWidth: 1,
+    flexGrow: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  communityActionButtonText: {
+    color: '#0F766E',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  communityActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
   communityStatusText: {
     color: '#6D28D9',
     fontSize: 12,
@@ -507,6 +678,45 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontSize: 13,
     marginTop: 6,
+  },
+  reportFeedbackSuccess: {
+    color: '#065F46',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  reportStatusButton: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#6D28D9',
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 8,
+    paddingVertical: 9,
+  },
+  reportStatusButtonText: {
+    color: '#6D28D9',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  reportStatusOption: {
+    backgroundColor: '#F5F3FF',
+    borderColor: '#6D28D9',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  reportStatusOptionText: {
+    color: '#6D28D9',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  reportStatusOptionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
   },
   rowCard: {
     backgroundColor: '#F9FAFB',

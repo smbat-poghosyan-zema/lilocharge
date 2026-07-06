@@ -1,4 +1,8 @@
-import type { MostConfidentStatusResponse, StationDetailResponse } from '@lilocharge/shared-types';
+import type {
+  ConnectorStatusUpdateResponse,
+  MostConfidentStatusResponse,
+  StationDetailResponse,
+} from '@lilocharge/shared-types';
 import { ConnectorType, StationStatus } from '@lilocharge/shared-types';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
@@ -8,17 +12,25 @@ import { StationDetailScreen } from './station-detail-screen';
 const STATION_ID = '11111111-1111-1111-1111-111111111111';
 const CCS_CONNECTOR_ID = '22222222-2222-2222-2222-222222222222';
 const TYPE2_CONNECTOR_ID = '33333333-3333-3333-3333-333333333333';
+const USER_ID = '99999999-9999-9999-9999-999999999999';
 
 const mockPush = jest.fn<void, [string]>();
 const mockReplace = jest.fn<void, [string]>();
 
 let mockParams: { id?: string };
+let mockedSessionState: { userId: string | null };
 
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
   useRouter: () => ({
     push: mockPush,
     replace: mockReplace,
+  }),
+}));
+
+jest.mock('../onboarding/onboarding-session', () => ({
+  useOnboardingSession: () => ({
+    state: mockedSessionState,
   }),
 }));
 
@@ -110,6 +122,7 @@ interface StationsApiClientMock {
     [string]
   >;
   readonly getStationDetail: jest.Mock<Promise<StationDetailResponse>, [string]>;
+  readonly reportConnectorStatus: jest.Mock<Promise<ConnectorStatusUpdateResponse>, [string]>;
 }
 
 function createStationsApiClientMock(): StationsApiClientMock {
@@ -122,12 +135,25 @@ function createStationsApiClientMock(): StationsApiClientMock {
     getStationDetail: jest.fn<Promise<StationDetailResponse>, [string]>(() => {
       return Promise.resolve(buildStationDetail());
     }),
+    reportConnectorStatus: jest.fn<Promise<ConnectorStatusUpdateResponse>, [string]>(() => {
+      return Promise.resolve({
+        comment: null,
+        confidenceScore: 1,
+        connectorId: CCS_CONNECTOR_ID,
+        createdAt: '2026-07-06T10:00:00.000Z',
+        id: '88888888-8888-8888-8888-888888888888',
+        status: StationStatus.OCCUPIED,
+        updatedAt: '2026-07-06T10:00:00.000Z',
+        userId: USER_ID,
+      });
+    }),
   };
 }
 
 describe('StationDetailScreen', () => {
   beforeEach(() => {
     mockParams = { id: STATION_ID };
+    mockedSessionState = { userId: USER_ID };
   });
 
   it('shows a loading state while the station detail request is pending', () => {
@@ -236,6 +262,116 @@ describe('StationDetailScreen', () => {
     expect(
       screen.queryByTestId(`station-detail-community-status-${TYPE2_CONNECTOR_ID}`),
     ).toBeNull();
+  });
+
+  it('navigates to the review form when pressing "Write a review"', async () => {
+    render(<StationDetailScreen stationsApiClient={createStationsApiClientMock()} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('station-detail-write-review')).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByTestId('station-detail-write-review'));
+
+    expect(mockPush).toHaveBeenCalledWith(`/stations/${STATION_ID}/review`);
+  });
+
+  it('navigates to the problem report form when pressing "Report a problem"', async () => {
+    render(<StationDetailScreen stationsApiClient={createStationsApiClientMock()} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('station-detail-report-problem')).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByTestId('station-detail-report-problem'));
+
+    expect(mockPush).toHaveBeenCalledWith(`/stations/${STATION_ID}/report`);
+  });
+
+  it('submits a community connector status report from the quick action', async () => {
+    const stationsApiClient = createStationsApiClientMock();
+
+    render(<StationDetailScreen stationsApiClient={stationsApiClient} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId(`station-detail-report-status-${CCS_CONNECTOR_ID}`)).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByTestId(`station-detail-report-status-${CCS_CONNECTOR_ID}`));
+
+    expect(
+      screen.getByTestId(`station-detail-report-status-picker-${CCS_CONNECTOR_ID}`),
+    ).toBeTruthy();
+
+    fireEvent.press(
+      screen.getByTestId(
+        `station-detail-report-status-option-${CCS_CONNECTOR_ID}-${StationStatus.OCCUPIED}`,
+      ),
+    );
+
+    await waitFor(() => {
+      expect(stationsApiClient.reportConnectorStatus).toHaveBeenCalledWith(USER_ID, {
+        connectorId: CCS_CONNECTOR_ID,
+        status: StationStatus.OCCUPIED,
+      });
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId(`station-detail-report-status-feedback-${CCS_CONNECTOR_ID}`),
+      ).toBeTruthy();
+    });
+
+    expect(
+      screen.queryByTestId(`station-detail-report-status-picker-${CCS_CONNECTOR_ID}`),
+    ).toBeNull();
+  });
+
+  it('shows an error feedback when the status report submission fails', async () => {
+    const stationsApiClient = createStationsApiClientMock();
+
+    stationsApiClient.reportConnectorStatus.mockRejectedValue(new Error('network down'));
+
+    render(<StationDetailScreen stationsApiClient={stationsApiClient} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId(`station-detail-report-status-${CCS_CONNECTOR_ID}`)).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByTestId(`station-detail-report-status-${CCS_CONNECTOR_ID}`));
+    fireEvent.press(
+      screen.getByTestId(
+        `station-detail-report-status-option-${CCS_CONNECTOR_ID}-${StationStatus.OFFLINE}`,
+      ),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId(`station-detail-report-status-feedback-${CCS_CONNECTOR_ID}`),
+      ).toHaveTextContent('Չհաջողվեց ուղարկել կարգավիճակի հաղորդումը:');
+    });
+  });
+
+  it('asks signed-out users to sign in before reporting connector status', async () => {
+    mockedSessionState = { userId: null };
+
+    const stationsApiClient = createStationsApiClientMock();
+
+    render(<StationDetailScreen stationsApiClient={stationsApiClient} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId(`station-detail-report-status-${CCS_CONNECTOR_ID}`)).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByTestId(`station-detail-report-status-${CCS_CONNECTOR_ID}`));
+
+    expect(
+      screen.queryByTestId(`station-detail-report-status-picker-${CCS_CONNECTOR_ID}`),
+    ).toBeNull();
+    expect(
+      screen.getByTestId(`station-detail-report-status-feedback-${CCS_CONNECTOR_ID}`),
+    ).toHaveTextContent('Մուտք գործեք միակցիչի կարգավիճակը հաղորդելու համար:');
+    expect(stationsApiClient.reportConnectorStatus).not.toHaveBeenCalled();
   });
 
   it('shows an error state with retry when the detail request fails', async () => {

@@ -1,4 +1,6 @@
 import type {
+  ConnectorStatusUpdateResponse,
+  CreateConnectorStatusUpdateRequest,
   MostConfidentStatusResponse,
   NearbyStationsQueryRequest,
   StationDetailQueryRequest,
@@ -30,6 +32,10 @@ export interface StationsApi {
  */
 export interface CommunityStationsApi extends StationsApi {
   getConnectorCommunityStatus(connectorId: string): Promise<MostConfidentStatusResponse | null>;
+  reportConnectorStatus(
+    userId: string,
+    request: CreateConnectorStatusUpdateRequest,
+  ): Promise<ConnectorStatusUpdateResponse>;
 }
 
 /**
@@ -70,6 +76,17 @@ export function createStationsApi(apiClient: ApiClient): CommunityStationsApi {
     ): Promise<MostConfidentStatusResponse | null> => {
       return apiClient.get<MostConfidentStatusResponse | null>(
         `/connectors/${connectorId}/most-confident-status`,
+      );
+    },
+    reportConnectorStatus: (
+      userId: string,
+      request: CreateConnectorStatusUpdateRequest,
+    ): Promise<ConnectorStatusUpdateResponse> => {
+      return apiClient.post<ConnectorStatusUpdateResponse, CreateConnectorStatusUpdateRequest>(
+        `/users/${userId}/connector-status-updates`,
+        {
+          body: request,
+        },
       );
     },
   };

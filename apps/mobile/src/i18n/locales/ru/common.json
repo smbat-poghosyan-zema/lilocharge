@@ -116,7 +116,17 @@
       "reviewsTitle": "Отзывы",
       "noReviews": "Отзывов пока нет",
       "reviewSummary": "{{rating}}/5 · {{count}} отзывов",
-      "reviewWithoutComment": "Комментарий отсутствует"
+      "reviewWithoutComment": "Комментарий отсутствует",
+      "writeReview": "Написать отзыв",
+      "reportProblem": "Сообщить о проблеме",
+      "communityReport": {
+        "action": "Сообщить статус",
+        "prompt": "В каком состоянии сейчас этот разъем?",
+        "cancel": "Отмена",
+        "success": "Спасибо! Ваше сообщение о статусе отправлено.",
+        "error": "Не удалось отправить сообщение о статусе.",
+        "signInRequired": "Войдите, чтобы сообщить статус разъема."
+      }
     },
     "confidence": {
       "summary": "По данным сообщества: {{status}} · {{confidence}}% уверенности · {{timeAgo}}",
@@ -149,6 +159,161 @@
     },
     "language": {
       "title": "Язык"
+    },
+    "navigation": {
+      "title": "Платежи и кошелек",
+      "paymentMethods": "Способы оплаты",
+      "wallet": "Кошелек"
+    }
+  },
+  "payments": {
+    "title": "Способы оплаты",
+    "subtitle": "Управляйте сохраненными картами и кошельками.",
+    "loading": "Загружаем способы оплаты...",
+    "loadError": "Не удалось загрузить способы оплаты.",
+    "retry": "Повторить",
+    "empty": "У вас пока нет сохраненных способов оплаты.",
+    "defaultBadge": "Основной",
+    "makeDefault": "Сделать основным",
+    "delete": "Удалить",
+    "deleteConfirm": {
+      "title": "Удалить способ оплаты?",
+      "message": "Этот способ оплаты будет удален из вашего аккаунта.",
+      "confirm": "Удалить",
+      "cancel": "Отмена"
+    },
+    "gateways": {
+      "ARCA": "Карта ArCa",
+      "IDRAM": "Кошелек Idram",
+      "APPLE_PAY": "Apple Pay",
+      "GOOGLE_PAY": "Google Pay",
+      "WALLET": "Кошелек LiloCharge"
+    },
+    "add": {
+      "toggle": "Добавить способ оплаты",
+      "title": "Новый способ оплаты",
+      "gatewayLabel": "Платежная система",
+      "tokenLabel": "Платежный токен",
+      "tokenHelp": "Вставьте токен, выданный банковской привязкой ArCa или Idram.",
+      "displayLabelLabel": "Название (необязательно)",
+      "displayLabelPlaceholder": "например, Личная карта",
+      "submit": "Сохранить способ оплаты",
+      "submitting": "Сохранение...",
+      "cancel": "Отмена",
+      "errors": {
+        "tokenRequired": "Введите платежный токен",
+        "submitFailed": "Не удалось сохранить способ оплаты."
+      }
+    },
+    "errors": {
+      "deleteFailed": "Не удалось удалить способ оплаты.",
+      "setDefaultFailed": "Не удалось назначить основной способ оплаты."
+    },
+    "signedOut": {
+      "message": "Войдите, чтобы управлять способами оплаты.",
+      "signIn": "Войти"
+    }
+  },
+  "wallet": {
+    "title": "Кошелек",
+    "subtitle": "Пополните баланс для мгновенной оплаты зарядки.",
+    "loading": "Загружаем кошелек...",
+    "loadError": "Не удалось загрузить кошелек.",
+    "retry": "Повторить",
+    "balanceTitle": "Баланс",
+    "topUp": {
+      "title": "Пополнить",
+      "customAmountLabel": "Другая сумма (AMD)",
+      "customAmountPlaceholder": "например, 5000",
+      "methodLabel": "Оплатить с помощью",
+      "submit": "Пополнить",
+      "submitting": "Обрабатывается...",
+      "success": "Баланс успешно пополнен.",
+      "noMethods": "Добавьте способ оплаты, чтобы пополнить кошелек.",
+      "addMethod": "Добавить способ оплаты",
+      "errors": {
+        "invalidAmount": "Введите корректную сумму",
+        "methodRequired": "Выберите способ оплаты",
+        "topUpFailed": "Не удалось пополнить кошелек."
+      }
+    },
+    "transactions": {
+      "title": "Операции",
+      "empty": "Операций пока нет.",
+      "types": {
+        "TOP_UP": "Пополнение",
+        "DEDUCTION": "Списание",
+        "REFUND": "Возврат"
+      }
+    },
+    "signedOut": {
+      "message": "Войдите, чтобы увидеть свой кошелек.",
+      "signIn": "Войти"
+    }
+  },
+  "reviews": {
+    "form": {
+      "title": "Написать отзыв",
+      "subtitle": "Поделитесь опытом использования этой станции.",
+      "ratingLabel": "Оценка",
+      "starLabel": "{{value}} из 5",
+      "commentLabel": "Комментарий (необязательно)",
+      "commentPlaceholder": "Что понравилось? Что нет?",
+      "photosLabel": "Фотографии ({{current}}/5)",
+      "addPhoto": "Добавить фото",
+      "removePhoto": "Удалить",
+      "photosUnavailable": "Загрузка фотографий временно недоступна. Ваш отзыв будет отправлен без фотографий.",
+      "submit": "Отправить отзыв",
+      "submitting": "Отправка...",
+      "missingStation": "Станция не указана.",
+      "success": {
+        "title": "Спасибо!",
+        "message": "Ваш отзыв опубликован.",
+        "done": "Готово"
+      },
+      "errors": {
+        "ratingRequired": "Выберите оценку от 1 до 5",
+        "submitFailed": "Не удалось отправить отзыв.",
+        "photoPickFailed": "Не удалось выбрать фотографию."
+      },
+      "signedOut": {
+        "message": "Войдите, чтобы написать отзыв.",
+        "signIn": "Войти"
+      }
+    }
+  },
+  "problemReports": {
+    "form": {
+      "title": "Сообщить о проблеме",
+      "subtitle": "Расскажите, что не так с этой станцией.",
+      "typeLabel": "Тип проблемы",
+      "descriptionLabel": "Описание",
+      "descriptionPlaceholder": "Опишите проблему...",
+      "submit": "Отправить сообщение",
+      "submitting": "Отправка...",
+      "missingStation": "Станция не указана.",
+      "success": {
+        "title": "Сообщение отправлено",
+        "message": "Спасибо! Наша команда разберется.",
+        "done": "Готово"
+      },
+      "errors": {
+        "descriptionRequired": "Опишите проблему",
+        "submitFailed": "Не удалось отправить сообщение."
+      },
+      "signedOut": {
+        "message": "Войдите, чтобы сообщить о проблеме.",
+        "signIn": "Войти"
+      },
+      "types": {
+        "OFFLINE": "Станция не работает",
+        "BROKEN_CONNECTOR": "Сломан разъем",
+        "NO_POWER": "Нет питания",
+        "PAYMENT_ISSUE": "Проблема с оплатой",
+        "PHYSICAL_DAMAGE": "Физическое повреждение",
+        "ACCESS_BLOCKED": "Доступ заблокирован",
+        "OTHER": "Другое"
+      }
     }
   },
   "sessions": {

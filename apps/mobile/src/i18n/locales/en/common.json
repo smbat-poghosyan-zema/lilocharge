@@ -116,7 +116,17 @@
       "reviewsTitle": "Reviews",
       "noReviews": "No reviews yet",
       "reviewSummary": "{{rating}}/5 · {{count}} reviews",
-      "reviewWithoutComment": "No comment"
+      "reviewWithoutComment": "No comment",
+      "writeReview": "Write a review",
+      "reportProblem": "Report a problem",
+      "communityReport": {
+        "action": "Report status",
+        "prompt": "What is the current status of this connector?",
+        "cancel": "Cancel",
+        "success": "Thanks! Your status report was submitted.",
+        "error": "Failed to submit the status report.",
+        "signInRequired": "Sign in to report connector status."
+      }
     },
     "confidence": {
       "summary": "Community reported: {{status}} · {{confidence}}% confidence · {{timeAgo}}",
@@ -149,6 +159,161 @@
     },
     "language": {
       "title": "Language"
+    },
+    "navigation": {
+      "title": "Payments & wallet",
+      "paymentMethods": "Payment methods",
+      "wallet": "Wallet"
+    }
+  },
+  "payments": {
+    "title": "Payment methods",
+    "subtitle": "Manage your saved cards and wallets.",
+    "loading": "Loading payment methods...",
+    "loadError": "Failed to load payment methods.",
+    "retry": "Try again",
+    "empty": "You have no saved payment methods yet.",
+    "defaultBadge": "Default",
+    "makeDefault": "Make default",
+    "delete": "Delete",
+    "deleteConfirm": {
+      "title": "Delete payment method?",
+      "message": "This payment method will be removed from your account.",
+      "confirm": "Delete",
+      "cancel": "Cancel"
+    },
+    "gateways": {
+      "ARCA": "ArCa card",
+      "IDRAM": "Idram wallet",
+      "APPLE_PAY": "Apple Pay",
+      "GOOGLE_PAY": "Google Pay",
+      "WALLET": "LiloCharge wallet"
+    },
+    "add": {
+      "toggle": "Add payment method",
+      "title": "New payment method",
+      "gatewayLabel": "Gateway",
+      "tokenLabel": "Payment token",
+      "tokenHelp": "Paste the token issued by your bank's ArCa or Idram binding flow.",
+      "displayLabelLabel": "Label (optional)",
+      "displayLabelPlaceholder": "e.g. Personal card",
+      "submit": "Save payment method",
+      "submitting": "Saving...",
+      "cancel": "Cancel",
+      "errors": {
+        "tokenRequired": "Enter the payment token",
+        "submitFailed": "Failed to save the payment method."
+      }
+    },
+    "errors": {
+      "deleteFailed": "Failed to delete the payment method.",
+      "setDefaultFailed": "Failed to set the default payment method."
+    },
+    "signedOut": {
+      "message": "Sign in to manage payment methods.",
+      "signIn": "Sign in"
+    }
+  },
+  "wallet": {
+    "title": "Wallet",
+    "subtitle": "Top up your balance for instant charging payments.",
+    "loading": "Loading wallet...",
+    "loadError": "Failed to load wallet.",
+    "retry": "Try again",
+    "balanceTitle": "Balance",
+    "topUp": {
+      "title": "Top up",
+      "customAmountLabel": "Custom amount (AMD)",
+      "customAmountPlaceholder": "e.g. 5000",
+      "methodLabel": "Pay with",
+      "submit": "Top up",
+      "submitting": "Processing...",
+      "success": "Balance topped up successfully.",
+      "noMethods": "Add a payment method to top up your wallet.",
+      "addMethod": "Add payment method",
+      "errors": {
+        "invalidAmount": "Enter a valid amount",
+        "methodRequired": "Choose a payment method",
+        "topUpFailed": "Failed to top up the wallet."
+      }
+    },
+    "transactions": {
+      "title": "Transactions",
+      "empty": "No transactions yet.",
+      "types": {
+        "TOP_UP": "Top-up",
+        "DEDUCTION": "Charge",
+        "REFUND": "Refund"
+      }
+    },
+    "signedOut": {
+      "message": "Sign in to see your wallet.",
+      "signIn": "Sign in"
+    }
+  },
+  "reviews": {
+    "form": {
+      "title": "Write a review",
+      "subtitle": "Share your experience at this station.",
+      "ratingLabel": "Rating",
+      "starLabel": "{{value}} of 5",
+      "commentLabel": "Comment (optional)",
+      "commentPlaceholder": "What worked well? What didn't?",
+      "photosLabel": "Photos ({{current}}/5)",
+      "addPhoto": "Add photo",
+      "removePhoto": "Remove",
+      "photosUnavailable": "Photo uploads are temporarily unavailable. Your review will be submitted without photos.",
+      "submit": "Submit review",
+      "submitting": "Submitting...",
+      "missingStation": "Station not specified.",
+      "success": {
+        "title": "Thank you!",
+        "message": "Your review has been published.",
+        "done": "Done"
+      },
+      "errors": {
+        "ratingRequired": "Choose a rating from 1 to 5",
+        "submitFailed": "Failed to submit the review.",
+        "photoPickFailed": "Failed to pick a photo."
+      },
+      "signedOut": {
+        "message": "Sign in to write a review.",
+        "signIn": "Sign in"
+      }
+    }
+  },
+  "problemReports": {
+    "form": {
+      "title": "Report a problem",
+      "subtitle": "Tell us what is wrong with this station.",
+      "typeLabel": "Problem type",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Describe the problem...",
+      "submit": "Send report",
+      "submitting": "Sending...",
+      "missingStation": "Station not specified.",
+      "success": {
+        "title": "Report sent",
+        "message": "Thank you! Our team will look into it.",
+        "done": "Done"
+      },
+      "errors": {
+        "descriptionRequired": "Describe the problem",
+        "submitFailed": "Failed to send the report."
+      },
+      "signedOut": {
+        "message": "Sign in to report a problem.",
+        "signIn": "Sign in"
+      },
+      "types": {
+        "OFFLINE": "Station offline",
+        "BROKEN_CONNECTOR": "Broken connector",
+        "NO_POWER": "No power",
+        "PAYMENT_ISSUE": "Payment issue",
+        "PHYSICAL_DAMAGE": "Physical damage",
+        "ACCESS_BLOCKED": "Access blocked",
+        "OTHER": "Other"
+      }
     }
   },
   "sessions": {

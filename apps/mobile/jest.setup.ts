@@ -71,6 +71,25 @@ jest.mock('expo-location', () => ({
   }),
 }));
 
+jest.mock('expo-image-picker', () => ({
+  MediaTypeOptions: {
+    All: 'All',
+    Images: 'Images',
+    Videos: 'Videos',
+  },
+  launchImageLibraryAsync: jest.fn(() => {
+    return Promise.resolve({ assets: null, canceled: true });
+  }),
+  requestMediaLibraryPermissionsAsync: jest.fn(() => {
+    return Promise.resolve({
+      canAskAgain: true,
+      expires: 'never',
+      granted: true,
+      status: 'granted',
+    });
+  }),
+}));
+
 jest.mock('expo-notifications', () => ({
   AndroidImportance: {
     DEFAULT: 3,

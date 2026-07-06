@@ -141,6 +141,36 @@ export function ProfileScreen({ profileApiClient = profileApi }: ProfileScreenPr
       )}
 
       <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>{t('profile.navigation.title')}</Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={(): void => {
+            router.push('/payment-methods');
+          }}
+          style={({ pressed }) => {
+            return [styles.navigationRow, pressed ? styles.buttonPressed : null];
+          }}
+          testID="profile-payment-methods"
+        >
+          <Text style={styles.navigationRowText}>{t('profile.navigation.paymentMethods')}</Text>
+          <Text style={styles.navigationRowChevron}>›</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={(): void => {
+            router.push('/wallet');
+          }}
+          style={({ pressed }) => {
+            return [styles.navigationRow, pressed ? styles.buttonPressed : null];
+          }}
+          testID="profile-wallet"
+        >
+          <Text style={styles.navigationRowText}>{t('profile.navigation.wallet')}</Text>
+          <Text style={styles.navigationRowChevron}>›</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>{t('profile.language.title')}</Text>
         {LANGUAGE_OPTIONS.map((option) => {
           const isSelected = i18n.language === option.code;
@@ -348,6 +378,28 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontSize: 13,
     marginTop: 6,
+  },
+  navigationRow: {
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  navigationRowChevron: {
+    color: '#6B7280',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  navigationRowText: {
+    color: '#111827',
+    fontSize: 14,
+    fontWeight: '600',
   },
   primaryButton: {
     alignItems: 'center',

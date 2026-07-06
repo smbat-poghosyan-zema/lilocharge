@@ -222,6 +222,9 @@ importers:
       expo-camera:
         specifier: ~15.0.16
         version: 15.0.16(expo@51.0.39)
+      expo-image-picker:
+        specifier: ~15.0.7
+        version: 15.0.7(expo@51.0.39)
       expo-location:
         specifier: ~17.0.1
         version: 17.0.1(expo@51.0.39)
@@ -9588,6 +9591,23 @@ packages:
     dependencies:
       expo: 51.0.39(@babel/core@7.29.0)(@babel/preset-env@7.29.0)(react-native@0.74.5)(react@18.2.0)
       fontfaceobserver: 2.3.0
+    dev: false
+
+  /expo-image-loader@4.7.0(expo@51.0.39):
+    resolution: {integrity: sha512-cx+MxxsAMGl9AiWnQUzrkJMJH4eNOGlu7XkLGnAXSJrRoIiciGaKqzeaD326IyCTV+Z1fXvIliSgNW+DscvD8g==}
+    peerDependencies:
+      expo: '*'
+    dependencies:
+      expo: 51.0.39(@babel/core@7.29.0)(@babel/preset-env@7.29.0)(react-native@0.74.5)(react@18.2.0)
+    dev: false
+
+  /expo-image-picker@15.0.7(expo@51.0.39):
+    resolution: {integrity: sha512-u8qiPZNfDb+ap6PJ8pq2iTO7JKX+ikAUQ0K0c7gXGliKLxoXgDdDmXxz9/6QdICTshJBJlBvI0MwY5NWu7A/uw==}
+    peerDependencies:
+      expo: '*'
+    dependencies:
+      expo: 51.0.39(@babel/core@7.29.0)(@babel/preset-env@7.29.0)(react-native@0.74.5)(react@18.2.0)
+      expo-image-loader: 4.7.0(expo@51.0.39)
     dev: false
 
   /expo-keep-awake@13.0.2(expo@51.0.39):

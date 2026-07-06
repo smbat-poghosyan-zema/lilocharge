@@ -245,6 +245,44 @@ describe('stations api', () => {
     );
   });
 
+  it('submits a community connector status report through the typed API client', async () => {
+    const connectorId = '22222222-2222-2222-2222-222222222222';
+    const userId = '88888888-8888-8888-8888-888888888888';
+    const apiClientMock = {
+      post: jest.fn(() => {
+        return Promise.resolve({
+          comment: null,
+          confidenceScore: 1,
+          connectorId,
+          createdAt: '2026-07-06T10:00:00.000Z',
+          id: '99999999-9999-9999-9999-999999999999',
+          status: StationStatus.OFFLINE,
+          updatedAt: '2026-07-06T10:00:00.000Z',
+          userId,
+        });
+      }),
+    };
+
+    const stationsApi = createStationsApi(apiClientMock as never);
+
+    await expect(
+      stationsApi.reportConnectorStatus(userId, {
+        connectorId,
+        status: StationStatus.OFFLINE,
+      }),
+    ).resolves.toMatchObject({
+      connectorId,
+      status: StationStatus.OFFLINE,
+    });
+
+    expect(apiClientMock.post).toHaveBeenCalledWith(`/users/${userId}/connector-status-updates`, {
+      body: {
+        connectorId,
+        status: StationStatus.OFFLINE,
+      },
+    });
+  });
+
   it('returns null when a connector has no community status reports', async () => {
     const apiClientMock = {
       get: jest.fn<Promise<MostConfidentStatusResponse | null>, [string]>(() => {
