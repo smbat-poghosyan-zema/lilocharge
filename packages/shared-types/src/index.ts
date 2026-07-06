@@ -29,7 +29,10 @@ export type {
   ExchangeApplePayTokenRequest,
   ExchangeGooglePayTokenRequest,
   PaymentGatewayCode,
+  PaymentGatewayWebhookPayload,
   PaymentMethodResponse,
+  PaymentWebhookAckResponse,
+  PaymentWebhookStatus,
 } from './payment';
 export type {
   CreateReviewRequest,

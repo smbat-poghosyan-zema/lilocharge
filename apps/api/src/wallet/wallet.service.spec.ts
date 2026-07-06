@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { BadRequestException } from '@nestjs/common';
-import { WalletTransactionType } from '@prisma/client';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { PaymentGateway, WalletTransactionType } from '@prisma/client';
 
 import type { ArcaClient } from '../payments/arca.client';
 import type { IdramClient } from '../payments/idram.client';
@@ -11,6 +11,8 @@ import { WalletService } from './wallet.service';
 const USER_ID = '11111111-1111-1111-1111-111111111111';
 const WALLET_ID = '22222222-2222-2222-2222-222222222222';
 const SESSION_ID = '33333333-3333-3333-3333-333333333333';
+const PAYMENT_METHOD_ID = '55555555-5555-5555-5555-555555555555';
+const UUID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
 interface WalletRecord {
   readonly balance: number;
@@ -68,6 +70,9 @@ describe('WalletService', () => {
 
   beforeEach(() => {
     prismaService = {
+      paymentMethod: {
+        findFirst: jest.fn(),
+      },
       wallet: {
         create: jest.fn(),
         findUnique: jest.fn(),
@@ -130,7 +135,32 @@ describe('WalletService', () => {
   });
 
   describe('topUp', () => {
-    it('should top up wallet via ARCA gateway', async () => {
+    let txWalletTransactionCreate: jest.Mock;
+
+    const mockTopUpTransaction = (input: {
+      readonly newBalance: number;
+      readonly transaction: WalletTransactionRecord;
+      readonly wallet: WalletRecord;
+    }): void => {
+      txWalletTransactionCreate = jest.fn().mockResolvedValue(input.transaction);
+      (prismaService.$transaction as jest.Mock).mockImplementation(
+        (callback: (tx: never) => Promise<unknown>) => {
+          return callback({
+            wallet: {
+              findUnique: jest.fn().mockResolvedValue({ balance: input.wallet.balance }),
+              update: jest
+                .fn()
+                .mockResolvedValue({ ...input.wallet, balance: input.newBalance }),
+            },
+            walletTransaction: {
+              create: txWalletTransactionCreate,
+            },
+          } as never);
+        },
+      );
+    };
+
+    it('should top up wallet via ARCA gateway using the stored payment-method token', async () => {
       const wallet = buildWalletRecord();
       const transaction = buildTransactionRecord({
         type: WalletTransactionType.TOP_UP,
@@ -139,44 +169,63 @@ describe('WalletService', () => {
         balanceAfter: 15000,
       });
 
-      // eslint-disable-next-line @typescript-eslint/unbound-method
+      (prismaService.paymentMethod.findFirst as jest.Mock).mockResolvedValue({
+        gateway: PaymentGateway.ARCA,
+        id: PAYMENT_METHOD_ID,
+        token: 'stored-card-token-1',
+      });
       (prismaService.wallet.findUnique as jest.Mock).mockResolvedValue(wallet);
-      // eslint-disable-next-line @typescript-eslint/unbound-method
       (arcaClient.preAuthorize as jest.Mock).mockResolvedValue({
         gatewayTransactionId: 'arca-tx-123',
       });
-      // eslint-disable-next-line @typescript-eslint/unbound-method
       (arcaClient.capture as jest.Mock).mockResolvedValue(undefined);
-
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      (prismaService.$transaction as jest.Mock).mockImplementation(
-        (callback: (tx: never) => Promise<unknown>) => {
-          return callback({
-            wallet: {
-              findUnique: jest.fn().mockResolvedValue({ balance: 10000 }),
-              update: jest.fn().mockResolvedValue({ ...wallet, balance: 15000 }),
-            },
-            walletTransaction: {
-              create: jest.fn().mockResolvedValue(transaction),
-            },
-          } as never);
-        },
-      );
+      mockTopUpTransaction({ newBalance: 15000, transaction, wallet });
 
       const result = await service.topUp({
         userId: USER_ID,
         amount: 5000,
         gateway: 'ARCA',
+        paymentMethodId: PAYMENT_METHOD_ID,
       });
 
       expect(result.newBalance).toBe(15000);
       expect(result.gatewayTransactionId).toBe('arca-tx-123');
       expect(result.transaction.amount).toBe(5000);
-      expect(arcaClient.preAuthorize).toHaveBeenCalled();
-      expect(arcaClient.capture).toHaveBeenCalled();
+      expect(prismaService.paymentMethod.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: PAYMENT_METHOD_ID,
+          userId: USER_ID,
+        },
+        select: expect.any(Object),
+      });
+      expect(arcaClient.preAuthorize).toHaveBeenCalledWith({
+        amount: 5000,
+        cardToken: 'stored-card-token-1',
+        currency: 'AMD',
+        description: 'Wallet top-up',
+        idempotencyKey: expect.stringMatching(UUID_PATTERN),
+        orderId: expect.stringMatching(/^wallet-topup-[0-9a-f-]{36}$/),
+      });
+      expect(arcaClient.capture).toHaveBeenCalledWith({
+        amount: 5000,
+        gatewayTransactionId: 'arca-tx-123',
+        idempotencyKey: expect.stringMatching(UUID_PATTERN),
+      });
+
+      const preAuthorizeKey = arcaClient.preAuthorize.mock.calls[0]?.[0]?.idempotencyKey;
+      const captureKey = arcaClient.capture.mock.calls[0]?.[0]?.idempotencyKey;
+      expect(preAuthorizeKey).not.toBe(captureKey);
+      expect(txWalletTransactionCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            gatewayTransactionId: 'arca-tx-123',
+            idempotencyKey: captureKey,
+          }),
+        }),
+      );
     });
 
-    it('should top up wallet via IDRAM gateway', async () => {
+    it('should top up wallet via IDRAM gateway using the stored payment-method token', async () => {
       const wallet = buildWalletRecord();
       const transaction = buildTransactionRecord({
         type: WalletTransactionType.TOP_UP,
@@ -185,37 +234,34 @@ describe('WalletService', () => {
         balanceAfter: 13000,
       });
 
-      // eslint-disable-next-line @typescript-eslint/unbound-method
+      (prismaService.paymentMethod.findFirst as jest.Mock).mockResolvedValue({
+        gateway: PaymentGateway.IDRAM,
+        id: PAYMENT_METHOD_ID,
+        token: 'stored-idram-token-1',
+      });
       (prismaService.wallet.findUnique as jest.Mock).mockResolvedValue(wallet);
-      // eslint-disable-next-line @typescript-eslint/unbound-method
       (idramClient.debitWallet as jest.Mock).mockResolvedValue({
         gatewayTransactionId: 'idram-tx-456',
       });
-
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      (prismaService.$transaction as jest.Mock).mockImplementation(
-        (callback: (tx: never) => Promise<unknown>) => {
-          return callback({
-            wallet: {
-              findUnique: jest.fn().mockResolvedValue({ balance: 10000 }),
-              update: jest.fn().mockResolvedValue({ ...wallet, balance: 13000 }),
-            },
-            walletTransaction: {
-              create: jest.fn().mockResolvedValue(transaction),
-            },
-          } as never);
-        },
-      );
+      mockTopUpTransaction({ newBalance: 13000, transaction, wallet });
 
       const result = await service.topUp({
         userId: USER_ID,
         amount: 3000,
         gateway: 'IDRAM',
+        paymentMethodId: PAYMENT_METHOD_ID,
       });
 
       expect(result.newBalance).toBe(13000);
       expect(result.gatewayTransactionId).toBe('idram-tx-456');
-      expect(idramClient.debitWallet).toHaveBeenCalled();
+      expect(idramClient.debitWallet).toHaveBeenCalledWith({
+        amount: 3000,
+        currency: 'AMD',
+        description: 'Wallet top-up',
+        idempotencyKey: expect.stringMatching(UUID_PATTERN),
+        orderId: expect.stringMatching(/^wallet-topup-[0-9a-f-]{36}$/),
+        walletToken: 'stored-idram-token-1',
+      });
     });
 
     it('should throw BadRequestException for non-positive amount', async () => {
@@ -224,6 +270,7 @@ describe('WalletService', () => {
           userId: USER_ID,
           amount: 0,
           gateway: 'ARCA',
+          paymentMethodId: PAYMENT_METHOD_ID,
         }),
       ).rejects.toThrow(BadRequestException);
 
@@ -232,8 +279,57 @@ describe('WalletService', () => {
           userId: USER_ID,
           amount: -100,
           gateway: 'ARCA',
+          paymentMethodId: PAYMENT_METHOD_ID,
         }),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should require a paymentMethodId instead of forwarding empty gateway tokens', async () => {
+      await expect(
+        service.topUp({
+          userId: USER_ID,
+          amount: 5000,
+          gateway: 'ARCA',
+        }),
+      ).rejects.toThrow('paymentMethodId is required for wallet top-up');
+
+      expect(arcaClient.preAuthorize).not.toHaveBeenCalled();
+      expect(idramClient.debitWallet).not.toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException when payment method is missing or owned by another user', async () => {
+      (prismaService.paymentMethod.findFirst as jest.Mock).mockResolvedValue(null);
+
+      await expect(
+        service.topUp({
+          userId: USER_ID,
+          amount: 5000,
+          gateway: 'ARCA',
+          paymentMethodId: PAYMENT_METHOD_ID,
+        }),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(arcaClient.preAuthorize).not.toHaveBeenCalled();
+    });
+
+    it('should reject payment methods that cannot service the requested gateway', async () => {
+      (prismaService.paymentMethod.findFirst as jest.Mock).mockResolvedValue({
+        gateway: PaymentGateway.IDRAM,
+        id: PAYMENT_METHOD_ID,
+        token: 'stored-idram-token-1',
+      });
+
+      await expect(
+        service.topUp({
+          userId: USER_ID,
+          amount: 5000,
+          gateway: 'ARCA',
+          paymentMethodId: PAYMENT_METHOD_ID,
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(arcaClient.preAuthorize).not.toHaveBeenCalled();
+      expect(idramClient.debitWallet).not.toHaveBeenCalled();
     });
   });
 

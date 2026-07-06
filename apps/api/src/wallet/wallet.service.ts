@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type {
   WalletResponse,
   WalletTopUpResponse,
@@ -41,6 +43,26 @@ type WalletResponseRecord = Prisma.WalletGetPayload<{
 type WalletTransactionResponseRecord = Prisma.WalletTransactionGetPayload<{
   select: typeof WALLET_TRANSACTION_RESPONSE_SELECT;
 }>;
+
+const TOP_UP_PAYMENT_METHOD_SELECT = {
+  gateway: true,
+  id: true,
+  token: true,
+} satisfies Prisma.PaymentMethodSelect;
+
+type TopUpPaymentMethodRecord = Prisma.PaymentMethodGetPayload<{
+  select: typeof TOP_UP_PAYMENT_METHOD_SELECT;
+}>;
+
+/** Payment-method gateways whose stored tokens are chargeable through the ArCa card API. */
+const ARCA_ROUTED_GATEWAYS: readonly PaymentGateway[] = [
+  PaymentGateway.ARCA,
+  PaymentGateway.APPLE_PAY,
+  PaymentGateway.GOOGLE_PAY,
+];
+
+/** Case-insensitive UUID shape guard applied before querying UUID-typed columns. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Input for topping up wallet via ArCa or Idram. */
 export interface TopUpWalletInput {
@@ -103,15 +125,22 @@ export class WalletService {
 
   /**
    * Tops up wallet balance via ArCa or Idram payment gateway.
-   * Creates a payment transaction, captures funds, and records wallet transaction.
+   * Resolves the caller's stored payment method (never forwarding raw ids as gateway
+   * tokens), charges the gateway with per-operation idempotency keys, and records the
+   * wallet transaction atomically with the balance update.
    */
   public async topUp(input: TopUpWalletInput): Promise<WalletTopUpResponse> {
     if (input.amount <= 0) {
       throw new BadRequestException('Top-up amount must be greater than zero');
     }
 
+    const paymentMethod = await this.resolveTopUpPaymentMethod(input);
     const wallet = await this.getOrCreateWallet(input.userId);
     const gateway = input.gateway === 'ARCA' ? PaymentGateway.ARCA : PaymentGateway.IDRAM;
+    const orderId = `wallet-topup-${randomUUID()}`;
+    // The key of the money-moving operation (ArCa capture / Idram debit) is persisted on
+    // the wallet transaction so operational retries or reconciliation can reuse it.
+    const idempotencyKey = randomUUID();
 
     let gatewayTransactionId: string | null = null;
 
@@ -120,10 +149,11 @@ export class WalletService {
       // For ArCa, use preAuthorize followed by immediate capture
       const preAuthResult = await this.arcaClient.preAuthorize({
         amount: input.amount,
-        cardToken: input.paymentMethodId ?? '',
+        cardToken: paymentMethod.token,
         currency: 'AMD',
         description: 'Wallet top-up',
-        orderId: `wallet-topup-${wallet.id}-${Date.now()}`,
+        idempotencyKey: randomUUID(),
+        orderId,
       });
       gatewayTransactionId = preAuthResult.gatewayTransactionId;
 
@@ -131,6 +161,7 @@ export class WalletService {
       await this.arcaClient.capture({
         amount: input.amount,
         gatewayTransactionId,
+        idempotencyKey,
       });
     } else {
       // For Idram, use debitWallet for direct charge
@@ -138,8 +169,9 @@ export class WalletService {
         amount: input.amount,
         currency: 'AMD',
         description: 'Wallet top-up',
-        orderId: `wallet-topup-${wallet.id}-${Date.now()}`,
-        walletToken: input.paymentMethodId ?? '',
+        idempotencyKey,
+        orderId,
+        walletToken: paymentMethod.token,
       });
       gatewayTransactionId = debitResult.gatewayTransactionId;
     }
@@ -172,6 +204,7 @@ export class WalletService {
           balanceAfter: newBalance,
           gateway,
           gatewayTransactionId,
+          idempotencyKey,
           description: `Wallet top-up via ${input.gateway}`,
         },
         select: WALLET_TRANSACTION_RESPONSE_SELECT,
@@ -185,6 +218,50 @@ export class WalletService {
       newBalance: result.wallet.balance,
       transaction: mapWalletTransactionRecordToResponse(result.transaction),
     };
+  }
+
+  /**
+   * Resolves the stored payment method backing one wallet top-up.
+   * Rejects missing ids, ids not owned by the caller (404), and methods whose gateway
+   * cannot service the requested top-up gateway, so raw ids are never sent as tokens.
+   */
+  private async resolveTopUpPaymentMethod(
+    input: TopUpWalletInput,
+  ): Promise<TopUpPaymentMethodRecord> {
+    const paymentMethodId = input.paymentMethodId?.trim();
+
+    if (paymentMethodId === undefined || paymentMethodId.length === 0) {
+      throw new BadRequestException('paymentMethodId is required for wallet top-up');
+    }
+
+    if (!UUID_PATTERN.test(paymentMethodId)) {
+      throw new BadRequestException('paymentMethodId must be a valid UUID');
+    }
+
+    const paymentMethod = await this.prismaService.paymentMethod.findFirst({
+      where: {
+        id: paymentMethodId,
+        userId: input.userId,
+      },
+      select: TOP_UP_PAYMENT_METHOD_SELECT,
+    });
+
+    if (paymentMethod === null) {
+      throw new NotFoundException('Payment method not found for this user');
+    }
+
+    const isCompatible =
+      input.gateway === 'ARCA'
+        ? ARCA_ROUTED_GATEWAYS.includes(paymentMethod.gateway)
+        : paymentMethod.gateway === PaymentGateway.IDRAM;
+
+    if (!isCompatible) {
+      throw new BadRequestException(
+        `Payment method gateway ${paymentMethod.gateway} cannot be used for ${input.gateway} top-up`,
+      );
+    }
+
+    return paymentMethod;
   }
 
   /**

@@ -77,6 +77,65 @@ describe('ArcaClient', () => {
     );
   });
 
+  it('forwards the idempotency key header when one is supplied', async () => {
+    const fetchMock = jest
+      .fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>()
+      .mockResolvedValue(
+        buildResponse({
+          payload: {
+            status: 'CAPTURED',
+            transactionId: 'arca-tx-2',
+          },
+        }),
+      );
+    const client = new ArcaClient({
+      apiKey: 'arca-api-key',
+      baseUrl: 'https://arca.test/v1',
+      fetchFn: fetchMock,
+      merchantId: 'arca-merchant-id',
+    });
+
+    await client.capture({
+      amount: 5000,
+      gatewayTransactionId: 'arca-tx-1',
+      idempotencyKey: 'idempotency-key-1',
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0] ?? [undefined, undefined];
+    expect((requestInit as RequestInit).headers).toEqual(
+      expect.objectContaining({
+        'Idempotency-Key': 'idempotency-key-1',
+      }),
+    );
+  });
+
+  it('omits the idempotency key header when none is supplied', async () => {
+    const fetchMock = jest
+      .fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>()
+      .mockResolvedValue(
+        buildResponse({
+          payload: {
+            status: 'CAPTURED',
+            transactionId: 'arca-tx-2',
+          },
+        }),
+      );
+    const client = new ArcaClient({
+      apiKey: 'arca-api-key',
+      baseUrl: 'https://arca.test/v1',
+      fetchFn: fetchMock,
+      merchantId: 'arca-merchant-id',
+    });
+
+    await client.capture({
+      amount: 5000,
+      gatewayTransactionId: 'arca-tx-1',
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0] ?? [undefined, undefined];
+    expect((requestInit as RequestInit).headers).not.toHaveProperty('Idempotency-Key');
+  });
+
   it('throws internal server error when required credentials are missing', async () => {
     const fetchMock = jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>();
     const client = new ArcaClient({

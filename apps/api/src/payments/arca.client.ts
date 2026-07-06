@@ -19,6 +19,7 @@ export interface ArcaPreAuthorizeRequest {
   readonly cardToken: string;
   readonly currency: 'AMD';
   readonly description?: string;
+  readonly idempotencyKey?: string;
   readonly orderId: string;
 }
 
@@ -26,12 +27,14 @@ export interface ArcaPreAuthorizeRequest {
 export interface ArcaCaptureRequest {
   readonly amount: number;
   readonly gatewayTransactionId: string;
+  readonly idempotencyKey?: string;
 }
 
 /** Supported request payload for ArCa refund operations. */
 export interface ArcaRefundRequest {
   readonly amount: number;
   readonly gatewayTransactionId: string;
+  readonly idempotencyKey?: string;
 }
 
 /** Standard response payload returned by ArCa client operations. */
@@ -55,6 +58,7 @@ interface ExecuteOperationInput {
   readonly allowedStatuses: readonly string[];
   readonly declinedErrorMessage: string;
   readonly endpointPath: string;
+  readonly idempotencyKey?: string;
   readonly payload: Record<string, unknown>;
 }
 
@@ -83,6 +87,7 @@ export class ArcaClient {
       allowedStatuses: ['APPROVED', 'AUTHORIZED'],
       declinedErrorMessage: 'ArCa pre-authorization was declined',
       endpointPath: '/payments/preauthorize',
+      idempotencyKey: request.idempotencyKey,
       payload: {
         amount: request.amount,
         cardToken: request.cardToken,
@@ -99,6 +104,7 @@ export class ArcaClient {
       allowedStatuses: ['APPROVED', 'CAPTURED'],
       declinedErrorMessage: 'ArCa capture was declined',
       endpointPath: '/payments/capture',
+      idempotencyKey: request.idempotencyKey,
       payload: {
         amount: request.amount,
         transactionId: request.gatewayTransactionId,
@@ -112,6 +118,7 @@ export class ArcaClient {
       allowedStatuses: ['APPROVED', 'REFUNDED'],
       declinedErrorMessage: 'ArCa refund was declined',
       endpointPath: '/payments/refund',
+      idempotencyKey: request.idempotencyKey,
       payload: {
         amount: request.amount,
         transactionId: request.gatewayTransactionId,
@@ -123,7 +130,7 @@ export class ArcaClient {
   private async executeOperation(
     input: ExecuteOperationInput,
   ): Promise<ArcaGatewayOperationResult> {
-    const payload = await this.postJson(input.endpointPath, input.payload);
+    const payload = await this.postJson(input.endpointPath, input.payload, input.idempotencyKey);
     const envelope = parseArcaOperationEnvelope(payload);
 
     if (!input.allowedStatuses.includes(envelope.status)) {
@@ -135,23 +142,37 @@ export class ArcaClient {
     };
   }
 
-  /** Sends one authenticated JSON POST request to ArCa and returns parsed response payload. */
-  private async postJson(endpointPath: string, payload: Record<string, unknown>): Promise<unknown> {
+  /**
+   * Sends one authenticated JSON POST request to ArCa and returns parsed response payload.
+   * When an idempotency key is supplied it is forwarded via the `Idempotency-Key` header so
+   * retried operations are deduplicated by the gateway.
+   */
+  private async postJson(
+    endpointPath: string,
+    payload: Record<string, unknown>,
+    idempotencyKey?: string,
+  ): Promise<unknown> {
     const { apiKey, merchantId } = resolveGatewayCredentials({
       apiKey: this.apiKey,
       merchantId: this.merchantId,
     });
 
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'X-Api-Key': apiKey,
+      'X-Merchant-Id': merchantId,
+    };
+
+    if (idempotencyKey !== undefined) {
+      headers['Idempotency-Key'] = idempotencyKey;
+    }
+
     let response: Response;
     try {
       response = await this.fetchFn(buildArcaRequestUrl(this.baseUrl, endpointPath), {
         body: JSON.stringify(payload),
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          'X-Api-Key': apiKey,
-          'X-Merchant-Id': merchantId,
-        },
+        headers,
         method: 'POST',
       });
     } catch (error: unknown) {

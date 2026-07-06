@@ -1,10 +1,12 @@
+import { randomUUID } from 'node:crypto';
+
 import type {
   ExchangeApplePayTokenRequest,
   ExchangeGooglePayTokenRequest,
   PaymentGatewayCode,
   PaymentMethodResponse,
 } from '@lilocharge/shared-types';
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PaymentGateway, PaymentStatus } from '@prisma/client';
 
@@ -28,10 +30,13 @@ const PAYMENT_LOOKUP_SELECT = {
   amount: true,
   authorizedAmount: true,
   capturedAmount: true,
+  captureIdempotencyKey: true,
   gateway: true,
   gatewayTransactionId: true,
   id: true,
   paymentMethodId: true,
+  preauthIdempotencyKey: true,
+  refundIdempotencyKey: true,
   sessionId: true,
   status: true,
   userId: true,
@@ -233,8 +238,10 @@ export class PaymentsService {
       );
     }
 
+    const preauthIdempotencyKey = existingPayment?.preauthIdempotencyKey ?? randomUUID();
     const gatewayTransactionId = await this.preAuthorizeForGateway({
       amount,
+      idempotencyKey: preauthIdempotencyKey,
       paymentMethod,
       sessionId: input.sessionId,
     });
@@ -248,6 +255,7 @@ export class PaymentsService {
           gateway: paymentMethod.gateway,
           gatewayTransactionId,
           paymentMethodId: paymentMethod.id,
+          preauthIdempotencyKey,
           sessionId: input.sessionId,
           status: PaymentStatus.AUTHORIZED,
           userId: input.userId,
@@ -270,6 +278,7 @@ export class PaymentsService {
         gateway: paymentMethod.gateway,
         gatewayTransactionId,
         paymentMethodId: paymentMethod.id,
+        preauthIdempotencyKey,
         status: PaymentStatus.AUTHORIZED,
       },
       select: {
@@ -296,10 +305,13 @@ export class PaymentsService {
       return;
     }
 
+    const captureIdempotencyKey = await this.resolveCaptureIdempotencyKey(payment);
+
     let gatewayTransactionId: string | undefined;
     try {
       gatewayTransactionId = await this.captureForGateway({
         amount: input.amount,
+        idempotencyKey: captureIdempotencyKey,
         payment,
       });
     } catch (error: unknown) {
@@ -346,7 +358,8 @@ export class PaymentsService {
     }
 
     const refundAmount = resolveRefundAmount(payment);
-    await this.refundForGateway(payment, refundAmount);
+    const refundIdempotencyKey = await this.resolveRefundIdempotencyKey(payment);
+    await this.refundForGateway(payment, refundAmount, refundIdempotencyKey);
 
     await this.prismaService.payment.update({
       where: {
@@ -434,6 +447,7 @@ export class PaymentsService {
   /** Dispatches one pre-authorization flow to ArCa or Idram and returns optional transaction metadata. */
   private async preAuthorizeForGateway(input: {
     readonly amount: number;
+    readonly idempotencyKey: string;
     readonly paymentMethod: PaymentMethodLookupRecord;
     readonly sessionId: string;
   }): Promise<string | null> {
@@ -443,6 +457,7 @@ export class PaymentsService {
         cardToken: input.paymentMethod.token,
         currency: 'AMD',
         description: 'LiloCharge session pre-authorization',
+        idempotencyKey: input.idempotencyKey,
         orderId: input.sessionId,
       });
 
@@ -470,8 +485,15 @@ export class PaymentsService {
   /** Dispatches one capture flow to ArCa or Idram and returns updated gateway transaction metadata. */
   private async captureForGateway(input: {
     readonly amount: number;
+    readonly idempotencyKey: string;
     readonly payment: PaymentLookupRecord;
   }): Promise<string | undefined> {
+    if (input.payment.gateway === PaymentGateway.WALLET) {
+      throw new InternalServerErrorException(
+        'WALLET payments are settled by WalletService balance deduction; gateway capture must never be invoked for wallet-funded sessions',
+      );
+    }
+
     if (isArcaRoutedGateway(input.payment.gateway)) {
       if (input.payment.gatewayTransactionId === null) {
         throw new BadRequestException('ArCa gateway transaction id is missing for capture');
@@ -480,6 +502,7 @@ export class PaymentsService {
       await this.arcaClient.capture({
         amount: input.amount,
         gatewayTransactionId: input.payment.gatewayTransactionId,
+        idempotencyKey: input.idempotencyKey,
       });
 
       return undefined;
@@ -496,6 +519,7 @@ export class PaymentsService {
         amount: input.amount,
         currency: 'AMD',
         description: 'LiloCharge session capture',
+        idempotencyKey: input.idempotencyKey,
         orderId: input.payment.sessionId,
         walletToken: paymentMethod.token,
       });
@@ -512,7 +536,14 @@ export class PaymentsService {
   private async refundForGateway(
     payment: PaymentLookupRecord,
     refundAmount: number,
+    idempotencyKey: string,
   ): Promise<void> {
+    if (payment.gateway === PaymentGateway.WALLET) {
+      throw new InternalServerErrorException(
+        'WALLET payments are refunded by WalletService balance credit; gateway refund must never be invoked for wallet-funded sessions',
+      );
+    }
+
     if (isArcaRoutedGateway(payment.gateway)) {
       if (payment.gatewayTransactionId === null) {
         throw new BadRequestException('ArCa gateway transaction id is missing for refund');
@@ -522,6 +553,7 @@ export class PaymentsService {
         await this.arcaClient.refund({
           amount: refundAmount,
           gatewayTransactionId: payment.gatewayTransactionId,
+          idempotencyKey,
         });
       }
 
@@ -541,6 +573,7 @@ export class PaymentsService {
         await this.idramClient.refund({
           amount: refundAmount,
           gatewayTransactionId: payment.gatewayTransactionId,
+          idempotencyKey,
         });
       }
 
@@ -550,6 +583,56 @@ export class PaymentsService {
     throw new BadRequestException(
       `${resolveGatewayLabel(payment.gateway)} payment refund is not supported`,
     );
+  }
+
+  /**
+   * Resolves the capture idempotency key for one payment, generating and persisting a fresh
+   * UUID before the first gateway attempt so any retry after a failure reuses the same key.
+   */
+  private async resolveCaptureIdempotencyKey(payment: PaymentLookupRecord): Promise<string> {
+    if (payment.captureIdempotencyKey !== null) {
+      return payment.captureIdempotencyKey;
+    }
+
+    const captureIdempotencyKey = randomUUID();
+    await this.prismaService.payment.update({
+      where: {
+        id: payment.id,
+      },
+      data: {
+        captureIdempotencyKey,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    return captureIdempotencyKey;
+  }
+
+  /**
+   * Resolves the refund idempotency key for one payment, generating and persisting a fresh
+   * UUID before the first gateway attempt so any retry after a failure reuses the same key.
+   */
+  private async resolveRefundIdempotencyKey(payment: PaymentLookupRecord): Promise<string> {
+    if (payment.refundIdempotencyKey !== null) {
+      return payment.refundIdempotencyKey;
+    }
+
+    const refundIdempotencyKey = randomUUID();
+    await this.prismaService.payment.update({
+      where: {
+        id: payment.id,
+      },
+      data: {
+        refundIdempotencyKey,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    return refundIdempotencyKey;
   }
 
   /** Finds one session-scoped payment record by unique session id. */

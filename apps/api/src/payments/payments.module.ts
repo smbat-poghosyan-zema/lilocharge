@@ -6,14 +6,25 @@ import { ApplePayClient } from './apple-pay.client';
 import { ArcaClient } from './arca.client';
 import { GooglePayClient } from './google-pay.client';
 import { IdramClient } from './idram.client';
+import { PaymentWebhooksController } from './payment-webhooks.controller';
+import { PaymentWebhooksService } from './payment-webhooks.service';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
+import { WebhookSignatureVerifier } from './webhook-signature.verifier';
 
 /** Feature module providing ArCa/Idram/Apple Pay gateway integrations for setup and session billing flows. */
 @Module({
   imports: [NotificationsModule, PrismaModule],
-  controllers: [PaymentsController],
-  providers: [ApplePayClient, ArcaClient, GooglePayClient, IdramClient, PaymentsService],
+  controllers: [PaymentsController, PaymentWebhooksController],
+  providers: [
+    ApplePayClient,
+    ArcaClient,
+    GooglePayClient,
+    IdramClient,
+    PaymentWebhooksService,
+    PaymentsService,
+    WebhookSignatureVerifier,
+  ],
   exports: [PaymentsService, ArcaClient, IdramClient, ApplePayClient, GooglePayClient],
 })
 export class PaymentsModule {}

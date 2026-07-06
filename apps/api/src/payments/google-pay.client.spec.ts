@@ -87,18 +87,28 @@ describe('GooglePayClient', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('falls back to deterministic local tokenization when exchange URL is not configured', async () => {
+  it('throws service unavailable instead of fabricating tokens when exchange URL is not configured', async () => {
+    const fetchMock = jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>();
     const client = new GooglePayClient({
+      fetchFn: fetchMock,
       merchantIdentifier: 'merchant.com.lilocharge',
     });
 
-    const result = await client.exchangeToken({
-      paymentToken: 'google-pay-payment-token',
-      transactionIdentifier: 'google-pay-transaction-1',
-    });
-
-    expect(result.network).toBeNull();
-    expect(result.paymentMethodToken).toMatch(/^googlepay_[a-f0-9]{64}$/);
+    await expect(
+      client.exchangeToken({
+        paymentToken: 'google-pay-payment-token',
+        transactionIdentifier: 'google-pay-transaction-1',
+      }),
+    ).rejects.toThrow(
+      'Google Pay token exchange is not configured (set GOOGLE_PAY_TOKEN_EXCHANGE_URL)',
+    );
+    await expect(
+      client.exchangeToken({
+        paymentToken: 'google-pay-payment-token',
+        transactionIdentifier: 'google-pay-transaction-1',
+      }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('throws bad gateway when remote token exchange returns non-success status', async () => {

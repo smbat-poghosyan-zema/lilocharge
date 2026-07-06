@@ -427,36 +427,20 @@ describe('Payment Gateways Sandbox Testing Suite', () => {
       expect(result.network).toBe('mastercard');
     });
 
-    it('falls back to local tokenization when sandbox URL not configured', async () => {
+    it('rejects token exchange when sandbox URL not configured', async () => {
+      const fetchMock = jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>();
       const client = new ApplePayClient({
+        fetchFn: fetchMock,
         merchantIdentifier: 'merchant.com.lilocharge.sandbox',
       });
 
-      const result = await client.exchangeToken({
-        paymentToken: 'sandbox-apple-pay-token',
-        transactionIdentifier: 'sandbox-apple-txn-003',
-      });
-
-      expect(result.network).toBeNull();
-      expect(result.paymentMethodToken).toMatch(/^applepay_[a-f0-9]{64}$/);
-    });
-
-    it('produces consistent local tokens for same input in sandbox mode', async () => {
-      const client = new ApplePayClient({
-        merchantIdentifier: 'merchant.com.lilocharge.sandbox',
-      });
-
-      const result1 = await client.exchangeToken({
-        paymentToken: 'test-token',
-        transactionIdentifier: 'test-txn',
-      });
-
-      const result2 = await client.exchangeToken({
-        paymentToken: 'test-token',
-        transactionIdentifier: 'test-txn',
-      });
-
-      expect(result1.paymentMethodToken).toBe(result2.paymentMethodToken);
+      await expect(
+        client.exchangeToken({
+          paymentToken: 'sandbox-apple-pay-token',
+          transactionIdentifier: 'sandbox-apple-txn-003',
+        }),
+      ).rejects.toThrow(ServiceUnavailableException);
+      expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it('handles invalid token format in sandbox mode', async () => {
@@ -567,36 +551,20 @@ describe('Payment Gateways Sandbox Testing Suite', () => {
       expect(result.network).toBe('mastercard');
     });
 
-    it('falls back to local tokenization when test URL not configured', async () => {
+    it('rejects token exchange when test URL not configured', async () => {
+      const fetchMock = jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>();
       const client = new GooglePayClient({
+        fetchFn: fetchMock,
         merchantIdentifier: 'lilocharge-test-merchant-id',
       });
 
-      const result = await client.exchangeToken({
-        paymentToken: 'test-google-pay-token',
-        transactionIdentifier: 'test-google-txn-003',
-      });
-
-      expect(result.network).toBeNull();
-      expect(result.paymentMethodToken).toMatch(/^googlepay_[a-f0-9]{64}$/);
-    });
-
-    it('produces consistent local tokens for same input in test mode', async () => {
-      const client = new GooglePayClient({
-        merchantIdentifier: 'lilocharge-test-merchant-id',
-      });
-
-      const result1 = await client.exchangeToken({
-        paymentToken: 'test-token',
-        transactionIdentifier: 'test-txn',
-      });
-
-      const result2 = await client.exchangeToken({
-        paymentToken: 'test-token',
-        transactionIdentifier: 'test-txn',
-      });
-
-      expect(result1.paymentMethodToken).toBe(result2.paymentMethodToken);
+      await expect(
+        client.exchangeToken({
+          paymentToken: 'test-google-pay-token',
+          transactionIdentifier: 'test-google-txn-003',
+        }),
+      ).rejects.toThrow(ServiceUnavailableException);
+      expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it('handles invalid token format in test mode', async () => {

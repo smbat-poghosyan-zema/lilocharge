@@ -69,6 +69,67 @@ describe('IdramClient', () => {
     );
   });
 
+  it('forwards the idempotency key header on wallet debit when one is supplied', async () => {
+    const fetchMock = jest
+      .fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>()
+      .mockResolvedValue(
+        buildResponse({
+          payload: {
+            status: 'APPROVED',
+            transactionId: 'idram-tx-1',
+          },
+        }),
+      );
+    const client = new IdramClient({
+      apiKey: 'idram-api-key',
+      baseUrl: 'https://idram.test/v1',
+      fetchFn: fetchMock,
+    });
+
+    await client.debitWallet({
+      amount: 5000,
+      currency: 'AMD',
+      idempotencyKey: 'idempotency-key-1',
+      orderId: 'order-1',
+      walletToken: 'wallet-token-1',
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0] ?? [undefined, undefined];
+    expect((requestInit as RequestInit).headers).toEqual(
+      expect.objectContaining({
+        'Idempotency-Key': 'idempotency-key-1',
+      }),
+    );
+  });
+
+  it('omits the idempotency key header when none is supplied', async () => {
+    const fetchMock = jest
+      .fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>()
+      .mockResolvedValue(
+        buildResponse({
+          payload: {
+            status: 'APPROVED',
+            transactionId: 'idram-tx-1',
+          },
+        }),
+      );
+    const client = new IdramClient({
+      apiKey: 'idram-api-key',
+      baseUrl: 'https://idram.test/v1',
+      fetchFn: fetchMock,
+    });
+
+    await client.debitWallet({
+      amount: 5000,
+      currency: 'AMD',
+      orderId: 'order-1',
+      walletToken: 'wallet-token-1',
+    });
+
+    const [, requestInit] = fetchMock.mock.calls[0] ?? [undefined, undefined];
+    expect((requestInit as RequestInit).headers).not.toHaveProperty('Idempotency-Key');
+  });
+
   it('throws internal server error when required credentials are missing', async () => {
     const fetchMock = jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>();
     const client = new IdramClient({

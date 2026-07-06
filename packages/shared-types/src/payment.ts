@@ -29,3 +29,23 @@ export interface ExchangeGooglePayTokenRequest {
   readonly paymentToken: string;
   readonly transactionIdentifier: string;
 }
+
+/** Payment lifecycle status reported by gateway webhook/callback notifications. */
+export type PaymentWebhookStatus = 'AUTHORIZED' | 'CAPTURED' | 'FAILED' | 'REFUNDED';
+
+/**
+ * Callback body posted by ArCa/Idram gateway webhooks to the payments API.
+ * `orderId` carries the merchant order id sent on the original gateway request
+ * (the charging session id for session payments), and `amount` is in AMD minor units.
+ */
+export interface PaymentGatewayWebhookPayload {
+  readonly amount: number;
+  readonly gatewayTransactionId: string;
+  readonly orderId: string;
+  readonly status: PaymentWebhookStatus;
+}
+
+/** Acknowledgement body returned to gateways after a webhook is accepted. */
+export interface PaymentWebhookAckResponse {
+  readonly received: true;
+}

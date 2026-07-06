@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 import {
   BadGatewayException,
   Inject,
@@ -61,16 +59,17 @@ export class ApplePayClient {
 
   /**
    * Exchanges one Apple Pay payment token for a PSP payment-method token.
-   * Falls back to deterministic local tokenization when no exchange URL is configured.
+   * Requires APPLE_PAY_TOKEN_EXCHANGE_URL to be configured; there is deliberately
+   * no local fallback because fabricated tokens would later be sent to ArCa as
+   * real card tokens and silently fail (or worse, charge the wrong instrument).
    */
   public async exchangeToken(
     request: ApplePayTokenExchangeRequest,
   ): Promise<ApplePayTokenExchangeResult> {
     if (this.tokenExchangeUrl === undefined) {
-      return {
-        network: null,
-        paymentMethodToken: buildLocalApplePayToken(request),
-      };
+      throw new ServiceUnavailableException(
+        'Apple Pay token exchange is not configured (set APPLE_PAY_TOKEN_EXCHANGE_URL)',
+      );
     }
 
     const merchantIdentifier = resolveMerchantIdentifier({
@@ -117,15 +116,6 @@ export class ApplePayClient {
       throw new BadGatewayException('Apple Pay token exchange returned invalid JSON payload');
     }
   }
-}
-
-/** Builds one local deterministic token used for development environments without exchange endpoint. */
-function buildLocalApplePayToken(request: ApplePayTokenExchangeRequest): string {
-  const digest = createHash('sha256')
-    .update(`${request.paymentToken}:${request.transactionIdentifier}`)
-    .digest('hex');
-
-  return `applepay_${digest}`;
 }
 
 /** Resolves mandatory Apple Pay merchant identifier and fails loudly when missing. */

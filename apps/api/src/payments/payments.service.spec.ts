@@ -19,10 +19,13 @@ interface PaymentRecord {
   readonly amount: number;
   readonly authorizedAmount: number;
   readonly capturedAmount: number;
+  readonly captureIdempotencyKey: string | null;
   readonly gateway: PaymentGateway;
   readonly gatewayTransactionId: string | null;
   readonly id: string;
   readonly paymentMethodId: string;
+  readonly preauthIdempotencyKey: string | null;
+  readonly refundIdempotencyKey: string | null;
   readonly sessionId: string;
   readonly status: PaymentStatus;
   readonly userId: string;
@@ -99,16 +102,21 @@ interface NotificationsServiceMock extends Pick<
 const SESSION_ID = '22222222-2222-2222-2222-222222222222';
 const USER_ID = '11111111-1111-1111-1111-111111111111';
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Builds one payment record fixture for deterministic payment-service unit tests. */
 function buildPaymentRecord(overrides?: Partial<PaymentRecord>): PaymentRecord {
   return {
     amount: 5000,
     authorizedAmount: 5000,
     capturedAmount: 0,
+    captureIdempotencyKey: null,
     gateway: PaymentGateway.ARCA,
     gatewayTransactionId: 'arca-tx-1',
     id: 'payment-1',
     paymentMethodId: 'payment-method-1',
+    preauthIdempotencyKey: null,
+    refundIdempotencyKey: null,
     sessionId: SESSION_ID,
     status: PaymentStatus.AUTHORIZED,
     userId: USER_ID,
@@ -214,6 +222,7 @@ describe('PaymentsService', () => {
       cardToken: 'card-token-1',
       currency: 'AMD',
       description: 'LiloCharge session pre-authorization',
+      idempotencyKey: expect.stringMatching(UUID_PATTERN) as unknown as string,
       orderId: SESSION_ID,
     });
     expect(prismaMock.payment.create).toHaveBeenCalledWith({
@@ -224,6 +233,7 @@ describe('PaymentsService', () => {
         gateway: PaymentGateway.ARCA,
         gatewayTransactionId: 'arca-tx-1',
         paymentMethodId: 'payment-method-1',
+        preauthIdempotencyKey: expect.stringMatching(UUID_PATTERN) as unknown as string,
         sessionId: SESSION_ID,
         status: PaymentStatus.AUTHORIZED,
         userId: USER_ID,
@@ -232,6 +242,11 @@ describe('PaymentsService', () => {
         id: true,
       },
     });
+    const preAuthorizeCallKey = arcaClientMock.preAuthorize.mock.calls[0]?.[0]?.idempotencyKey;
+    const createCallData = prismaMock.payment.create.mock.calls[0]?.[0] as {
+      readonly data: { readonly preauthIdempotencyKey: string };
+    };
+    expect(createCallData.data.preauthIdempotencyKey).toBe(preAuthorizeCallKey);
     expect(idramClientMock.getBalance).not.toHaveBeenCalled();
     expect(applePayClientMock.exchangeToken).not.toHaveBeenCalled();
     expect(googlePayClientMock.exchangeToken).not.toHaveBeenCalled();
@@ -267,6 +282,7 @@ describe('PaymentsService', () => {
         gateway: PaymentGateway.IDRAM,
         gatewayTransactionId: null,
         paymentMethodId: 'payment-method-2',
+        preauthIdempotencyKey: expect.stringMatching(UUID_PATTERN) as unknown as string,
         sessionId: SESSION_ID,
         status: PaymentStatus.AUTHORIZED,
         userId: USER_ID,
@@ -350,6 +366,18 @@ describe('PaymentsService', () => {
     expect(arcaClientMock.capture).toHaveBeenCalledWith({
       amount: 3900,
       gatewayTransactionId: 'arca-tx-1',
+      idempotencyKey: expect.stringMatching(UUID_PATTERN) as unknown as string,
+    });
+    expect(prismaMock.payment.update).toHaveBeenCalledWith({
+      where: {
+        id: 'payment-1',
+      },
+      data: {
+        captureIdempotencyKey: expect.stringMatching(UUID_PATTERN) as unknown as string,
+      },
+      select: {
+        id: true,
+      },
     });
     expect(prismaMock.payment.update).toHaveBeenCalledWith({
       where: {
@@ -400,6 +428,7 @@ describe('PaymentsService', () => {
       amount: 3900,
       currency: 'AMD',
       description: 'LiloCharge session capture',
+      idempotencyKey: expect.stringMatching(UUID_PATTERN) as unknown as string,
       orderId: SESSION_ID,
       walletToken: 'wallet-token-1',
     });
@@ -463,7 +492,62 @@ describe('PaymentsService', () => {
       sessionId: SESSION_ID,
       userId: USER_ID,
     });
-    expect(prismaMock.payment.update).not.toHaveBeenCalled();
+    expect(prismaMock.payment.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: PaymentStatus.CAPTURED }) as unknown as object,
+      }),
+    );
+  });
+
+  it('reuses the persisted capture idempotency key when a capture is retried', async () => {
+    prismaMock.payment.findUnique.mockResolvedValue(
+      buildPaymentRecord({
+        captureIdempotencyKey: 'capture-key-1',
+      }),
+    );
+    arcaClientMock.capture.mockResolvedValue({
+      gatewayTransactionId: 'arca-tx-1',
+    });
+    prismaMock.payment.update.mockResolvedValue({ id: 'payment-1' });
+
+    await service.captureAuthorizedPaymentForSession({
+      amount: 3900,
+      sessionId: SESSION_ID,
+    });
+
+    expect(arcaClientMock.capture).toHaveBeenCalledWith({
+      amount: 3900,
+      gatewayTransactionId: 'arca-tx-1',
+      idempotencyKey: 'capture-key-1',
+    });
+    expect(prismaMock.payment.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          captureIdempotencyKey: expect.any(String) as unknown as string,
+        }) as unknown as object,
+      }),
+    );
+  });
+
+  it('rejects gateway capture dispatch for WALLET payments with descriptive invariant error', async () => {
+    prismaMock.payment.findUnique.mockResolvedValue(
+      buildPaymentRecord({
+        capturedAmount: 1000,
+        gateway: PaymentGateway.WALLET,
+        status: PaymentStatus.CAPTURED,
+      }),
+    );
+    prismaMock.payment.update.mockResolvedValue({ id: 'payment-1' });
+
+    await expect(
+      service.captureAuthorizedPaymentForSession({
+        amount: 3900,
+        sessionId: SESSION_ID,
+      }),
+    ).rejects.toThrow('WALLET payments are settled by WalletService balance deduction');
+
+    expect(arcaClientMock.capture).not.toHaveBeenCalled();
+    expect(idramClientMock.debitWallet).not.toHaveBeenCalled();
   });
 
   it('refunds captured ArCa payments for failed sessions and marks payment as refunded', async () => {
@@ -483,6 +567,7 @@ describe('PaymentsService', () => {
     expect(arcaClientMock.refund).toHaveBeenCalledWith({
       amount: 3800,
       gatewayTransactionId: 'arca-tx-1',
+      idempotencyKey: expect.stringMatching(UUID_PATTERN) as unknown as string,
     });
     expect(prismaMock.payment.update).toHaveBeenCalledWith({
       where: {
@@ -517,6 +602,7 @@ describe('PaymentsService', () => {
     expect(idramClientMock.refund).toHaveBeenCalledWith({
       amount: 3800,
       gatewayTransactionId: 'idram-tx-1',
+      idempotencyKey: expect.stringMatching(UUID_PATTERN) as unknown as string,
     });
     expect(prismaMock.payment.update).toHaveBeenCalledWith({
       where: {
@@ -530,6 +616,35 @@ describe('PaymentsService', () => {
       },
     });
     expect(arcaClientMock.refund).not.toHaveBeenCalled();
+  });
+
+  it('reuses the persisted refund idempotency key when a refund is retried', async () => {
+    prismaMock.payment.findUnique.mockResolvedValue(
+      buildPaymentRecord({
+        capturedAmount: 3800,
+        refundIdempotencyKey: 'refund-key-1',
+        status: PaymentStatus.CAPTURED,
+      }),
+    );
+    arcaClientMock.refund.mockResolvedValue({
+      gatewayTransactionId: 'arca-tx-1',
+    });
+    prismaMock.payment.update.mockResolvedValue({ id: 'payment-1' });
+
+    await service.refundPaymentForSessionFailure(SESSION_ID);
+
+    expect(arcaClientMock.refund).toHaveBeenCalledWith({
+      amount: 3800,
+      gatewayTransactionId: 'arca-tx-1',
+      idempotencyKey: 'refund-key-1',
+    });
+    expect(prismaMock.payment.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          refundIdempotencyKey: expect.any(String) as unknown as string,
+        }) as unknown as object,
+      }),
+    );
   });
 
   it('checks Idram wallet balance for one user using configured wallet token', async () => {

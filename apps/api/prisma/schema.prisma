@@ -143,6 +143,9 @@ model Payment {
   authorizedAmount     Int            @map("authorized_amount")
   capturedAmount       Int            @map("captured_amount")
   gatewayTransactionId String?        @map("gateway_transaction_id")
+  preauthIdempotencyKey String?       @map("preauth_idempotency_key")
+  captureIdempotencyKey String?       @map("capture_idempotency_key")
+  refundIdempotencyKey String?        @map("refund_idempotency_key")
   createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz
   updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -153,6 +156,7 @@ model Payment {
 
   @@index([userId])
   @@index([paymentMethodId])
+  @@index([gatewayTransactionId])
   @@map("payments")
 }
 
@@ -443,6 +447,7 @@ model WalletTransaction {
   balanceAfter         Int                   @map("balance_after")
   gateway              PaymentGateway?
   gatewayTransactionId String?               @map("gateway_transaction_id")
+  idempotencyKey       String?               @map("idempotency_key")
   sessionId            String?               @map("session_id") @db.Uuid
   description          String?               @db.Text
   createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz

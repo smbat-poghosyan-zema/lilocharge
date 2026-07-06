@@ -25,10 +25,13 @@ interface PaymentRecord {
   readonly amount: number;
   readonly authorizedAmount: number;
   readonly capturedAmount: number;
+  readonly captureIdempotencyKey: string | null;
   readonly gateway: PaymentGateway;
   readonly gatewayTransactionId: string | null;
   readonly id: string;
   readonly paymentMethodId: string;
+  readonly preauthIdempotencyKey: string | null;
+  readonly refundIdempotencyKey: string | null;
   readonly sessionId: string;
   readonly status: PaymentStatus;
   readonly userId: string;
@@ -104,6 +107,7 @@ interface NotificationsServiceMock extends Pick<
 
 const SESSION_ID = '22222222-2222-2222-2222-222222222222';
 const USER_ID = '11111111-1111-1111-1111-111111111111';
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Builds one payment method fixture for deterministic Apple Pay service tests.
@@ -132,10 +136,13 @@ function buildPaymentRecord(overrides?: Partial<PaymentRecord>): PaymentRecord {
     amount: 5000,
     authorizedAmount: 5000,
     capturedAmount: 0,
+    captureIdempotencyKey: null,
     gateway: PaymentGateway.APPLE_PAY,
     gatewayTransactionId: 'arca-tx-1',
     id: 'payment-1',
     paymentMethodId: 'payment-method-1',
+    preauthIdempotencyKey: null,
+    refundIdempotencyKey: null,
     sessionId: SESSION_ID,
     status: PaymentStatus.AUTHORIZED,
     userId: USER_ID,
@@ -287,6 +294,7 @@ describe('PaymentsService Apple Pay flows', () => {
       cardToken: 'apple-tokenized-card-1',
       currency: 'AMD',
       description: 'LiloCharge session pre-authorization',
+      idempotencyKey: expect.stringMatching(UUID_PATTERN) as unknown as string,
       orderId: SESSION_ID,
     });
     expect(prismaMock.payment.create).toHaveBeenCalledWith({
@@ -297,6 +305,7 @@ describe('PaymentsService Apple Pay flows', () => {
         gateway: PaymentGateway.APPLE_PAY,
         gatewayTransactionId: 'arca-tx-1',
         paymentMethodId: 'payment-method-1',
+        preauthIdempotencyKey: expect.stringMatching(UUID_PATTERN) as unknown as string,
         sessionId: SESSION_ID,
         status: PaymentStatus.AUTHORIZED,
         userId: USER_ID,
@@ -328,6 +337,7 @@ describe('PaymentsService Apple Pay flows', () => {
     expect(arcaClientMock.capture).toHaveBeenCalledWith({
       amount: 3900,
       gatewayTransactionId: 'arca-tx-1',
+      idempotencyKey: expect.stringMatching(UUID_PATTERN) as unknown as string,
     });
     expect(idramClientMock.debitWallet).not.toHaveBeenCalled();
   });
@@ -349,6 +359,7 @@ describe('PaymentsService Apple Pay flows', () => {
     expect(arcaClientMock.refund).toHaveBeenCalledWith({
       amount: 3800,
       gatewayTransactionId: 'arca-tx-1',
+      idempotencyKey: expect.stringMatching(UUID_PATTERN) as unknown as string,
     });
     expect(idramClientMock.refund).not.toHaveBeenCalled();
   });
