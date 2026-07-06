@@ -79,8 +79,12 @@ interface MeterValuesServiceMock extends Pick<OcppMeterValuesService, 'ingestMet
 
 interface TransactionsServiceMock extends Pick<
   OcppTransactionsService,
-  'handleStartTransaction' | 'handleStopTransaction'
+  'handleAuthorize' | 'handleStartTransaction' | 'handleStopTransaction'
 > {
+  readonly handleAuthorize: jest.Mock<
+    ReturnType<OcppTransactionsService['handleAuthorize']>,
+    Parameters<OcppTransactionsService['handleAuthorize']>
+  >;
   readonly handleStartTransaction: jest.Mock<
     ReturnType<OcppTransactionsService['handleStartTransaction']>,
     Parameters<OcppTransactionsService['handleStartTransaction']>
@@ -165,6 +169,10 @@ describe('OcppRoutingService', () => {
     };
     meterValuesServiceMock.ingestMeterValues.mockResolvedValue(0);
     transactionsServiceMock = {
+      handleAuthorize: jest.fn<
+        ReturnType<OcppTransactionsService['handleAuthorize']>,
+        Parameters<OcppTransactionsService['handleAuthorize']>
+      >(),
       handleStartTransaction: jest.fn<
         ReturnType<OcppTransactionsService['handleStartTransaction']>,
         Parameters<OcppTransactionsService['handleStartTransaction']>
@@ -181,6 +189,11 @@ describe('OcppRoutingService', () => {
       transactionId: 7001,
     });
     transactionsServiceMock.handleStopTransaction.mockResolvedValue({});
+    transactionsServiceMock.handleAuthorize.mockResolvedValue({
+      idTagInfo: {
+        status: 'Accepted',
+      },
+    });
     registryService = new OcppRegistryService();
     routingService = new OcppRoutingService(
       registryService,
@@ -347,6 +360,40 @@ describe('OcppRoutingService', () => {
       'CP-001',
       stopPayload,
     );
+  });
+
+  it('routes Authorize payloads through the transactions service idTag validation', async () => {
+    const validIdTag = '11111111-1111-4111-8111-111111111111';
+
+    const acceptedResponse = await routingService.routeIncomingMessage('CP-001', 'Authorize', {
+      idTag: validIdTag,
+    });
+
+    transactionsServiceMock.handleAuthorize.mockResolvedValue({
+      idTagInfo: {
+        status: 'Invalid',
+      },
+    });
+    const invalidResponse = await routingService.routeIncomingMessage('CP-001', 'Authorize', {
+      idTag: 'unknown-tag',
+    });
+
+    expect(acceptedResponse).toEqual({
+      idTagInfo: {
+        status: 'Accepted',
+      },
+    });
+    expect(invalidResponse).toEqual({
+      idTagInfo: {
+        status: 'Invalid',
+      },
+    });
+    expect(transactionsServiceMock.handleAuthorize).toHaveBeenCalledWith('CP-001', {
+      idTag: validIdTag,
+    });
+    expect(transactionsServiceMock.handleAuthorize).toHaveBeenCalledWith('CP-001', {
+      idTag: 'unknown-tag',
+    });
   });
 
   it('rejects unsupported OCPP actions via NotImplemented responses', async () => {

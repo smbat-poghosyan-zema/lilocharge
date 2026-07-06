@@ -1,3 +1,5 @@
+import { createServer, type Server as HttpsServer } from 'node:https';
+
 import { Injectable } from '@nestjs/common';
 import { RPCServer } from 'ocpp-rpc';
 
@@ -9,6 +11,12 @@ export interface OcppServerFactoryOptions {
   readonly strictMode: boolean;
 }
 
+/** TLS key material used to create one HTTPS server that terminates `wss://` connections. */
+export interface OcppTlsServerOptions {
+  readonly cert: Buffer;
+  readonly key: Buffer;
+}
+
 /** Factory creating typed `ocpp-rpc` server instances for the OCPP module. */
 @Injectable()
 export class OcppServerFactory {
@@ -18,5 +26,13 @@ export class OcppServerFactory {
       protocols: [...options.protocols],
       strictMode: options.strictMode,
     }) as unknown as OcppServer;
+  }
+
+  /** Creates one HTTPS server used to terminate TLS for `wss://` OCPP connections. */
+  public createTlsServer(options: OcppTlsServerOptions): HttpsServer {
+    return createServer({
+      cert: options.cert,
+      key: options.key,
+    });
   }
 }

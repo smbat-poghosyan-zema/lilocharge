@@ -12,3 +12,12 @@ export const DEFAULT_BOOT_NOTIFICATION_INTERVAL_SECONDS = 300;
 
 /** Environment variable values that disable the OCPP server at runtime. */
 export const DISABLED_FLAG_VALUES = ['0', 'false', 'no', 'off'] as const;
+
+/** Charge-point authentication modes supported by the OCPP WebSocket server. */
+export const OCPP_AUTH_MODES = ['open', 'allowlist', 'basic'] as const;
+
+/** Default charge-point authentication mode (backwards compatible with dev/e2e setups). */
+export const DEFAULT_OCPP_AUTH_MODE = 'open';
+
+/** OCPP 1.6-J Authorize action name (not yet present in the shared OcppAction enum). */
+export const OCPP_AUTHORIZE_ACTION = 'Authorize';

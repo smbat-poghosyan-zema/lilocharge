@@ -16,16 +16,24 @@ import { createRPCError } from 'ocpp-rpc';
 
 import { ConnectorsService } from '../connectors/connectors.service';
 import { OcppMeterValuesService } from './ocpp.meter-values.service';
-import { DEFAULT_BOOT_NOTIFICATION_INTERVAL_SECONDS } from './ocpp.constants';
+import {
+  DEFAULT_BOOT_NOTIFICATION_INTERVAL_SECONDS,
+  OCPP_AUTHORIZE_ACTION,
+} from './ocpp.constants';
 import { OcppRegistryService } from './ocpp.registry.service';
 import {
   type ConnectorStatusUpdateEvent,
   StationStatusBroadcastService,
 } from './ocpp.status-broadcast.service';
-import { OcppTransactionsService } from './ocpp.transactions.service';
+import {
+  type OcppAuthorizeRequest,
+  type OcppAuthorizeResponse,
+  OcppTransactionsService,
+} from './ocpp.transactions.service';
 import type { OcppServerClient } from './ocpp.server.types';
 
 type OcppRoutingResponse =
+  | OcppAuthorizeResponse
   | OcppBootNotificationResponse
   | OcppHeartbeatResponse
   | OcppStartTransactionResponse
@@ -38,6 +46,7 @@ export const ROUTED_OCPP_ACTIONS = [
   OcppAction.HEARTBEAT,
   OcppAction.STATUS_NOTIFICATION,
   OcppAction.METER_VALUES,
+  OCPP_AUTHORIZE_ACTION,
   OcppAction.START_TRANSACTION,
   OcppAction.STOP_TRANSACTION,
 ] as const;
@@ -103,6 +112,8 @@ export class OcppRoutingService {
         );
       case OcppAction.METER_VALUES:
         return this.handleMeterValues(chargePointId, payload as OcppMeterValuesRequest);
+      case OCPP_AUTHORIZE_ACTION:
+        return this.handleAuthorize(chargePointId, payload as OcppAuthorizeRequest);
       case OcppAction.START_TRANSACTION:
         return this.handleStartTransaction(chargePointId, payload as OcppStartTransactionRequest);
       case OcppAction.STOP_TRANSACTION:
@@ -206,6 +217,17 @@ export class OcppRoutingService {
     );
 
     return {};
+  }
+
+  /** Authorizes one idTag using the same validation rules applied by StartTransaction. */
+  private async handleAuthorize(
+    chargePointId: string,
+    payload: OcppAuthorizeRequest,
+  ): Promise<OcppAuthorizeResponse> {
+    const response = await this.transactionsService.handleAuthorize(chargePointId, payload);
+    this.logger.log(`Authorize routed for ${chargePointId} -> ${response.idTagInfo.status}`);
+
+    return response;
   }
 
   /** Starts one session from an inbound StartTransaction message and returns a central transaction id. */

@@ -27,5 +27,12 @@ data:
   # Redis settings (non-sensitive)
   REDIS_PORT: '6379'
 
+  # OCPP central-system WebSocket server
+  OCPP_WS_ENABLED: 'true'
+  OCPP_WS_PORT: '9220'
+  # Charge-point authentication: open | allowlist | basic.
+  # 'basic' (OCPP 1.6 security profile 1) requires the ocpp-identity-secrets key in api-secrets.
+  OCPP_AUTH_MODE: 'basic'
+
   # Timezone
   TZ: 'Asia/Yerevan'

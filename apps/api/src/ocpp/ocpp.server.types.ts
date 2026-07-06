@@ -1,3 +1,6 @@
+import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
+import type { Duplex } from 'node:stream';
+
 import type { IHandlersOption } from 'ocpp-rpc';
 
 /** Function signature used for OCPP RPC message handlers. */
@@ -13,7 +16,15 @@ export interface OcppRpcCallOptions {
 /** Lightweight handshake metadata required by the OCPP server lifecycle. */
 export interface OcppServerHandshake {
   readonly endpoint: string;
+  /** Raw HTTP upgrade request headers (populated by `ocpp-rpc` from the WebSocket handshake). */
+  readonly headers?: IncomingHttpHeaders;
   readonly identity: string;
+  /**
+   * HTTP Basic password extracted by `ocpp-rpc`; only set when the Basic username matches the
+   * charge-point identity, per the OCPP 1.6 security profile 1 handshake rules.
+   */
+  readonly password?: Buffer;
+  readonly remoteAddress?: string;
 }
 
 /** Signature for the OCPP server authentication callback. */
@@ -42,6 +53,12 @@ export interface OcppServerClient {
 
 /** Shape of the OCPP server instance consumed by the Nest service lifecycle. */
 export interface OcppServer {
+  /**
+   * WebSocket upgrade handler exposed by `ocpp-rpc` for attaching the RPC server to an external
+   * HTTP(S) server (used for TLS-terminated `wss://` listeners).
+   */
+  readonly handleUpgrade: (request: IncomingMessage, socket: Duplex, head: Buffer) => Promise<void>;
+
   auth(callback: OcppServerAuthCallback): void;
   close(options?: {
     readonly awaitPending?: boolean;

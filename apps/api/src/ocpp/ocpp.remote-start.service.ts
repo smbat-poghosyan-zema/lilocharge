@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type {
   OcppRemoteStartTransactionRequest,
   OcppRemoteStartTransactionResponse,
@@ -9,10 +11,11 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
 
+import { RedisService } from '../redis/redis.service';
 import { OcppRegistryService } from './ocpp.registry.service';
 import type { OcppRpcCallOptions, OcppServerClient } from './ocpp.server.types';
 
@@ -20,9 +23,26 @@ const DEFAULT_REMOTE_START_MAX_ATTEMPTS = 3;
 const DEFAULT_REMOTE_START_RETRY_DELAY_MS = 300;
 const DEFAULT_REMOTE_START_TIMEOUT_MS = 10_000;
 const DEFAULT_TRANSACTION_TRACKING_TTL_MS = 5 * 60 * 1000;
+const MILLISECONDS_PER_SECOND = 1000;
+
+/** Redis key prefix for tracked remote-start correlation records. */
+export const OCPP_REMOTE_START_KEY_PREFIX = 'ocpp:remote-start';
 
 const INVALID_CALL_HANDLER_MESSAGE =
   'RemoteStartTransaction cannot be sent because the charge point client is missing a call handler';
+
+/**
+ * Minimal key-value contract required for remote-start tracking storage.
+ *
+ * `RedisService` satisfies this structurally; an in-memory fallback is used when no Redis
+ * service is available (for example, in directly constructed unit-test instances).
+ */
+export interface OcppRemoteStartTrackingStore {
+  del(key: string): Promise<void>;
+  get(key: string): Promise<string | null>;
+  scanKeys(pattern: string): Promise<string[]>;
+  setEx(key: string, ttlSeconds: number, value: string): Promise<void>;
+}
 
 /** Input payload used to dispatch one outbound OCPP RemoteStartTransaction command. */
 export interface OcppRemoteStartCommand {
@@ -42,7 +62,7 @@ export interface OcppRemoteStartResult {
   readonly trackingId: string | null;
 }
 
-/** One in-memory record tracking a previously accepted remote-start request. */
+/** One persisted record tracking a previously accepted remote-start request. */
 export interface OcppTrackedRemoteStartTransaction {
   readonly attemptCount: number;
   readonly chargePointId: string;
@@ -51,6 +71,8 @@ export interface OcppTrackedRemoteStartTransaction {
   readonly idTag: string;
   readonly remoteStartRequestId: string;
   readonly requestedAt: string;
+  /** Monotonic ordering hint used to pick the newest matching record deterministically. */
+  readonly sequence: number;
   readonly transactionId: number | null;
   readonly updatedAt: string;
 }
@@ -63,19 +85,42 @@ export interface OcppTransactionTrackingLinkInput {
   readonly transactionId: number;
 }
 
-/** Service responsible for outbound OCPP RemoteStartTransaction commands and retry-aware tracking. */
+/**
+ * Service responsible for outbound OCPP RemoteStartTransaction commands and retry-aware tracking.
+ *
+ * Tracking records are persisted in Redis (keyed by charge point and request id, with a TTL
+ * matching the remote-start correlation timeout) so an API restart does not orphan an in-flight
+ * remote start: the StartTransaction handler can still correlate the inbound transaction.
+ *
+ * Multi-instance limitation: each charge point holds exactly one WebSocket connection to exactly
+ * one API replica, and the live client object cannot be shared, so outbound commands must be
+ * issued on the replica that owns the connection (the local registry). Only the correlation
+ * state — not the connection — is shared through Redis.
+ */
 @Injectable()
 export class OcppRemoteStartService {
   private readonly logger: Logger = new Logger(OcppRemoteStartService.name);
-  private readonly trackedRemoteStarts: Map<string, OcppTrackedRemoteStartTransaction> = new Map();
+  private readonly trackingStore: OcppRemoteStartTrackingStore;
+  private nextSequence: number = Date.now();
 
-  constructor(private readonly registryService: OcppRegistryService) {}
+  constructor(
+    private readonly registryService: OcppRegistryService,
+    @Optional() redisService?: RedisService,
+  ) {
+    this.trackingStore = redisService ?? new InMemoryOcppTrackingStore();
+
+    if (redisService === undefined) {
+      this.logger.warn(
+        'RedisService unavailable; remote-start tracking falls back to in-memory storage (records are lost on restart)',
+      );
+    }
+  }
 
   /**
    * Sends one outbound RemoteStartTransaction command with retry/timeout handling.
    *
-   * Accepted requests are persisted in-memory so later inbound StartTransaction messages can be
-   * linked to their originating remote-start request by connector and idTag.
+   * Accepted requests are persisted in Redis so later inbound StartTransaction messages can be
+   * linked to their originating remote-start request by connector and idTag, even after restarts.
    */
   public async remoteStartTransaction(
     command: OcppRemoteStartCommand,
@@ -135,7 +180,7 @@ export class OcppRemoteStartService {
           };
         }
 
-        const trackedRequest = this.trackAcceptedRemoteStart({
+        const trackedRequest = await this.trackAcceptedRemoteStart({
           attemptCount,
           chargePointId: command.chargePointId,
           payload: command.payload,
@@ -168,69 +213,104 @@ export class OcppRemoteStartService {
     );
   }
 
-  /** Returns one tracked remote-start request by request id, or null when not found. */
-  public getTrackedRemoteStartTransaction(
+  /** Returns one tracked remote-start request by request id, or null when not found or expired. */
+  public async getTrackedRemoteStartTransaction(
     remoteStartRequestId: string,
-  ): OcppTrackedRemoteStartTransaction | null {
-    this.pruneExpiredPendingRecords();
+  ): Promise<OcppTrackedRemoteStartTransaction | null> {
+    try {
+      const keys = await this.trackingStore.scanKeys(
+        `${OCPP_REMOTE_START_KEY_PREFIX}:*:${remoteStartRequestId}`,
+      );
+      const key = keys[0];
 
-    return this.trackedRemoteStarts.get(remoteStartRequestId) ?? null;
+      if (key === undefined) {
+        return null;
+      }
+
+      const record = parseTrackedRecord(await this.trackingStore.get(key));
+
+      if (record === null || isPendingRecordExpired(record, Date.now())) {
+        return null;
+      }
+
+      return record;
+    } catch (error: unknown) {
+      this.logger.warn(`Remote-start tracking lookup failed: ${resolveErrorMessage(error)}`);
+      return null;
+    }
   }
 
   /**
    * Links one inbound OCPP transaction id to the newest pending tracked remote-start request.
    *
    * Matching is scoped to charge point, connector id, and idTag. Returns null when no compatible
-   * pending tracking record exists (for example, after TTL expiry).
+   * pending tracking record exists (for example, after TTL expiry). Linked records are retained
+   * for another full tracking window so completed correlations remain queryable.
    */
-  public linkTransactionIdToTrackedRemoteStart(
+  public async linkTransactionIdToTrackedRemoteStart(
     input: OcppTransactionTrackingLinkInput,
-  ): OcppTrackedRemoteStartTransaction | null {
+  ): Promise<OcppTrackedRemoteStartTransaction | null> {
     assertTransactionTrackingLinkInput(input);
-    this.pruneExpiredPendingRecords();
 
-    const latestPendingRecord = this.findLatestPendingTrackedRecord(input);
+    try {
+      const records = await this.readTrackedRecords(input.chargePointId);
+      const nowMs = Date.now();
+      const latestPendingRecord =
+        records
+          .filter((record) => {
+            return (
+              record.connectorId === input.connectorId &&
+              record.idTag === input.idTag &&
+              record.transactionId === null &&
+              !isPendingRecordExpired(record, nowMs)
+            );
+          })
+          .sort((left, right) => right.sequence - left.sequence)[0] ?? null;
 
-    if (latestPendingRecord === null) {
+      if (latestPendingRecord === null) {
+        return null;
+      }
+
+      const updatedRecord: OcppTrackedRemoteStartTransaction = {
+        ...latestPendingRecord,
+        transactionId: input.transactionId,
+        updatedAt: new Date(nowMs).toISOString(),
+      };
+      await this.persistTrackedRecord(updatedRecord, resolveLinkedRecordTtlSeconds(updatedRecord));
+
+      return updatedRecord;
+    } catch (error: unknown) {
+      this.logger.warn(`Remote-start tracking link failed: ${resolveErrorMessage(error)}`);
       return null;
     }
-
-    const updatedAt = new Date().toISOString();
-    const updatedRecord: OcppTrackedRemoteStartTransaction = {
-      ...latestPendingRecord,
-      transactionId: input.transactionId,
-      updatedAt,
-    };
-    this.trackedRemoteStarts.set(updatedRecord.remoteStartRequestId, updatedRecord);
-
-    return updatedRecord;
   }
 
   /** Finds one tracked remote-start request by charge point id and linked OCPP transaction id. */
-  public findTrackedRemoteStartTransactionByTransactionId(
+  public async findTrackedRemoteStartTransactionByTransactionId(
     chargePointId: string,
     transactionId: number,
-  ): OcppTrackedRemoteStartTransaction | null {
-    this.pruneExpiredPendingRecords();
+  ): Promise<OcppTrackedRemoteStartTransaction | null> {
+    try {
+      const records = await this.readTrackedRecords(chargePointId);
 
-    const matchingRecords = [...this.trackedRemoteStarts.values()]
-      .filter((record) => {
-        return record.chargePointId === chargePointId && record.transactionId === transactionId;
-      })
-      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-
-    return matchingRecords[0] ?? null;
+      return (
+        records
+          .filter((record) => record.transactionId === transactionId)
+          .sort((left, right) => right.sequence - left.sequence)[0] ?? null
+      );
+    } catch (error: unknown) {
+      this.logger.warn(`Remote-start tracking search failed: ${resolveErrorMessage(error)}`);
+      return null;
+    }
   }
 
   /** Stores one accepted remote-start request for later inbound transaction-id linking. */
-  private trackAcceptedRemoteStart(input: {
+  private async trackAcceptedRemoteStart(input: {
     readonly attemptCount: number;
     readonly chargePointId: string;
     readonly payload: OcppRemoteStartTransactionRequest;
     readonly trackingTtlMs: number;
-  }): OcppTrackedRemoteStartTransaction {
-    this.pruneExpiredPendingRecords();
-
+  }): Promise<OcppTrackedRemoteStartTransaction> {
     const now = new Date();
     const trackedRecord: OcppTrackedRemoteStartTransaction = {
       attemptCount: input.attemptCount,
@@ -240,49 +320,189 @@ export class OcppRemoteStartService {
       idTag: input.payload.idTag,
       remoteStartRequestId: randomUUID(),
       requestedAt: now.toISOString(),
+      sequence: this.allocateSequence(),
       transactionId: null,
       updatedAt: now.toISOString(),
     };
-    this.trackedRemoteStarts.set(trackedRecord.remoteStartRequestId, trackedRecord);
+
+    try {
+      await this.persistTrackedRecord(
+        trackedRecord,
+        millisecondsToTtlSeconds(input.trackingTtlMs),
+      );
+    } catch (error: unknown) {
+      // Tracking is best-effort correlation metadata; a storage outage must not fail an
+      // already-accepted remote start.
+      this.logger.error(`Remote-start tracking persist failed: ${resolveErrorMessage(error)}`);
+    }
 
     return trackedRecord;
   }
 
-  /** Returns the newest compatible pending tracked record for one transaction-link operation. */
-  private findLatestPendingTrackedRecord(
-    input: OcppTransactionTrackingLinkInput,
-  ): OcppTrackedRemoteStartTransaction | null {
-    const recordsNewestFirst = [...this.trackedRemoteStarts.values()].reverse();
-
-    return (
-      recordsNewestFirst.find((record) => {
-        return (
-          record.chargePointId === input.chargePointId &&
-          record.connectorId === input.connectorId &&
-          record.idTag === input.idTag &&
-          record.transactionId === null
-        );
-      }) ?? null
+  /** Persists one tracked record under its charge-point-scoped Redis key with the given TTL. */
+  private async persistTrackedRecord(
+    record: OcppTrackedRemoteStartTransaction,
+    ttlSeconds: number,
+  ): Promise<void> {
+    await this.trackingStore.setEx(
+      buildTrackingKey(record.chargePointId, record.remoteStartRequestId),
+      ttlSeconds,
+      JSON.stringify(record),
     );
   }
 
-  /** Removes expired records that never received a transaction id link. */
-  private pruneExpiredPendingRecords(now: Date = new Date()): void {
-    const nowMs = now.getTime();
+  /** Reads all tracked remote-start records currently stored for one charge point. */
+  private async readTrackedRecords(
+    chargePointId: string,
+  ): Promise<OcppTrackedRemoteStartTransaction[]> {
+    const keys = await this.trackingStore.scanKeys(
+      `${OCPP_REMOTE_START_KEY_PREFIX}:${encodeChargePointId(chargePointId)}:*`,
+    );
+    const rawRecords = await Promise.all(keys.map((key) => this.trackingStore.get(key)));
 
-    this.trackedRemoteStarts.forEach((record, remoteStartRequestId) => {
-      if (record.transactionId !== null) {
-        return;
+    return rawRecords
+      .map((rawRecord) => parseTrackedRecord(rawRecord))
+      .filter((record): record is OcppTrackedRemoteStartTransaction => record !== null);
+  }
+
+  /** Allocates one monotonically increasing sequence value for record ordering. */
+  private allocateSequence(): number {
+    this.nextSequence += 1;
+
+    return this.nextSequence;
+  }
+}
+
+/** In-memory tracking store used when Redis is unavailable (unit tests, degraded startup). */
+class InMemoryOcppTrackingStore implements OcppRemoteStartTrackingStore {
+  private readonly entries: Map<string, { expiresAtMs: number; value: string }> = new Map();
+
+  /** Deletes one stored entry by key. */
+  public del(key: string): Promise<void> {
+    this.entries.delete(key);
+
+    return Promise.resolve();
+  }
+
+  /** Returns one stored value by key, honouring entry TTLs. */
+  public get(key: string): Promise<string | null> {
+    this.pruneExpiredEntries();
+
+    return Promise.resolve(this.entries.get(key)?.value ?? null);
+  }
+
+  /** Returns all stored keys matching one Redis-style glob pattern. */
+  public scanKeys(pattern: string): Promise<string[]> {
+    this.pruneExpiredEntries();
+    const matcher = buildGlobMatcher(pattern);
+
+    return Promise.resolve([...this.entries.keys()].filter((key) => matcher.test(key)));
+  }
+
+  /** Stores one value with a TTL in seconds. */
+  public setEx(key: string, ttlSeconds: number, value: string): Promise<void> {
+    this.entries.set(key, {
+      expiresAtMs: Date.now() + ttlSeconds * MILLISECONDS_PER_SECOND,
+      value,
+    });
+
+    return Promise.resolve();
+  }
+
+  /** Removes entries whose TTL has elapsed. */
+  private pruneExpiredEntries(): void {
+    const nowMs = Date.now();
+
+    this.entries.forEach((entry, key) => {
+      if (entry.expiresAtMs <= nowMs) {
+        this.entries.delete(key);
       }
-
-      const expiresAtMs = Date.parse(record.expiresAt);
-      if (!Number.isFinite(expiresAtMs) || expiresAtMs > nowMs) {
-        return;
-      }
-
-      this.trackedRemoteStarts.delete(remoteStartRequestId);
     });
   }
+}
+
+/** Builds one anchored regular expression matching Redis-style `*` glob patterns. */
+function buildGlobMatcher(pattern: string): RegExp {
+  const escapedPattern = pattern
+    .split('*')
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('.*');
+
+  return new RegExp(`^${escapedPattern}$`);
+}
+
+/** Builds the Redis key for one tracked remote-start record. */
+function buildTrackingKey(chargePointId: string, remoteStartRequestId: string): string {
+  return `${OCPP_REMOTE_START_KEY_PREFIX}:${encodeChargePointId(chargePointId)}:${remoteStartRequestId}`;
+}
+
+/** Encodes charge point identities so separator and glob characters cannot corrupt Redis keys. */
+function encodeChargePointId(chargePointId: string): string {
+  return encodeURIComponent(chargePointId);
+}
+
+/** Converts one millisecond TTL to a whole-second Redis TTL (minimum one second). */
+function millisecondsToTtlSeconds(ttlMs: number): number {
+  return Math.max(1, Math.ceil(ttlMs / MILLISECONDS_PER_SECOND));
+}
+
+/** Resolves the retention TTL for one linked record (one full tracking window from link time). */
+function resolveLinkedRecordTtlSeconds(record: OcppTrackedRemoteStartTransaction): number {
+  const trackingWindowMs = Date.parse(record.expiresAt) - Date.parse(record.requestedAt);
+
+  if (!Number.isFinite(trackingWindowMs) || trackingWindowMs <= 0) {
+    return millisecondsToTtlSeconds(DEFAULT_TRANSACTION_TRACKING_TTL_MS);
+  }
+
+  return millisecondsToTtlSeconds(trackingWindowMs);
+}
+
+/** Determines whether one pending (unlinked) record has passed its correlation deadline. */
+function isPendingRecordExpired(record: OcppTrackedRemoteStartTransaction, nowMs: number): boolean {
+  if (record.transactionId !== null) {
+    return false;
+  }
+
+  const expiresAtMs = Date.parse(record.expiresAt);
+
+  return Number.isFinite(expiresAtMs) && expiresAtMs <= nowMs;
+}
+
+/** Parses one raw stored JSON payload into a tracked remote-start record, or null when invalid. */
+function parseTrackedRecord(rawRecord: string | null): OcppTrackedRemoteStartTransaction | null {
+  if (rawRecord === null) {
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawRecord);
+  } catch {
+    return null;
+  }
+
+  if (typeof parsed !== 'object' || parsed === null) {
+    return null;
+  }
+
+  const record = parsed as Partial<OcppTrackedRemoteStartTransaction>;
+  const hasValidShape =
+    typeof record.chargePointId === 'string' &&
+    typeof record.connectorId === 'number' &&
+    typeof record.expiresAt === 'string' &&
+    typeof record.idTag === 'string' &&
+    typeof record.remoteStartRequestId === 'string' &&
+    typeof record.requestedAt === 'string' &&
+    typeof record.updatedAt === 'string' &&
+    typeof record.attemptCount === 'number' &&
+    typeof record.sequence === 'number' &&
+    (record.transactionId === null || typeof record.transactionId === 'number');
+
+  if (!hasValidShape) {
+    return null;
+  }
+
+  return record as OcppTrackedRemoteStartTransaction;
 }
 
 /** Validates one RemoteStartTransaction request payload before dispatching outbound RPC calls. */

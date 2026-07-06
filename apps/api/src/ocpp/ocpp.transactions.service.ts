@@ -38,6 +38,18 @@ type SessionStopLookupRecord = Prisma.SessionGetPayload<{
   select: typeof SESSION_STOP_LOOKUP_SELECT;
 }>;
 
+/** OCPP 1.6-J Authorize request payload (not yet present in shared types). */
+export interface OcppAuthorizeRequest {
+  readonly idTag: string;
+}
+
+/** OCPP 1.6-J Authorize response payload. */
+export interface OcppAuthorizeResponse {
+  readonly idTagInfo: {
+    readonly status: 'Accepted' | 'Invalid';
+  };
+}
+
 interface MeterValueEnergyAggregate {
   readonly _max: {
     readonly energyActiveImport: number | null;
@@ -111,7 +123,7 @@ export class OcppTransactionsService {
       userId,
     });
 
-    this.remoteStartService.linkTransactionIdToTrackedRemoteStart({
+    await this.remoteStartService.linkTransactionIdToTrackedRemoteStart({
       chargePointId,
       connectorId: payload.connectorId,
       idTag: payload.idTag,
@@ -123,6 +135,36 @@ export class OcppTransactionsService {
         status: 'Accepted',
       },
       transactionId,
+    };
+  }
+
+  /**
+   * Handles one inbound OCPP Authorize payload.
+   *
+   * The idTag is validated with the same rules StartTransaction applies (UUID-shaped tag that
+   * resolves to an existing user), so pre-charge authorization and transaction start agree.
+   */
+  public async handleAuthorize(
+    chargePointId: string,
+    payload: OcppAuthorizeRequest,
+  ): Promise<OcppAuthorizeResponse> {
+    assertAuthorizePayload(payload);
+    const userId = await this.resolveUserId(payload.idTag);
+
+    if (userId === null) {
+      this.logger.warn(`Authorize rejected for ${chargePointId}: user not found for idTag`);
+
+      return {
+        idTagInfo: {
+          status: 'Invalid',
+        },
+      };
+    }
+
+    return {
+      idTagInfo: {
+        status: 'Accepted',
+      },
     };
   }
 
@@ -319,6 +361,13 @@ function assertStartTransactionPayload(payload: OcppStartTransactionRequest): vo
 
   if (payload.idTag.trim().length === 0) {
     throw new BadRequestException('StartTransaction idTag is required');
+  }
+}
+
+/** Validates one inbound OCPP Authorize payload. */
+function assertAuthorizePayload(payload: OcppAuthorizeRequest): void {
+  if (typeof payload.idTag !== 'string' || payload.idTag.trim().length === 0) {
+    throw new BadRequestException('Authorize idTag is required');
   }
 }
 

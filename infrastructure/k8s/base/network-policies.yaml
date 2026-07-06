@@ -16,7 +16,7 @@ spec:
     - Ingress
     - Egress
   ingress:
-    # Allow from ingress controller
+    # Allow from ingress controller (HTTP API and OCPP charge-point WebSockets)
     - from:
         - namespaceSelector:
             matchLabels:
@@ -24,6 +24,8 @@ spec:
       ports:
         - protocol: TCP
           port: 3000
+        - protocol: TCP
+          port: 9220
     # Allow from prometheus (metrics)
     - from:
         - namespaceSelector:

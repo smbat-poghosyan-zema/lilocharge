@@ -204,7 +204,7 @@ describe('OcppTransactionsService', () => {
     prismaMock.connector.findFirst.mockResolvedValue({ id: 'connector-1' });
     prismaMock.user.findUnique.mockResolvedValue({ id: USER_ID });
     prismaMock.session.create.mockResolvedValue({ id: 'session-1' });
-    remoteStartServiceMock.linkTransactionIdToTrackedRemoteStart.mockReturnValue(null);
+    remoteStartServiceMock.linkTransactionIdToTrackedRemoteStart.mockResolvedValue(null);
 
     const response = await service.handleStartTransaction('ev-armenia-001', buildStartPayload());
 
@@ -254,6 +254,44 @@ describe('OcppTransactionsService', () => {
     expect(prismaMock.session.create).not.toHaveBeenCalled();
     expect(remoteStartServiceMock.linkTransactionIdToTrackedRemoteStart).not.toHaveBeenCalled();
     expect(notificationsServiceMock.sendSessionStartedNotification).not.toHaveBeenCalled();
+  });
+
+  it('accepts Authorize requests when the idTag resolves to an existing user', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({ id: USER_ID });
+
+    const response = await service.handleAuthorize('ev-armenia-001', { idTag: USER_ID });
+
+    expect(response).toEqual({
+      idTagInfo: {
+        status: 'Accepted',
+      },
+    });
+    expect(prismaMock.user.findUnique).toHaveBeenCalledWith({
+      where: { id: USER_ID },
+      select: { id: true },
+    });
+  });
+
+  it('rejects Authorize requests when the idTag cannot be mapped to a user', async () => {
+    prismaMock.user.findUnique.mockResolvedValue(null);
+
+    const malformedResponse = await service.handleAuthorize('ev-armenia-001', {
+      idTag: 'user-123',
+    });
+    const unknownUserResponse = await service.handleAuthorize('ev-armenia-001', {
+      idTag: '99999999-9999-4999-8999-999999999999',
+    });
+
+    expect(malformedResponse).toEqual({
+      idTagInfo: {
+        status: 'Invalid',
+      },
+    });
+    expect(unknownUserResponse).toEqual({
+      idTagInfo: {
+        status: 'Invalid',
+      },
+    });
   });
 
   it('completes a session on StopTransaction and stores final cost from pricing calculation', async () => {

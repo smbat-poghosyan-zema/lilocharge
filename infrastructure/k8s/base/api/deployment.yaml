@@ -19,6 +19,10 @@ spec:
       targetPort: metrics
       protocol: TCP
       name: metrics
+    - port: 9220
+      targetPort: ocpp
+      protocol: TCP
+      name: ocpp
   selector:
     app.kubernetes.io/name: api
 ---
@@ -88,6 +92,14 @@ spec:
             - name: metrics
               containerPort: 9464
               protocol: TCP
+            # OCPP 1.6-J central-system WebSocket listener for charge points.
+            # NOTE: charge points hold a persistent WebSocket to exactly one replica, and
+            # remote commands must be issued by that replica; only remote-start correlation
+            # state is shared via Redis. Session affinity is therefore required at the
+            # ingress/LB layer when running more than one replica.
+            - name: ocpp
+              containerPort: 9220
+              protocol: TCP
           env:
             # ConfigMap values
             - name: NODE_ENV
@@ -130,6 +142,41 @@ spec:
                 configMapKeyRef:
                   name: api-config
                   key: OTEL_METRICS_PORT
+
+            # OCPP central-system WebSocket server
+            - name: OCPP_WS_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: OCPP_WS_ENABLED
+            - name: OCPP_WS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: OCPP_WS_PORT
+            - name: OCPP_AUTH_MODE
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: OCPP_AUTH_MODE
+            # Comma-separated identities; only consumed when OCPP_AUTH_MODE=allowlist.
+            - name: OCPP_ALLOWED_IDENTITIES
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: OCPP_ALLOWED_IDENTITIES
+                  optional: true
+            # JSON map of charge-point identity -> HTTP Basic secret; required when
+            # OCPP_AUTH_MODE=basic. Stored in the api-secrets Secret (sealed in production).
+            - name: OCPP_IDENTITY_SECRETS
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: ocpp-identity-secrets
+                  optional: true
+            # TLS (wss://) is terminated at the ingress/load balancer by default. To terminate
+            # TLS in-pod instead, mount a TLS secret and set OCPP_WS_TLS_CERT_PATH and
+            # OCPP_WS_TLS_KEY_PATH to the mounted certificate/key file paths.
 
             # Database connection
             - name: POSTGRES_HOST
