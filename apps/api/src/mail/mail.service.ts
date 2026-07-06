@@ -105,8 +105,19 @@ LiloCharge Team
     `.trim();
   }
 
-  /** Builds an HTML problem report email body. */
+  /**
+   * Builds an HTML problem report email body.
+   * All user-controlled fields are HTML-escaped to prevent HTML/markup injection.
+   */
   private buildProblemReportHtmlEmail(input: StationProblemReportEmailInput): string {
+    const operatorName = escapeHtml(input.operatorName);
+    const stationName = escapeHtml(input.stationName);
+    const stationAddress = escapeHtml(input.stationAddress);
+    const problemType = escapeHtml(input.problemType);
+    const reportedAt = escapeHtml(input.reportedAt);
+    const reporterName = escapeHtml(input.reporterName);
+    const description = escapeHtml(input.description);
+
     return `
 <!DOCTYPE html>
 <html>
@@ -130,37 +141,37 @@ LiloCharge Team
       <h2>LiloCharge Problem Report</h2>
     </div>
     <div class="content">
-      <p>Dear ${input.operatorName},</p>
+      <p>Dear ${operatorName},</p>
       <p>A problem has been reported for one of your charging stations:</p>
       
       <div class="field">
         <div class="label">Station:</div>
-        <div class="value">${input.stationName}</div>
+        <div class="value">${stationName}</div>
       </div>
       
       <div class="field">
         <div class="label">Address:</div>
-        <div class="value">${input.stationAddress}</div>
+        <div class="value">${stationAddress}</div>
       </div>
       
       <div class="field">
         <div class="label">Problem Type:</div>
-        <div class="value">${input.problemType}</div>
+        <div class="value">${problemType}</div>
       </div>
       
       <div class="field">
         <div class="label">Reported At:</div>
-        <div class="value">${input.reportedAt}</div>
+        <div class="value">${reportedAt}</div>
       </div>
       
       <div class="field">
         <div class="label">Reported By:</div>
-        <div class="value">${input.reporterName}</div>
+        <div class="value">${reporterName}</div>
       </div>
       
       <div class="field">
         <div class="label">Description:</div>
-        <div class="description-box">${input.description}</div>
+        <div class="description-box">${description}</div>
       </div>
       
       <p>Please investigate and resolve this issue as soon as possible to maintain service quality.</p>
@@ -182,4 +193,17 @@ function resolveErrorMessage(error: unknown): string {
   }
 
   return 'unknown email error';
+}
+
+const HTML_ESCAPE_MAP: Readonly<Record<string, string>> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+
+/** Escapes HTML special characters to prevent markup injection in HTML email bodies. */
+export function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => HTML_ESCAPE_MAP[character]);
 }

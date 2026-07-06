@@ -1,6 +1,40 @@
-import { parseCorsOrigins, resolvePort } from './main';
+import { buildHelmetOptions, parseCorsOrigins, resolvePort } from './main';
 
 describe('main bootstrap helpers', () => {
+  describe('buildHelmetOptions', () => {
+    it('keeps a restrictive CSP baseline', () => {
+      const options = buildHelmetOptions();
+      const csp = options.contentSecurityPolicy;
+
+      expect(csp).not.toBe(false);
+      if (csp === false || csp === true || csp === undefined) {
+        throw new Error('expected an explicit CSP configuration');
+      }
+
+      expect(csp.directives).toMatchObject({
+        defaultSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+      });
+    });
+
+    it('relaxes only the directives required by the Swagger UI at /docs', () => {
+      const options = buildHelmetOptions();
+      const csp = options.contentSecurityPolicy;
+      if (csp === false || csp === true || csp === undefined) {
+        throw new Error('expected an explicit CSP configuration');
+      }
+
+      expect(csp.directives).toMatchObject({
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:'],
+        fontSrc: ["'self'", 'data:'],
+      });
+      expect(options.crossOriginEmbedderPolicy).toBe(false);
+    });
+  });
+
   describe('parseCorsOrigins', () => {
     it('uses default whitelisted origins when no value is configured', () => {
       expect(parseCorsOrigins(undefined)).toEqual([
