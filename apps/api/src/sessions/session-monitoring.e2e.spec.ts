@@ -27,6 +27,10 @@ const TEST_PRICING_PLAN_ID = '77777777-7777-7777-7777-777777777777';
  * E2E test suite for real-time session monitoring with WebSocket updates and cost calculation.
  * Tests the complete flow: start session → emit meter values → receive WebSocket updates → verify cost accuracy.
  */
+/** Run-unique user identity so leftovers from crashed or concurrent runs never collide. */
+const RUN_SUFFIX = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+const TEST_PHONE_UNIQUE = `+374${RUN_SUFFIX.slice(-8)}`;
+
 describe('SessionMonitoring (E2E) - Real-Time Session Updates and Cost Calculation', () => {
   let app: NestFastifyApplication;
   let prismaService: PrismaService;
@@ -121,8 +125,8 @@ describe('SessionMonitoring (E2E) - Real-Time Session Updates and Cost Calculati
     await prismaService.user.create({
       data: {
         id: TEST_USER_ID,
-        email: 'testuser-e2e@example.com',
-        phone: '+37477111222',
+        email: `monitoring-${RUN_SUFFIX}@lilocharge.am`,
+        phone: TEST_PHONE_UNIQUE,
         displayName: 'Test User E2E',
         passwordHash: 'hashed-password',
         language: 'HY',

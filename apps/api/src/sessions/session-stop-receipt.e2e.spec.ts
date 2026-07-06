@@ -2,8 +2,11 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { SessionStatus } from '@lilocharge/shared-types';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { Test, type TestingModule } from '@nestjs/testing';
+import { JwtService } from '@nestjs/jwt';
 import { ValidationPipe } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 
 import { AppModule } from '../app.module';
 import { HttpExceptionFilter } from '../common/filters/http-exception.filter';
@@ -21,9 +24,15 @@ const TEST_PAYMENT_METHOD_ID = randomUUID();
  * E2E test suite for session stop, final cost calculation, and PDF receipt generation.
  * Tests the complete flow: stop session → verify final cost → download PDF receipt → verify content.
  */
+/** Run-unique user identity so leftovers from crashed or concurrent runs never collide. */
+const RUN_SUFFIX = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+const TEST_PHONE_UNIQUE = `+374${RUN_SUFFIX.slice(-8)}`;
+
 describe('SessionStop and Receipt (E2E) - Session Stop, Cost, and PDF Receipt', () => {
   let app: NestFastifyApplication;
   let prismaService: PrismaService;
+  let authHeaders: Record<string, string>;
+  let arcaMockServer: Server;
 
   beforeAll(async () => {
     process.env.DATABASE_URL =
@@ -35,6 +44,19 @@ describe('SessionStop and Receipt (E2E) - Session Stop, Cost, and PDF Receipt', 
     process.env.MINIMUM_SESSION_BALANCE_AMD = '1000';
     process.env.ARCA_API_KEY = 'test-arca-api-key';
     process.env.ARCA_MERCHANT_ID = 'test-merchant-id';
+
+    // Stopping a session captures the seeded ArCa pre-authorization over real HTTP, so the
+    // suite hosts a local gateway stub that approves every capture/refund request.
+    arcaMockServer = createServer((request, response) => {
+      const status = request.url?.includes('/refund') === true ? 'REFUNDED' : 'CAPTURED';
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ status, transactionId: `arca-mock-${Date.now()}` }));
+    });
+    await new Promise<void>((resolve) => {
+      arcaMockServer.listen(0, '127.0.0.1', () => resolve());
+    });
+    const arcaAddress = arcaMockServer.address() as AddressInfo;
+    process.env.ARCA_BASE_URL = `http://127.0.0.1:${arcaAddress.port}`;
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -58,12 +80,24 @@ describe('SessionStop and Receipt (E2E) - Session Stop, Cost, and PDF Receipt', 
 
     prismaService = moduleFixture.get<PrismaService>(PrismaService);
 
+    // Every route below sits behind the global JwtAuthGuard + IdorGuard, so requests must carry
+    // an access token whose sub matches the :userId path parameter.
+    const jwtService = moduleFixture.get<JwtService>(JwtService);
+    const accessToken = await jwtService.signAsync(
+      { sub: TEST_USER_ID, email: 'stop-receipt-e2e@lilocharge.am', tokenType: 'access' },
+      { secret: process.env.JWT_SECRET, expiresIn: '1h' },
+    );
+    authHeaders = { authorization: `Bearer ${accessToken}` };
+
     // Note: Server URL not used in tests as app.inject() is used directly
   }, 30000);
 
   afterAll(async () => {
     await cleanupTestData();
     await app.close();
+    await new Promise<void>((resolve) => {
+      arcaMockServer.close(() => resolve());
+    });
   });
 
   beforeEach(async () => {
@@ -112,9 +146,9 @@ describe('SessionStop and Receipt (E2E) - Session Stop, Cost, and PDF Receipt', 
     await prismaService.user.create({
       data: {
         id: TEST_USER_ID,
-        email: 'test-session-stop@example.com',
+        email: `stop-receipt-${RUN_SUFFIX}@lilocharge.am`,
         displayName: 'Test Session User',
-        phone: '+37412345678',
+        phone: TEST_PHONE_UNIQUE,
         passwordHash: '$2b$12$dummyhashdummyhashdummyhashdummyhashdummyhash',
         language: 'HY' as never,
       },
@@ -232,6 +266,7 @@ describe('SessionStop and Receipt (E2E) - Session Stop, Cost, and PDF Receipt', 
     const stopResponse = await app.inject({
       method: 'POST',
       url: `/users/${TEST_USER_ID}/sessions/${TEST_SESSION_ID}/stop`,
+      headers: authHeaders,
       payload: {
         endedAt: endTime.toISOString(),
       },
@@ -308,6 +343,7 @@ describe('SessionStop and Receipt (E2E) - Session Stop, Cost, and PDF Receipt', 
     const receiptResponse = await app.inject({
       method: 'GET',
       url: `/users/${TEST_USER_ID}/sessions/${TEST_SESSION_ID}/receipt`,
+      headers: authHeaders,
     });
 
     expect(receiptResponse.statusCode).toBe(200);
@@ -363,6 +399,7 @@ describe('SessionStop and Receipt (E2E) - Session Stop, Cost, and PDF Receipt', 
     const receiptResponse = await app.inject({
       method: 'GET',
       url: `/users/${TEST_USER_ID}/sessions/${TEST_SESSION_ID}/receipt`,
+      headers: authHeaders,
     });
 
     expect(receiptResponse.statusCode).toBe(200);
@@ -411,6 +448,7 @@ describe('SessionStop and Receipt (E2E) - Session Stop, Cost, and PDF Receipt', 
     const receiptResponse = await app.inject({
       method: 'GET',
       url: `/users/${TEST_USER_ID}/sessions/${TEST_SESSION_ID}/receipt`,
+      headers: authHeaders,
     });
 
     expect(receiptResponse.statusCode).toBe(400);
@@ -430,6 +468,7 @@ describe('SessionStop and Receipt (E2E) - Session Stop, Cost, and PDF Receipt', 
     const receiptResponse = await app.inject({
       method: 'GET',
       url: `/users/${TEST_USER_ID}/sessions/${nonExistentSessionId}/receipt`,
+      headers: authHeaders,
     });
 
     expect(receiptResponse.statusCode).toBe(404);
@@ -464,6 +503,7 @@ describe('SessionStop and Receipt (E2E) - Session Stop, Cost, and PDF Receipt', 
     const stopResponse = await app.inject({
       method: 'POST',
       url: `/users/${TEST_USER_ID}/sessions/${TEST_SESSION_ID}/stop`,
+      headers: authHeaders,
       payload: {
         endedAt: invalidEndTime.toISOString(),
       },
@@ -517,6 +557,7 @@ describe('SessionStop and Receipt (E2E) - Session Stop, Cost, and PDF Receipt', 
     const stopResponse = await app.inject({
       method: 'POST',
       url: `/users/${TEST_USER_ID}/sessions/${TEST_SESSION_ID}/stop`,
+      headers: authHeaders,
       payload: {
         endedAt: endTime.toISOString(),
       },
@@ -535,6 +576,7 @@ describe('SessionStop and Receipt (E2E) - Session Stop, Cost, and PDF Receipt', 
     const receiptResponse = await app.inject({
       method: 'GET',
       url: `/users/${TEST_USER_ID}/sessions/${TEST_SESSION_ID}/receipt`,
+      headers: authHeaders,
     });
 
     expect(receiptResponse.statusCode).toBe(200);

@@ -4,6 +4,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { JwtService } from '@nestjs/jwt';
+import { ThrottlerStorage } from '@nestjs/throttler';
 
 import { AppModule } from '../app.module';
 import { HttpExceptionFilter } from '../common/filters/http-exception.filter';
@@ -52,9 +53,27 @@ describe('AuthController (E2E) - User Registration Flow', () => {
     process.env.AUTH_OTP_TTL_SECONDS = '300';
     process.env.AUTH_REFRESH_SESSION_TTL_SECONDS = '604800';
 
+    // The suite issues more than 5 OTP requests overall, which would trip the production
+    // @Throttle budget on POST /auth/otp/request (5 requests / 5 min / IP) purely because all
+    // tests share one in-memory throttle counter and one loopback IP. The production throttler
+    // configuration stays untouched; only the counting storage is replaced with a permissive
+    // stub so every request is observed as the first hit within its window.
+    const permissiveThrottlerStorage: ThrottlerStorage = {
+      increment: () =>
+        Promise.resolve({
+          totalHits: 1,
+          timeToExpire: 0,
+          isBlocked: false,
+          timeToBlockExpire: 0,
+        }),
+    };
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(ThrottlerStorage)
+      .useValue(permissiveThrottlerStorage)
+      .compile();
 
     app = moduleFixture.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
 

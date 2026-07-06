@@ -1,0 +1,69 @@
+# LiloCharge e2e test stack.
+#
+# Purpose-built for `pnpm test:e2e` in apps/api: an isolated Postgres (TimescaleDB + PostGIS)
+# and Redis on non-default host ports so the stack can run alongside the dev stack from
+# docker-compose.yml. Data is intentionally not persisted between runs (no named volumes) —
+# every `up` starts from a clean database.
+#
+# Usage (from the repository root):
+#   1. Start the stack:
+#        docker compose -f infrastructure/docker/docker-compose.test.yml up -d --wait
+#   2. Apply the schema to the test database:
+#        cd apps/api
+#        DATABASE_URL='postgresql://lilocharge:lilocharge_dev_password@localhost:5437/lilocharge_test' \
+#          npx prisma migrate deploy   # or `npx prisma db push` for a schema-only sync
+#   3. Run the e2e suites (serial by design):
+#        pnpm test:e2e
+#   4. Tear down:
+#        docker compose -f infrastructure/docker/docker-compose.test.yml down
+#
+# The e2e suites hardcode these endpoints:
+#   DATABASE_URL postgresql://lilocharge:lilocharge_dev_password@localhost:5437/lilocharge_test
+#   REDIS_URL    redis://localhost:6382
+
+name: lilocharge-test-infra
+
+services:
+  postgres-test:
+    image: timescale/timescaledb-ha:pg16
+    container_name: lilocharge-postgres-test
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_TEST_DB:-lilocharge_test}
+      POSTGRES_USER: ${POSTGRES_TEST_USER:-lilocharge}
+      POSTGRES_PASSWORD: ${POSTGRES_TEST_PASSWORD:-lilocharge_dev_password}
+      TZ: ${TZ:-Asia/Yerevan}
+    ports:
+      - '${POSTGRES_TEST_PORT:-5437}:5432'
+    volumes:
+      # Same init scripts as the dev stack so postgis/timescaledb/pg_trgm/pgcrypto exist.
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - lilocharge-test-network
+
+  redis-test:
+    image: redis:7-alpine
+    container_name: lilocharge-redis-test
+    restart: unless-stopped
+    # No persistence: e2e runs always start from an empty Redis.
+    command: ['redis-server', '--save', '']
+    ports:
+      - '${REDIS_TEST_PORT:-6382}:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - lilocharge-test-network
+
+networks:
+  lilocharge-test-network:
+    name: lilocharge-test-network

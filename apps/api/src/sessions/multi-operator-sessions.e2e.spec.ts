@@ -32,6 +32,10 @@ const EVAN_PRICING_PLAN_ID = '14141414-1414-1414-1414-141414141414';
  * E2E test suite for multi-operator session simulation.
  * Tests the complete flow of charging sessions across 3+ different operators in sequence.
  */
+/** Run-unique user identity so leftovers from crashed or concurrent runs never collide. */
+const RUN_SUFFIX = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+const TEST_PHONE_UNIQUE = `+374${RUN_SUFFIX.slice(-8)}`;
+
 describe('Multi-Operator Sessions (E2E) - Session Lifecycle Across Different Operators', () => {
   let app: NestFastifyApplication;
   let prismaService: PrismaService;
@@ -157,8 +161,8 @@ describe('Multi-Operator Sessions (E2E) - Session Lifecycle Across Different Ope
     await prismaService.user.create({
       data: {
         id: TEST_USER_ID,
-        email: 'multiop-test@lilocharge.am',
-        phone: '+37477999888',
+        email: `multiop-${RUN_SUFFIX}@lilocharge.am`,
+        phone: TEST_PHONE_UNIQUE,
         displayName: 'Multi-Operator Test User',
         passwordHash: '$2b$12$test.hash.for.multi.operator.testing',
         language: 'HY',

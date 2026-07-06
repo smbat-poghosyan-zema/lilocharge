@@ -15,6 +15,7 @@ import { RPCClient } from 'ocpp-rpc';
 import { AppModule } from '../app.module';
 import { HttpExceptionFilter } from '../common/filters/http-exception.filter';
 import { PrismaService } from '../prisma/prisma.service';
+import { OcppIdTagService } from './ocpp.id-tag.service';
 import { OcppRegistryService } from './ocpp.registry.service';
 import { OcppRemoteStartService } from './ocpp.remote-start.service';
 import { OcppRemoteStopService } from './ocpp.remote-stop.service';
@@ -46,10 +47,15 @@ const OCPP_SERVER_HOST = '127.0.0.1';
  * 3. Seed database with matching station/connector records
  * 4. Run: pnpm test ocpp-compatibility.e2e.spec.ts
  */
+/** Run-unique user identity so leftovers from crashed or concurrent runs never collide. */
+const RUN_SUFFIX = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+const TEST_PHONE_UNIQUE = `+374${RUN_SUFFIX.slice(-8)}`;
+
 describe('OCPP 1.6-J Compatibility (E2E) - Charge Point Communication', () => {
   let app: NestFastifyApplication;
   let prismaService: PrismaService;
   let registryService: OcppRegistryService;
+  let idTagService: OcppIdTagService;
   let remoteStartService: OcppRemoteStartService;
   let remoteStopService: OcppRemoteStopService;
   let ocppClient: RPCClient | null = null;
@@ -85,6 +91,7 @@ describe('OCPP 1.6-J Compatibility (E2E) - Charge Point Communication', () => {
 
     prismaService = moduleFixture.get<PrismaService>(PrismaService);
     registryService = moduleFixture.get<OcppRegistryService>(OcppRegistryService);
+    idTagService = moduleFixture.get<OcppIdTagService>(OcppIdTagService);
     remoteStartService = moduleFixture.get<OcppRemoteStartService>(OcppRemoteStartService);
     remoteStopService = moduleFixture.get<OcppRemoteStopService>(OcppRemoteStopService);
 
@@ -149,7 +156,7 @@ describe('OCPP 1.6-J Compatibility (E2E) - Charge Point Communication', () => {
         id: TEST_USER_ID,
         email: `test-ocpp-${Date.now()}@lilocharge.am`,
         passwordHash: '$2b$12$abcdefghijklmnopqrstuv',
-        phone: '+37412345678',
+        phone: TEST_PHONE_UNIQUE,
         displayName: 'OCPP Test User',
         language: 'HY',
         pushNotificationsEnabled: true,
@@ -167,7 +174,9 @@ describe('OCPP 1.6-J Compatibility (E2E) - Charge Point Communication', () => {
         city: 'Yerevan',
         latitude: 40.1776,
         longitude: 44.5126,
-        operatorId: 'operator-test',
+        // The OCPP services resolve connectors scoped to station.operatorId === charge point
+        // identity, so the seeded station must be owned by the simulated charge point.
+        operatorId: TEST_CHARGE_POINT_ID,
         operatorName: 'Test Operator',
         status: 'AVAILABLE',
         createdAt: new Date('2026-02-17T08:00:00.000Z'),
@@ -214,15 +223,22 @@ describe('OCPP 1.6-J Compatibility (E2E) - Charge Point Communication', () => {
       identity: chargePointId,
       protocols: ['ocpp1.6'],
       strictMode: true,
+      // Reconnection is disabled so a refused/never-established connection surfaces as an
+      // error instead of the client silently retrying until the jest timeout.
+      reconnect: false,
     });
 
-    await new Promise<void>((resolve, reject) => {
-      client.on('open', () => resolve());
-      client.on('error', (error: Error) => reject(error));
-
-      // Timeout after 5 seconds
-      setTimeout(() => reject(new Error('OCPP client connection timeout')), 5000);
+    // RPCClient does not connect on construction; connect() resolves once the WebSocket
+    // handshake (including subprotocol negotiation and server-side auth) completes.
+    const connectTimeout = new Promise<never>((_, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error('OCPP client connection timeout')),
+        5000,
+      );
+      timer.unref();
     });
+
+    await Promise.race([client.connect(), connectTimeout]);
 
     return client;
   }
@@ -563,7 +579,7 @@ describe('OCPP 1.6-J Compatibility (E2E) - Charge Point Communication', () => {
     it('starts transaction and returns Accepted status with transaction ID', async () => {
       const response = (await ocppClient!.call(OcppAction.START_TRANSACTION, {
         connectorId: TEST_CONNECTOR_ID_OCPP,
-        idTag: TEST_USER_ID,
+        idTag: await idTagService.issueIdTag(TEST_USER_ID),
         meterStart: 0,
         timestamp: new Date().toISOString(),
       })) as OcppStartTransactionResponse;
@@ -588,7 +604,7 @@ describe('OCPP 1.6-J Compatibility (E2E) - Charge Point Communication', () => {
       // Start transaction
       const startResponse = (await ocppClient!.call(OcppAction.START_TRANSACTION, {
         connectorId: TEST_CONNECTOR_ID_OCPP,
-        idTag: TEST_USER_ID,
+        idTag: await idTagService.issueIdTag(TEST_USER_ID),
         meterStart: 1000,
         timestamp: new Date().toISOString(),
       })) as OcppStartTransactionResponse;
@@ -625,7 +641,7 @@ describe('OCPP 1.6-J Compatibility (E2E) - Charge Point Communication', () => {
       // Stop transaction
       const stopResponse = (await ocppClient!.call(OcppAction.STOP_TRANSACTION, {
         transactionId,
-        idTag: TEST_USER_ID,
+        idTag: await idTagService.issueIdTag(TEST_USER_ID),
         meterStop: 6000,
         timestamp: new Date().toISOString(),
         reason: 'Local',
@@ -684,11 +700,12 @@ describe('OCPP 1.6-J Compatibility (E2E) - Charge Point Communication', () => {
         return Promise.resolve({ status: 'Accepted' });
       });
 
+      const issuedIdTag = await idTagService.issueIdTag(TEST_USER_ID);
       const response = await remoteStartService.remoteStartTransaction({
         chargePointId: TEST_CHARGE_POINT_ID,
         payload: {
           connectorId: TEST_CONNECTOR_ID_OCPP,
-          idTag: TEST_USER_ID,
+          idTag: issuedIdTag,
         },
       });
 
@@ -696,7 +713,7 @@ describe('OCPP 1.6-J Compatibility (E2E) - Charge Point Communication', () => {
       expect(remoteStartReceived).toBe(true);
       expect(remoteStartPayload).toEqual({
         connectorId: TEST_CONNECTOR_ID_OCPP,
-        idTag: TEST_USER_ID,
+        idTag: issuedIdTag,
       });
     });
 
@@ -704,7 +721,7 @@ describe('OCPP 1.6-J Compatibility (E2E) - Charge Point Communication', () => {
       // First start a transaction
       const startResponse = (await ocppClient!.call(OcppAction.START_TRANSACTION, {
         connectorId: TEST_CONNECTOR_ID_OCPP,
-        idTag: TEST_USER_ID,
+        idTag: await idTagService.issueIdTag(TEST_USER_ID),
         meterStart: 0,
         timestamp: new Date().toISOString(),
       })) as OcppStartTransactionResponse;
@@ -743,7 +760,7 @@ describe('OCPP 1.6-J Compatibility (E2E) - Charge Point Communication', () => {
         chargePointId: TEST_CHARGE_POINT_ID,
         payload: {
           connectorId: TEST_CONNECTOR_ID_OCPP,
-          idTag: TEST_USER_ID,
+          idTag: await idTagService.issueIdTag(TEST_USER_ID),
         },
       });
 
@@ -760,10 +777,16 @@ describe('OCPP 1.6-J Compatibility (E2E) - Charge Point Communication', () => {
       await ocppClient.close();
       ocppClient = null;
 
-      // Allow time for disconnect event processing
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Registry removal is event-driven; poll briefly instead of relying on one fixed delay.
+      const deadline = Date.now() + 3000;
+      while (
+        registryService.getChargePoint(TEST_CHARGE_POINT_ID) !== null &&
+        Date.now() < deadline
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
 
-      expect(registryService.getChargePoint(TEST_CHARGE_POINT_ID)).toBeUndefined();
+      expect(registryService.getChargePoint(TEST_CHARGE_POINT_ID)).toBeNull();
     });
 
     it('handles reconnection after disconnect', async () => {
