@@ -6,13 +6,17 @@ Derived from [AUDIT-REPORT.md](AUDIT-REPORT.md) (2026-07-02). Every NOT DONE and
 **Effort:** S ≤ 1 day · M = 1–5 days · L > 1 week.
 **Category:** fix (defect in existing code) / refactor / implement (missing feature) / test.
 
-> **Status update (2026-07-04):** All eight P0 tasks are implemented on `claude/lilocharge-audit-58jj4m`
-> (commits `ff08519`…`ffe8587`). Verified: API 70 suites / 495 unit tests + live sessions e2e green,
-> mobile 50 suites / 357 tests green, tsc and eslint clean in both apps, `prisma migrate deploy`
-> verified against a fresh database. Remaining caveats now tracked in P1: charger-inbound
-> `StartTransaction` still creates a separate session row instead of linking to the API-created
-> session (reconcile with #15's tracked-remote-start work), and refresh-token rotation on mobile
-> is still out of scope (#3 wired access-token attach + 401 sign-out only).
+> **Status update (2026-07-06):** All eight P0 tasks AND all P1 tasks (#9-#28) are implemented on
+> `claude/lilocharge-audit-58jj4m` (P0: `ff08519`…`ffe8587`; P1: `7200fd2`…`576f4fd`).
+> Verified: API 80 suites / 608 unit tests green, **all 5 e2e suites 47/47 green in a single run**
+> (previously 14/47 with three suites broken since inception), mobile 65 suites / 496 tests green,
+> tsc and eslint clean everywhere. The e2e resurrection surfaced and fixed two real product bugs:
+> OCPP idTags exceeded the protocol's 20-char limit (now short Redis-mapped tokens), and stop
+> billing ignored meterStop-meterStart registers (now authoritative, fixing under-billing).
+> Still open (candidates for P2 hardening): refresh-token rotation on mobile (401 signs out),
+> charger-inbound StartTransaction linking to API-created sessions, an offline-session watchdog
+> (disconnects are logged, not auto-failed), and real gateway sandbox verification (webhook
+> signature scheme is a documented adaptation point).
 
 ---
 
@@ -29,7 +33,7 @@ Derived from [AUDIT-REPORT.md](AUDIT-REPORT.md) (2026-07-02). Every NOT DONE and
 | 7 | **Fix the API typecheck failure**: `mapNearbyStationRawRowToResponse` omits `connectorCount`/`maxPowerKw` required by `StationNearbyResponse` (the nearby API response actually lacks the fields the 3-layer map pins consume). `tsc` is red on production code while jest is green. | fix | `apps/api/src/stations/stations.service.ts:253-266`, `stations.service.spec.ts:382` | S |
 | 8 | **Integrate an SMS provider for OTP delivery** — `requestPhoneOtp` stores the code in Redis and returns "OTP sent successfully" without sending anything; phone registration is unusable in production. | implement | `apps/api/src/auth/auth.service.ts:54-72`, new SMS client module | M |
 
-## P1 — money path, security, broken tests, missing product surface
+## P1 — money path, security, broken tests, missing product surface — ✅ done
 
 | # | Task | Category | Affected files | Effort |
 |---|---|---|---|---|
