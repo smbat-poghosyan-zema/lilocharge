@@ -135,7 +135,11 @@ jobs:
   deploy:
     name: Trigger Backend Deployment
     needs: [test, e2e]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.BACKEND_DEPLOY_WEBHOOK_URL != ''
+    # NOTE: the `secrets` context is NOT valid in a job-level `if:` — referencing
+    # secrets.BACKEND_DEPLOY_WEBHOOK_URL here made the whole workflow error on every
+    # push to main. Gate on the event/ref only; the presence of the webhook URL is
+    # checked in the step below (secrets are only readable inside steps/env).
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     env:
       BACKEND_DEPLOY_WEBHOOK_TOKEN: ${{ secrets.BACKEND_DEPLOY_WEBHOOK_TOKEN }}
@@ -143,6 +147,10 @@ jobs:
     steps:
       - name: Call backend deployment webhook
         run: |
+          if [ -z "${BACKEND_DEPLOY_WEBHOOK_URL}" ]; then
+            echo "BACKEND_DEPLOY_WEBHOOK_URL is not configured; skipping deployment trigger."
+            exit 0
+          fi
           if [ -n "${BACKEND_DEPLOY_WEBHOOK_TOKEN}" ]; then
             curl --fail --show-error --silent \
               -X POST \

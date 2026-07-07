@@ -43,7 +43,14 @@ spec:
             - |
               echo "Running Prisma migrations..."
               cd /app/apps/api
-              npx prisma migrate deploy
+              # Use the pinned Prisma CLI baked into the image (npm install -g
+              # prisma@5.x in apps/api/Dockerfile), NOT `npx prisma`, which would
+              # download the latest major (v6) at runtime and mismatch @prisma/client v5.
+              # For a pre-existing (non-empty) database that predates Prisma's
+              # migration history, baseline it first so `migrate deploy` does not
+              # P3005 — see docs/DEPLOYMENT.md §7:
+              #   prisma migrate resolve --applied 20260217150000_init
+              prisma migrate deploy
               echo "Migrations completed successfully."
           env:
             - name: POSTGRES_HOST

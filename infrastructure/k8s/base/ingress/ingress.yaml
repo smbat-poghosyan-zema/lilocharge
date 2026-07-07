@@ -57,3 +57,97 @@ spec:
                 name: api
                 port:
                   number: 3000
+---
+# Socket.IO session-monitoring WebSocket (mobile clients).
+# The gateway lives on the HTTP port (3000) at /socket.io/, but WebSockets are
+# long-lived: the default 60s proxy-read/send timeout on the REST ingress above
+# would drop idle monitoring sockets. A separate Ingress lets nginx apply long
+# WS timeouts + cookie affinity to just this path (nginx merges Ingresses that
+# share a host). Affinity keeps a client pinned to the replica holding its socket.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lilocharge-ws-ingress
+  namespace: lilocharge
+  labels:
+    app.kubernetes.io/name: ingress
+    app.kubernetes.io/component: networking
+    app.kubernetes.io/part-of: lilocharge
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    cert-manager.io/acme-challenge-type: http01
+    nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+    nginx.ingress.kubernetes.io/force-ssl-redirect: 'true'
+    # Long-lived WebSocket timeouts (1h).
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: '60'
+    nginx.ingress.kubernetes.io/proxy-send-timeout: '3600'
+    nginx.ingress.kubernetes.io/proxy-read-timeout: '3600'
+    # Sticky sessions so a monitoring client stays on the replica holding its socket.
+    nginx.ingress.kubernetes.io/affinity: 'cookie'
+    nginx.ingress.kubernetes.io/affinity-mode: 'persistent'
+    nginx.ingress.kubernetes.io/session-cookie-name: 'lilocharge-ws-affinity'
+spec:
+  tls:
+    - hosts:
+        - api.lilocharge.am
+      secretName: lilocharge-tls-cert
+  rules:
+    - host: api.lilocharge.am
+      http:
+        paths:
+          - path: /socket.io
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 3000
+---
+# OCPP 1.6-J / 2.0.1 central-system WebSocket entrypoint for charge points.
+# Charge points open a persistent wss:// connection to exactly one replica and
+# remote commands must be issued from that same replica; only remote-start
+# correlation is shared via Redis. We therefore pin each charge point to a stable
+# replica by hashing the request URI (the chargePointId is in the ws path), which
+# works for non-browser OCPP clients that don't honour affinity cookies.
+# Charge points that can only speak plain ws:// (no TLS) cannot use this HTTPS
+# ingress — expose a dedicated LoadBalancer Service on 9220 for them instead
+# (see docs/DEPLOYMENT.md, "OCPP charge-point connectivity").
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lilocharge-ocpp-ingress
+  namespace: lilocharge
+  labels:
+    app.kubernetes.io/name: ingress
+    app.kubernetes.io/component: networking
+    app.kubernetes.io/part-of: lilocharge
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    cert-manager.io/acme-challenge-type: http01
+    nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+    nginx.ingress.kubernetes.io/force-ssl-redirect: 'true'
+    # Long-lived WebSocket timeouts (1h) so idle charge-point sockets survive.
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: '60'
+    nginx.ingress.kubernetes.io/proxy-send-timeout: '3600'
+    nginx.ingress.kubernetes.io/proxy-read-timeout: '3600'
+    # Pin each charge point to one replica by hashing its request URI (stable per
+    # chargePointId) — required because the OCPP session is held by a single replica.
+    nginx.ingress.kubernetes.io/upstream-hash-by: '$request_uri'
+spec:
+  tls:
+    - hosts:
+        - ocpp.lilocharge.am
+      secretName: lilocharge-ocpp-tls-cert
+  rules:
+    - host: ocpp.lilocharge.am
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 9220

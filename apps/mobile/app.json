@@ -6,7 +6,54 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "plugins": ["expo-router", "@rnmapbox/maps"],
+    "ios": {
+      "bundleIdentifier": "com.lilocharge.app",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "LiloCharge-ը օգտագործում է տեսախցիկը՝ լիցքակայանների QR կոդերը սկանավորելու և կարծիքների լուսանկարներ ավելացնելու համար։",
+        "NSPhotoLibraryUsageDescription": "LiloCharge-ը մուտք է գործում ձեր լուսանկարների գրադարան՝ կարծիքներին նկարներ կցելու համար։",
+        "NSLocationWhenInUseUsageDescription": "LiloCharge-ը օգտագործում է ձեր տեղադրությունը՝ մոտակա լիցքակայանները քարտեզի վրա ցույց տալու համար։",
+        "CFBundleLocalizations": ["hy", "en", "ru"]
+      }
+    },
+    "android": {
+      "package": "com.lilocharge.app",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsDownloadToken": "REPLACE_WITH_MAPBOX_DOWNLOAD_TOKEN"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "LiloCharge-ը օգտագործում է տեսախցիկը՝ լիցքակայանների QR կոդերը սկանավորելու և կարծիքների լուսանկարներ ավելացնելու համար։"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "LiloCharge-ը մուտք է գործում ձեր լուսանկարների գրադարան՝ կարծիքներին նկարներ կցելու համար։"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "LiloCharge-ը օգտագործում է ձեր տեղադրությունը՝ մոտակա լիցքակայանները քարտեզի վրա ցույց տալու համար։"
+        }
+      ],
+      "expo-notifications"
+    ],
     "experiments": {
       "typedRoutes": true
     },

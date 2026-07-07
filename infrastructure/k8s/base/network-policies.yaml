@@ -60,12 +60,22 @@ spec:
       ports:
         - protocol: UDP
           port: 53
-    # Allow external HTTPS (for payment gateways, etc.)
+    # Allow external HTTPS (for payment gateways, Twilio SMS, S3 uploads, FCM, etc.)
     - to:
         - namespaceSelector: {}
       ports:
         - protocol: TCP
           port: 443
+    # NOTE: this egress allows ONLY 443. If SMTP email delivery is enabled
+    # (SMTP_HOST/SMTP_PORT), add the SMTP submission port here or outbound mail
+    # is silently blocked. Uncomment the port your provider uses:
+    # - to:
+    #     - namespaceSelector: {}
+    #   ports:
+    #     - protocol: TCP
+    #       port: 587   # STARTTLS submission
+    #     - protocol: TCP
+    #       port: 465   # implicit TLS (SMTPS)
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

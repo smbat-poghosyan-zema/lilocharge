@@ -139,16 +139,39 @@ kubectl create secret generic redis-credentials \
   --from-literal=password=YOUR_REDIS_PASSWORD \
   -n lilocharge
 
-# API secrets
+# API secrets — the full set consumed by apps/api. Values that are REQUIRED in
+# production are marked; missing them causes the failures noted (login 500s,
+# payment-callback 503s, dead OTP/registration, dead uploads/push).
 kubectl create secret generic api-secrets \
   --from-literal=jwt-secret=YOUR_JWT_SECRET \
+  --from-literal=refresh-token-secret=YOUR_REFRESH_SECRET `# REQUIRED: login 500s without it` \
+  --from-literal=arca-api-key=YOUR_ARCA_API_KEY \
   --from-literal=arca-merchant-id=YOUR_ARCA_ID \
+  --from-literal=arca-webhook-secret=YOUR_ARCA_WEBHOOK_SECRET `# REQUIRED: ArCa callbacks 503 without it` \
   --from-literal=idram-api-key=YOUR_IDRAM_KEY \
-  --from-literal=mapbox-token=YOUR_MAPBOX_TOKEN \
-  --from-literal=fcm-server-key=YOUR_FCM_KEY \
+  --from-literal=idram-webhook-secret=YOUR_IDRAM_WEBHOOK_SECRET `# REQUIRED: Idram callbacks 503 without it` \
+  --from-literal=apple-pay-api-key=YOUR_APPLE_PAY_KEY \
+  --from-literal=google-pay-api-key=YOUR_GOOGLE_PAY_KEY \
+  --from-literal=twilio-account-sid=YOUR_TWILIO_SID `# REQUIRED in prod (SMS_ENABLED=true)` \
+  --from-literal=twilio-auth-token=YOUR_TWILIO_TOKEN \
+  --from-literal=sms-from-number=+374XXXXXXXX \
+  --from-literal=fcm-project-id=YOUR_FCM_PROJECT_ID `# Firebase Admin service account` \
+  --from-literal=fcm-client-email=YOUR_FCM_CLIENT_EMAIL \
+  --from-literal=fcm-private-key='YOUR_FCM_PRIVATE_KEY' `# \n-escaped PEM` \
+  --from-literal=uploads-s3-access-key-id=YOUR_S3_KEY_ID `# uploads 503 without S3 creds` \
+  --from-literal=uploads-s3-secret-access-key=YOUR_S3_SECRET \
+  --from-literal=ocpp-identity-secrets='{"chargePointId":"secret"}' `# OCPP_AUTH_MODE=basic` \
   --from-literal=sentry-dsn=YOUR_SENTRY_DSN \
   -n lilocharge
 ```
+
+> **Removed ghost secrets:** `mapbox-token` and `fcm-server-key` are no longer
+> created — the API code never reads them. Mapbox is used only by the mobile
+> app (`EXPO_PUBLIC_MAPBOX_TOKEN`), and push uses the Firebase Admin service
+> account (`fcm-*`) rather than the legacy FCM server key. Non-secret config
+> (`CORS_ORIGIN`, `SMS_ENABLED`, base URLs, `UPLOADS_S3_ENDPOINT/REGION/BUCKET`,
+> `FCM_ENABLED`, `MINIMUM_SESSION_BALANCE_AMD`, OTEL settings, etc.) lives in the
+> `api-config` ConfigMap (`infrastructure/k8s/base/configmap.yaml`), not here.
 
 #### Option C: Sealed Secrets (Recommended)
 
@@ -211,6 +234,26 @@ kubectl logs -n lilocharge job/prisma-migrate
 ./scripts/k8s-deploy.sh migrate
 ```
 
+The Job runs `prisma migrate deploy` using the **pinned Prisma CLI baked into
+the API image** (`npm install -g prisma@5.x` in `apps/api/Dockerfile`, kept in
+lockstep with `@prisma/client`). Do not switch it back to `npx prisma`, which
+would download the latest major (v6) at runtime and mismatch the v5 client.
+
+> **Pre-existing (non-empty) database:** `prisma migrate deploy` fails with
+> **P3005** ("database schema is not empty") when the target DB already has
+> tables but no `_prisma_migrations` history — e.g. a DB created with
+> `prisma db push` or restored from a dump. Baseline it once before the first
+> deploy so Prisma treats the initial migration as already applied:
+>
+> ```bash
+> # Run inside a pod/Job with DATABASE_URL set (from /app/apps/api):
+> prisma migrate resolve --applied 20260217150000_init
+> # Then re-run the migration Job; deploy will apply only the later migrations.
+> ```
+>
+> A brand-new empty database needs no baseline — `migrate deploy` applies every
+> migration from scratch.
+
 ### 8. Verify Deployment
 
 ```bash
@@ -232,7 +275,9 @@ Get the LoadBalancer IP:
 kubectl get svc -n ingress-nginx ingress-nginx-controller
 ```
 
-Create an A record pointing `api.lilocharge.am` to the LoadBalancer IP.
+Create A records pointing **both** `api.lilocharge.am` (REST + Socket.IO
+monitoring) **and** `ocpp.lilocharge.am` (OCPP charge-point WebSocket) to the
+LoadBalancer IP. See "OCPP charge-point connectivity" below.
 
 ### 10. Verify SSL Certificate
 
@@ -244,6 +289,83 @@ kubectl describe certificate lilocharge-tls-cert -n lilocharge
 # Test HTTPS
 curl -v https://api.lilocharge.am/health
 ```
+
+## OCPP charge-point connectivity
+
+Charge points hold a **persistent WebSocket** to the central system on container
+port **9220** (OCPP 1.6-J / 2.0.1). The session is owned by a single API replica
+and remote commands must be issued from that same replica (only remote-start
+correlation is shared via Redis), so the connection must be **pinned to one
+replica** for its lifetime.
+
+Two entrypoints are provided:
+
+1. **wss:// via ingress (default).** `infrastructure/k8s/base/ingress/ingress.yaml`
+   adds a dedicated `ocpp.lilocharge.am` Ingress that routes to the `api` Service
+   on port 9220 with:
+   - `nginx.ingress.kubernetes.io/upstream-hash-by: $request_uri` — pins each
+     charge point to a stable replica by hashing its ws URL (which carries the
+     chargePointId). Cookie affinity is unsuitable here because OCPP clients are
+     not browsers.
+   - `proxy-read-timeout`/`proxy-send-timeout: 3600` — the default 60s would drop
+     idle charge-point sockets.
+   - cert-manager TLS (`ocpp.lilocharge.am` → `lilocharge-ocpp-tls-cert`).
+
+   Point charge points at `wss://ocpp.lilocharge.am/<ocpp-path>`.
+
+2. **Plain ws:// via a dedicated LoadBalancer (fallback).** Charge points that
+   cannot do TLS cannot use the HTTPS ingress (it force-redirects to 443). For
+   those, expose the OCPP port directly with a LoadBalancer Service and document
+   it as the OCPP entrypoint, e.g.:
+
+   ```yaml
+   apiVersion: v1
+   kind: Service
+   metadata:
+     name: ocpp-lb
+     namespace: lilocharge
+     labels:
+       app.kubernetes.io/name: api
+       app.kubernetes.io/part-of: lilocharge
+     annotations:
+       service.beta.kubernetes.io/aws-load-balancer-type: nlb   # cloud-specific
+   spec:
+     type: LoadBalancer
+     externalTrafficPolicy: Local
+     sessionAffinity: ClientIP        # pin a charge point to one replica
+     sessionAffinityConfig:
+       clientIP:
+         timeoutSeconds: 10800
+     selector:
+       app.kubernetes.io/name: api
+     ports:
+       - name: ocpp
+         port: 9220
+         targetPort: ocpp
+   ```
+
+   Prefer wss:// in production; use plain ws:// only on a trusted network.
+
+The **Socket.IO session-monitoring** gateway (mobile clients) is also a
+WebSocket, served on the HTTP port (3000) at `/socket.io/`. A separate
+`lilocharge-ws-ingress` applies the same 3600s WS timeouts and cookie-based
+sticky sessions to just that path, so live-session sockets are not dropped by the
+REST ingress's 60s timeout.
+
+> **Event-loop wedge caveat (see docs/load-test-results.md):** the API is a
+> single Node process and can enter a temporary event-loop wedge under sustained
+> CPU saturation (~2,000 rps on 1 vCPU). During a wedge the HTTP server may still
+> accept the TCP connection while never responding, so the `/health` **liveness
+> probe cannot reliably detect it** and won't restart the pod. Horizontal scaling
+> via the HPA (2–10 replicas, CPU@70% of a 1-vCPU request) is the intended
+> mitigation; a Node `cluster` or more vCPUs per pod would raise the single-pod
+> ceiling. The deployment CPU request was raised from 250m to 1000m so the HPA's
+> 70% target fires on real saturation (700m) rather than at ~175m.
+
+> **Email egress:** the API egress NetworkPolicy allows outbound **443 only**. If
+> SMTP email is enabled (`SMTP_HOST`/`SMTP_PORT`), outbound mail on 587/465 is
+> silently blocked — uncomment the SMTP egress ports in
+> `infrastructure/k8s/base/network-policies.yaml`.
 
 ## Post-Deployment
 

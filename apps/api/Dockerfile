@@ -44,6 +44,14 @@ COPY apps/api/prisma/ ./apps/api/prisma/
 
 RUN pnpm install --frozen-lockfile --prod
 
+# Ship a pinned Prisma CLI in the image for the migration Job
+# (infrastructure/k8s/jobs/migration-job.yaml runs `prisma migrate deploy`).
+# The `prisma` CLI is a devDependency, so a --prod install omits it; without a
+# pinned CLI here, `npx prisma` at runtime would fetch the latest major (v6),
+# which mismatches @prisma/client v5. Keep this version in lockstep with the
+# @prisma/client version in apps/api/package.json (currently 5.22.0).
+RUN npm install -g prisma@5.22.0
+
 # Copy built application
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/node_modules/.prisma ./apps/api/node_modules/.prisma
@@ -57,8 +65,8 @@ USER nodejs
 
 WORKDIR /app/apps/api
 
-# Expose ports
-EXPOSE 3000 9464
+# Expose ports: 3000 HTTP API, 9464 Prometheus metrics, 9220 OCPP WebSocket
+EXPOSE 3000 9464 9220
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \

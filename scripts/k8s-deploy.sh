@@ -111,16 +111,45 @@ create_secrets() {
     echo
     read -sp "Enter Redis password: " REDIS_PASSWORD
     echo
+    # ── Auth (both REQUIRED — the API 500s on every login without the refresh secret) ──
     read -sp "Enter JWT secret: " JWT_SECRET
     echo
+    read -sp "Enter refresh-token secret: " REFRESH_TOKEN_SECRET
+    echo
+    # ── Payments: ArCa / Idram (webhook secrets REQUIRED — callbacks 503 without them) ──
+    read -sp "Enter ArCa API key: " ARCA_API_KEY
+    echo
     read -p "Enter ArCa merchant ID: " ARCA_MERCHANT_ID
+    read -sp "Enter ArCa webhook secret: " ARCA_WEBHOOK_SECRET
+    echo
     read -sp "Enter Idram API key: " IDRAM_API_KEY
     echo
-    read -p "Enter Mapbox token: " MAPBOX_TOKEN
-    read -sp "Enter FCM server key: " FCM_SERVER_KEY
+    read -sp "Enter Idram webhook secret: " IDRAM_WEBHOOK_SECRET
     echo
+    # ── Payments: Apple Pay / Google Pay (optional) ──
+    read -sp "Enter Apple Pay API key (optional): " APPLE_PAY_API_KEY
+    echo
+    read -sp "Enter Google Pay API key (optional): " GOOGLE_PAY_API_KEY
+    echo
+    # ── SMS / OTP (REQUIRED in prod or phone registration is dead) ──
+    read -p "Enter Twilio account SID: " TWILIO_ACCOUNT_SID
+    read -sp "Enter Twilio auth token: " TWILIO_AUTH_TOKEN
+    echo
+    read -p "Enter SMS from number (e.g. +374...): " SMS_FROM_NUMBER
+    # ── Push notifications (Firebase Admin service account) ──
+    read -p "Enter FCM project ID: " FCM_PROJECT_ID
+    read -p "Enter FCM client email: " FCM_CLIENT_EMAIL
+    read -sp "Enter FCM private key (\\n-escaped PEM): " FCM_PRIVATE_KEY
+    echo
+    # ── Uploads (S3-compatible presigning; endpoints 503 without these) ──
+    read -p "Enter uploads S3 access key ID: " UPLOADS_S3_ACCESS_KEY_ID
+    read -sp "Enter uploads S3 secret access key: " UPLOADS_S3_SECRET_ACCESS_KEY
+    echo
+    # ── OCPP basic-auth identity map (JSON: {"chargePointId":"secret"}) ──
+    read -p "Enter OCPP identity secrets JSON: " OCPP_IDENTITY_SECRETS
+    # ── Observability ──
     read -p "Enter Sentry DSN (optional): " SENTRY_DSN
-    
+
     # Create PostgreSQL secret
     kubectl create secret generic postgres-credentials \
         --from-literal=username=lilocharge \
@@ -128,24 +157,37 @@ create_secrets() {
         --from-literal=database=lilocharge \
         -n lilocharge \
         --dry-run=client -o yaml | kubectl apply -f -
-    
+
     # Create Redis secret
     kubectl create secret generic redis-credentials \
         --from-literal=password="${REDIS_PASSWORD}" \
         -n lilocharge \
         --dry-run=client -o yaml | kubectl apply -f -
-    
+
     # Create API secrets
     kubectl create secret generic api-secrets \
         --from-literal=jwt-secret="${JWT_SECRET}" \
+        --from-literal=refresh-token-secret="${REFRESH_TOKEN_SECRET}" \
+        --from-literal=arca-api-key="${ARCA_API_KEY}" \
         --from-literal=arca-merchant-id="${ARCA_MERCHANT_ID}" \
+        --from-literal=arca-webhook-secret="${ARCA_WEBHOOK_SECRET}" \
         --from-literal=idram-api-key="${IDRAM_API_KEY}" \
-        --from-literal=mapbox-token="${MAPBOX_TOKEN}" \
-        --from-literal=fcm-server-key="${FCM_SERVER_KEY}" \
+        --from-literal=idram-webhook-secret="${IDRAM_WEBHOOK_SECRET}" \
+        --from-literal=apple-pay-api-key="${APPLE_PAY_API_KEY}" \
+        --from-literal=google-pay-api-key="${GOOGLE_PAY_API_KEY}" \
+        --from-literal=twilio-account-sid="${TWILIO_ACCOUNT_SID}" \
+        --from-literal=twilio-auth-token="${TWILIO_AUTH_TOKEN}" \
+        --from-literal=sms-from-number="${SMS_FROM_NUMBER}" \
+        --from-literal=fcm-project-id="${FCM_PROJECT_ID}" \
+        --from-literal=fcm-client-email="${FCM_CLIENT_EMAIL}" \
+        --from-literal=fcm-private-key="${FCM_PRIVATE_KEY}" \
+        --from-literal=uploads-s3-access-key-id="${UPLOADS_S3_ACCESS_KEY_ID}" \
+        --from-literal=uploads-s3-secret-access-key="${UPLOADS_S3_SECRET_ACCESS_KEY}" \
+        --from-literal=ocpp-identity-secrets="${OCPP_IDENTITY_SECRETS}" \
         --from-literal=sentry-dsn="${SENTRY_DSN}" \
         -n lilocharge \
         --dry-run=client -o yaml | kubectl apply -f -
-    
+
     log_info "Secrets created successfully."
 }
 

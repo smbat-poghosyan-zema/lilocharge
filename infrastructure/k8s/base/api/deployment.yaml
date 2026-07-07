@@ -142,6 +142,143 @@ spec:
                 configMapKeyRef:
                   name: api-config
                   key: OTEL_METRICS_PORT
+            - name: OTEL_TRACES_EXPORTER
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: OTEL_TRACES_EXPORTER
+            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+                  optional: true
+
+            # Application / server
+            - name: PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: PORT
+            - name: APP_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: APP_NAME
+            - name: APP_VERSION
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: APP_VERSION
+
+            # CORS
+            - name: CORS_ORIGIN
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: CORS_ORIGIN
+
+            # Auth token lifetimes (secrets are wired further below)
+            - name: JWT_EXPIRY
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: JWT_EXPIRY
+            - name: REFRESH_TOKEN_EXPIRY
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: REFRESH_TOKEN_EXPIRY
+            - name: AUTH_OTP_TTL_SECONDS
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: AUTH_OTP_TTL_SECONDS
+            - name: AUTH_REFRESH_SESSION_TTL_SECONDS
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: AUTH_REFRESH_SESSION_TTL_SECONDS
+
+            # SMS / OTP delivery
+            - name: SMS_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: SMS_ENABLED
+            - name: SMS_API_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: SMS_API_BASE_URL
+
+            # Payments: base URLs / merchant identifiers (secrets below)
+            - name: ARCA_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: ARCA_BASE_URL
+            - name: IDRAM_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: IDRAM_BASE_URL
+            - name: APPLE_PAY_MERCHANT_IDENTIFIER
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: APPLE_PAY_MERCHANT_IDENTIFIER
+            - name: APPLE_PAY_TOKEN_EXCHANGE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: APPLE_PAY_TOKEN_EXCHANGE_URL
+            - name: GOOGLE_PAY_MERCHANT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: GOOGLE_PAY_MERCHANT_ID
+            - name: GOOGLE_PAY_TOKEN_EXCHANGE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: GOOGLE_PAY_TOKEN_EXCHANGE_URL
+
+            # Uploads (S3-compatible presigning)
+            - name: UPLOADS_S3_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: UPLOADS_S3_ENDPOINT
+            - name: UPLOADS_S3_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: UPLOADS_S3_REGION
+            - name: UPLOADS_S3_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: UPLOADS_S3_BUCKET
+            - name: UPLOADS_PUBLIC_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: UPLOADS_PUBLIC_BASE_URL
+
+            # Push notifications
+            - name: FCM_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: FCM_ENABLED
+
+            # Sessions / billing
+            - name: MINIMUM_SESSION_BALANCE_AMD
+              valueFrom:
+                configMapKeyRef:
+                  name: api-config
+                  key: MINIMUM_SESSION_BALANCE_AMD
 
             # OCPP central-system WebSocket server
             - name: OCPP_WS_ENABLED
@@ -220,44 +357,128 @@ spec:
             - name: REDIS_URL
               value: 'redis://:$(REDIS_PASSWORD)@$(REDIS_HOST):$(REDIS_PORT)'
 
-            # Application secrets
+            # Application secrets (auth)
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
                   name: api-secrets
                   key: jwt-secret
+            # REQUIRED: the API returns 500 on every login when this is unset.
+            - name: REFRESH_TOKEN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: refresh-token-secret
+
+            # Payments: ArCa / Idram (API keys, merchant id, webhook secrets).
+            # The webhook secrets are REQUIRED — payment callbacks 503 without them.
+            - name: ARCA_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: arca-api-key
             - name: ARCA_MERCHANT_ID
               valueFrom:
                 secretKeyRef:
                   name: api-secrets
                   key: arca-merchant-id
+            - name: ARCA_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: arca-webhook-secret
             - name: IDRAM_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: api-secrets
                   key: idram-api-key
-            - name: MAPBOX_TOKEN
+            - name: IDRAM_WEBHOOK_SECRET
               valueFrom:
                 secretKeyRef:
                   name: api-secrets
-                  key: mapbox-token
-            - name: FCM_SERVER_KEY
+                  key: idram-webhook-secret
+
+            # Payments: Apple Pay / Google Pay API keys (optional per gateway).
+            - name: APPLE_PAY_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: api-secrets
-                  key: fcm-server-key
+                  key: apple-pay-api-key
+                  optional: true
+            - name: GOOGLE_PAY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: google-pay-api-key
+                  optional: true
+
+            # SMS / OTP (Twilio-compatible). Required in prod when SMS_ENABLED=true.
+            - name: TWILIO_ACCOUNT_SID
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: twilio-account-sid
+            - name: TWILIO_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: twilio-auth-token
+            - name: SMS_FROM_NUMBER
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: sms-from-number
+
+            # Push notifications (Firebase Admin service account).
+            - name: FCM_PROJECT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: fcm-project-id
+            - name: FCM_CLIENT_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: fcm-client-email
+            - name: FCM_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: fcm-private-key
+
+            # Uploads (S3-compatible presigning) credentials.
+            - name: UPLOADS_S3_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: uploads-s3-access-key-id
+            - name: UPLOADS_S3_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: api-secrets
+                  key: uploads-s3-secret-access-key
+
+            # Observability
             - name: SENTRY_DSN
               valueFrom:
                 secretKeyRef:
                   name: api-secrets
                   key: sentry-dsn
+                  optional: true
           resources:
+            # The API is a single Node process; load testing (docs/load-test-results.md)
+            # shows it saturates ~1 vCPU at ~2,000 rps. Request a full core so the HPA's
+            # CPU@70% target triggers on real saturation (70% of 1000m = 700m), not on the
+            # old 250m request where 70% = 175m fired far too early. The limit gives modest
+            # burst headroom. NOTE: the liveness probe cannot detect an event-loop wedge
+            # (the HTTP server may accept but never respond); horizontal scaling via the HPA
+            # is the mitigation — see docs/load-test-results.md.
             requests:
               memory: '512Mi'
-              cpu: '250m'
+              cpu: '1000m'
             limits:
               memory: '1Gi'
-              cpu: '1000m'
+              cpu: '1500m'
           livenessProbe:
             httpGet:
               path: /health
