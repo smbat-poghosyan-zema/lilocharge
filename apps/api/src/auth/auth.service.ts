@@ -15,6 +15,7 @@ import { JwtService } from '@nestjs/jwt';
 import { compare, hash } from 'bcrypt';
 import { randomInt, randomUUID } from 'node:crypto';
 
+import { parsePositiveIntegerOrDefault } from '../common/parse-positive-integer';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { SmsService } from '../sms/sms.service';
@@ -71,7 +72,7 @@ export class AuthService {
     // was not. In disabled mode (SMS_ENABLED unset) SmsService no-ops and dev flows keep
     // reading the OTP from Redis.
     await this.smsService.sendSms({
-      body: buildOtpSmsBody(otpCode, otpTtlSeconds),
+      body: buildOtpSmsBody(otpCode, otpTtlSeconds, dto.language ?? 'hy'),
       to: normalizedPhone,
     });
 
@@ -274,11 +275,51 @@ function buildOtpKey(phone: string): string {
   return `auth:otp:${phone}`;
 }
 
-/** Builds the SMS text delivering one OTP code with its expiry window. */
-function buildOtpSmsBody(otpCode: string, otpTtlSeconds: number): string {
+/**
+ * Localized OTP SMS templates keyed by language. Armenian (hy) is the product default.
+ *
+ * The backend has no i18next runtime, so these are a small typed record of builders that keep
+ * the OTP code interpolation and expiry-minutes wording correct in each language.
+ */
+const OTP_SMS_TEMPLATES: Record<
+  SupportedLanguageCode,
+  (otpCode: string, expiryMinutes: number) => string
+> = {
+  hy: (otpCode, expiryMinutes) =>
+    `Ձեր LiloCharge հաստատման կոդն է՝ ${otpCode}: Կոդը վավեր է ${expiryMinutes} րոպե:`,
+  ru: (otpCode, expiryMinutes) =>
+    `Ваш код подтверждения LiloCharge: ${otpCode}. Он действителен ${expiryMinutes} ${resolveRussianMinutesWord(expiryMinutes)}.`,
+  en: (otpCode, expiryMinutes) =>
+    `Your LiloCharge verification code is ${otpCode}. It expires in ${expiryMinutes} minute${expiryMinutes === 1 ? '' : 's'}.`,
+};
+
+/** Selects the grammatically correct Russian plural form of "minute" for the given count. */
+function resolveRussianMinutesWord(minutes: number): string {
+  const modHundred = minutes % 100;
+  const modTen = minutes % 10;
+
+  if (modHundred >= 11 && modHundred <= 14) {
+    return 'минут';
+  }
+  if (modTen === 1) {
+    return 'минута';
+  }
+  if (modTen >= 2 && modTen <= 4) {
+    return 'минуты';
+  }
+
+  return 'минут';
+}
+
+/** Builds the localized SMS text delivering one OTP code with its expiry window. */
+function buildOtpSmsBody(
+  otpCode: string,
+  otpTtlSeconds: number,
+  language: SupportedLanguageCode,
+): string {
   const expiryMinutes = Math.max(1, Math.ceil(otpTtlSeconds / 60));
 
-  return `Your LiloCharge verification code is ${otpCode}. It expires in ${expiryMinutes} minute${expiryMinutes === 1 ? '' : 's'}.`;
+  return OTP_SMS_TEMPLATES[language](otpCode, expiryMinutes);
 }
 
 /** Builds the Redis key used to track active refresh-token session IDs by user. */
@@ -302,20 +343,6 @@ function generateOtpCode(): string {
   const otpValue = randomInt(0, maxExclusive);
 
   return otpValue.toString().padStart(OTP_LENGTH, '0');
-}
-
-/** Parses positive integer env values and falls back to defaults when invalid. */
-function parsePositiveIntegerOrDefault(rawValue: string | undefined, fallback: number): number {
-  if (rawValue === undefined) {
-    return fallback;
-  }
-
-  const parsedValue = Number(rawValue);
-  if (!Number.isInteger(parsedValue) || parsedValue <= 0) {
-    return fallback;
-  }
-
-  return parsedValue;
 }
 
 /** Type guard for Prisma unique-constraint errors. */

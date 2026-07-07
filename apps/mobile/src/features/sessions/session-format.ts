@@ -10,6 +10,17 @@ export function formatAmdFromCents(totalCostCents: number): string {
 }
 
 /**
+ * Formats one AMD amount already expressed in whole drams into a dram-suffixed display string.
+ *
+ * Whole-dram amounts render without decimals; fractional amounts keep two. Unlike
+ * `formatAmdFromCents`, the input is already in drams (station pricing values) and the output
+ * carries the Armenian dram symbol.
+ */
+export function formatDramAmount(value: number): string {
+  return Number.isInteger(value) ? `${value} ֏` : `${value.toFixed(2)} ֏`;
+}
+
+/**
  * Formats one energy reading in kilowatt-hours with two decimals.
  */
 export function formatEnergyKwh(energyKwh: number): string {

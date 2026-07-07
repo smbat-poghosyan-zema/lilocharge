@@ -3,6 +3,7 @@ import { Controller, Get, HttpStatus, Logger, Res } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 
 import { Public } from '../auth/decorators/public.decorator';
+import { resolveErrorMessage } from '../common/errors';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 
@@ -84,9 +85,4 @@ export class HealthController {
       return 'down';
     }
   }
-}
-
-/** Resolves log-friendly error text for unknown thrown values. */
-function resolveErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'unknown error';
 }

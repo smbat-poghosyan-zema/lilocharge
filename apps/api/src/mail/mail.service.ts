@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import type Mail from 'nodemailer/lib/mailer';
 
+import { resolveErrorMessage } from '../common/errors';
+
 /** Input for sending a station problem notification email. */
 export interface StationProblemReportEmailInput {
   readonly operatorEmail: string;
@@ -77,7 +79,9 @@ export class MailService {
         `Problem report email sent to ${input.operatorEmail} for station ${input.stationName}`,
       );
     } catch (error: unknown) {
-      this.logger.error(`Failed to send problem report email: ${resolveErrorMessage(error)}`);
+      this.logger.error(
+        `Failed to send problem report email: ${resolveErrorMessage(error, 'unknown email error')}`,
+      );
       throw error;
     }
   }
@@ -184,15 +188,6 @@ LiloCharge Team
 </html>
     `.trim();
   }
-}
-
-/** Resolves log-friendly error text for unknown thrown values. */
-function resolveErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return 'unknown email error';
 }
 
 const HTML_ESCAPE_MAP: Readonly<Record<string, string>> = {

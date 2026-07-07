@@ -1,5 +1,7 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 
+import { resolveErrorMessage } from '../common/errors';
+
 const DEFAULT_SMS_API_BASE_URL = 'https://api.twilio.com/2010-04-01';
 const ENABLED_FLAG_VALUES = ['1', 'true', 'on', 'enabled', 'yes'] as const;
 
@@ -80,7 +82,9 @@ export class SmsService {
         method: 'POST',
       });
     } catch (error: unknown) {
-      this.logger.error(`Failed to reach SMS provider: ${resolveErrorMessage(error)}`);
+      this.logger.error(
+        `Failed to reach SMS provider: ${resolveErrorMessage(error, 'unknown SMS error')}`,
+      );
       throw new ServiceUnavailableException(SMS_SEND_FAILED_MESSAGE);
     }
 
@@ -125,13 +129,4 @@ async function readResponseBodySafely(response: Response): Promise<string> {
   } catch {
     return 'unreadable response body';
   }
-}
-
-/** Resolves log-friendly error text for unknown thrown values. */
-function resolveErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return 'unknown SMS error';
 }

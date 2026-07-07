@@ -133,7 +133,7 @@ describe('AuthService', () => {
     expect(/^\d{6}$/.test(otpCode)).toBe(true);
   });
 
-  it('delivers the stored OTP code to the requested phone via SMS', async () => {
+  it('delivers the stored OTP code to the requested phone via SMS in Armenian by default', async () => {
     await service.requestPhoneOtp({ phone: USER_PHONE });
 
     const [[, , otpCode]] = redisMock.setEx.mock.calls;
@@ -142,6 +142,23 @@ describe('AuthService', () => {
     const [[smsInput]] = smsMock.sendSms.mock.calls;
     expect(smsInput.to).toBe(USER_PHONE);
     expect(smsInput.body).toContain(otpCode);
+    expect(smsInput.body).toContain('LiloCharge');
+    expect(smsInput.body).toContain('3 րոպե');
+  });
+
+  it('renders the OTP SMS in Russian with the correct minute plural when requested', async () => {
+    await service.requestPhoneOtp({ language: 'ru', phone: USER_PHONE });
+
+    const [[smsInput]] = smsMock.sendSms.mock.calls;
+    expect(smsInput.body).toContain('код подтверждения');
+    expect(smsInput.body).toContain('3 минуты');
+  });
+
+  it('renders the OTP SMS in English when requested', async () => {
+    await service.requestPhoneOtp({ language: 'en', phone: USER_PHONE });
+
+    const [[smsInput]] = smsMock.sendSms.mock.calls;
+    expect(smsInput.body).toContain('verification code');
     expect(smsInput.body).toContain('3 minutes');
   });
 

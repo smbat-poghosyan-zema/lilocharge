@@ -7,6 +7,8 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 
+import { resolveErrorMessage } from '../common/errors';
+
 /** Injection token used for optional Google Pay client configuration overrides. */
 export const GOOGLE_PAY_CLIENT_OPTIONS = 'GOOGLE_PAY_CLIENT_OPTIONS';
 
@@ -100,7 +102,7 @@ export class GooglePayClient {
       });
     } catch (error: unknown) {
       throw new ServiceUnavailableException(
-        `Google Pay token exchange failed: ${resolveErrorMessage(error)}`,
+        `Google Pay token exchange failed: ${resolveErrorMessage(error, 'unknown transport error')}`,
       );
     }
 
@@ -184,13 +186,4 @@ function normalizeOptionalString(value: string | undefined): string | undefined 
   }
 
   return normalizedValue;
-}
-
-/** Resolves a safe log-ready message for unknown thrown values. */
-function resolveErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return 'unknown transport error';
 }

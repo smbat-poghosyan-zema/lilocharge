@@ -8,6 +8,8 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 
+import { resolveErrorMessage } from '../common/errors';
+
 const DEFAULT_IDRAM_BASE_URL = 'https://wallet.idram.am/api/v1';
 
 /** Injection token used for optional Idram client configuration overrides. */
@@ -184,7 +186,7 @@ export class IdramClient {
       });
     } catch (error: unknown) {
       throw new ServiceUnavailableException(
-        `Idram gateway request failed: ${resolveErrorMessage(error)}`,
+        `Idram gateway request failed: ${resolveErrorMessage(error, 'unknown transport error')}`,
       );
     }
 
@@ -302,15 +304,6 @@ function normalizeOptionalString(value: string | undefined): string | undefined 
   }
 
   return normalizedValue;
-}
-
-/** Resolves a safe log-ready message for unknown thrown values. */
-function resolveErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return 'unknown transport error';
 }
 
 /** Builds one stable Idram request URL while preserving optional base-path segments. */

@@ -10,6 +10,8 @@ import {
 import type { Messaging, SendResponse } from 'firebase-admin/messaging';
 import { getMessaging } from 'firebase-admin/messaging';
 
+import { resolveErrorMessage } from '../common/errors';
+
 const DISABLED_FLAG_VALUES = ['0', 'false', 'off', 'disabled', 'no'];
 const FCM_ADMIN_APP_NAME = 'lilocharge-fcm';
 
@@ -81,7 +83,9 @@ export class FcmAdminClient {
         successCount: response.successCount,
       };
     } catch (error: unknown) {
-      this.logger.warn(`FCM multicast delivery failed: ${resolveErrorMessage(error)}`);
+      this.logger.warn(
+        `FCM multicast delivery failed: ${resolveErrorMessage(error, 'unknown transport error')}`,
+      );
       return buildEmptySendResult();
     }
   }
@@ -109,7 +113,9 @@ export class FcmAdminClient {
       this.messagingClient = getMessaging(app);
       return this.messagingClient;
     } catch (error: unknown) {
-      this.logger.warn(`FCM admin client initialization failed: ${resolveErrorMessage(error)}`);
+      this.logger.warn(
+        `FCM admin client initialization failed: ${resolveErrorMessage(error, 'unknown transport error')}`,
+      );
       this.messagingClient = null;
       return this.messagingClient;
     }
@@ -227,15 +233,6 @@ function normalizeOptionalString(value: string | undefined): string | undefined 
   }
 
   return normalizedValue;
-}
-
-/** Resolves log-friendly error text for unknown thrown values. */
-function resolveErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return 'unknown transport error';
 }
 
 /** Builds one empty send result used for disabled or skipped dispatch operations. */

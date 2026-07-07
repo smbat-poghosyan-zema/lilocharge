@@ -9,8 +9,10 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 
 import { ApiClientError } from '../../api';
 import { useAppTranslation } from '../../i18n/use-app-translation';
+import { normalizeRouteParam } from '../../utils/route-params';
 import { useOnboardingSession } from '../onboarding/onboarding-session';
 import { stationsApi, type StationsApi } from '../stations/stations-api';
+import { formatDramAmount } from './session-format';
 import { sessionsApi, type SessionsApi } from './sessions-api';
 
 type StationDetailState =
@@ -252,16 +254,6 @@ export function ChargeConfirmScreen({
 }
 
 /**
- * Normalizes one expo-router search param into a trimmed string or null.
- */
-function normalizeRouteParam(value: string | string[] | undefined): string | null {
-  const singleValue = Array.isArray(value) ? value[0] : value;
-  const normalizedValue = singleValue?.trim() ?? '';
-
-  return normalizedValue.length > 0 ? normalizedValue : null;
-}
-
-/**
  * Finds the scanned connector inside one station detail payload.
  */
 function findConnectorById(
@@ -325,13 +317,6 @@ function formatPricingDetails(
   }
 
   return pricingTokens.length > 0 ? pricingTokens.join(' · ') : t('stations.map.sheet.noPricing');
-}
-
-/**
- * Formats numeric values into Armenian dram strings.
- */
-function formatDramAmount(value: number): string {
-  return Number.isInteger(value) ? `${value} ֏` : `${value.toFixed(2)} ֏`;
 }
 
 /**

@@ -13,6 +13,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 
+import { resolveErrorMessage } from '../common/errors';
 import { OCPP_PROTOCOL_2_0_1 } from './ocpp.constants';
 import { OcppRegistryService } from './ocpp.registry.service';
 import type { OcppRpcCallOptions, OcppServerClient } from './ocpp.server.types';
@@ -126,7 +127,7 @@ export class OcppRemoteStopService {
         };
       } catch (error: unknown) {
         lastError = error;
-        const message = resolveErrorMessage(error);
+        const message = resolveErrorMessage(error, 'Unknown remote-stop error');
         this.logger.warn(
           `RemoteStopTransaction attempt ${attemptCount}/${maxAttempts} failed for ${command.chargePointId} transaction ${command.payload.transactionId}: ${message}`,
         );
@@ -140,7 +141,7 @@ export class OcppRemoteStopService {
     }
 
     throw new ServiceUnavailableException(
-      `RemoteStopTransaction failed for ${command.chargePointId} transaction ${command.payload.transactionId}: ${resolveErrorMessage(lastError)}`,
+      `RemoteStopTransaction failed for ${command.chargePointId} transaction ${command.payload.transactionId}: ${resolveErrorMessage(lastError, 'Unknown remote-stop error')}`,
     );
   }
 }
@@ -262,15 +263,6 @@ function parseRemoteStopResponse(payload: unknown): OcppRemoteStopTransactionRes
   return {
     status: response.status,
   };
-}
-
-/** Resolves a safe log/error message from an unknown thrown value. */
-function resolveErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return 'Unknown remote-stop error';
 }
 
 /** Waits for one retry interval in milliseconds. */

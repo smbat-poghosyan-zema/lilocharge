@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
@@ -11,7 +11,7 @@ import { WalletService } from './wallet.service';
  * Integrates with ArCa/Idram payment gateways for wallet top-ups.
  */
 @Module({
-  imports: [PrismaModule, PaymentsModule, NotificationsModule],
+  imports: [PrismaModule, forwardRef(() => PaymentsModule), NotificationsModule],
   controllers: [WalletController],
   providers: [WalletService],
   exports: [WalletService],

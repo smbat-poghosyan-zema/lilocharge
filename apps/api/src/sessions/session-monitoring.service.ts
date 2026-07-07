@@ -5,6 +5,7 @@ import {
 import { Injectable, Logger } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 
+import { resolveErrorMessage } from '../common/errors';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionCostCalculatorService } from './session-cost-calculator.service';
 import { SessionMonitoringGateway } from './session-monitoring.gateway';
@@ -137,7 +138,7 @@ export class SessionMonitoringService {
 
       return pricing.totalCost;
     } catch (error: unknown) {
-      const message = resolveErrorMessage(error);
+      const message = resolveErrorMessage(error, 'Unknown session monitoring error');
       this.logger.warn(`Session live cost fallback for ${session.id}: ${message}`);
 
       return 0;
@@ -155,13 +156,4 @@ function calculateEnergyDeliveredKwh(energyAggregate: SessionEnergyAggregate): n
   }
 
   return Math.max(0, (maxEnergyWh - minEnergyWh) / WATT_HOURS_PER_KILOWATT_HOUR);
-}
-
-/** Resolves one safe log message from unknown thrown values. */
-function resolveErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return 'Unknown session monitoring error';
 }

@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionMonitoringService } from '../sessions/session-monitoring.service';
+import { buildCandidateEvseIds } from './ocpp.evse-id';
 
 const OCPP_CONNECTOR_LOOKUP_SELECT = {
   id: true,
@@ -364,11 +365,4 @@ function normalizeSoc(value: number, unit: OcppMeterSampledValue['unit']): numbe
   }
 
   return null;
-}
-
-/** Builds deterministic EVSE identifier candidates used to resolve OCPP connector updates. */
-function buildCandidateEvseIds(chargePointId: string, ocppConnectorId: number): readonly string[] {
-  const connectorId = String(ocppConnectorId);
-
-  return [`${chargePointId}-evse-${connectorId}`, `${chargePointId}-${connectorId}`, connectorId];
 }

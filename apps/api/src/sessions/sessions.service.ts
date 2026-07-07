@@ -20,7 +20,9 @@ import {
 import { Prisma, SessionStatus as PrismaSessionStatus } from '@prisma/client';
 import PDFDocument from 'pdfkit';
 
+import { resolveErrorMessage } from '../common/errors';
 import { NotificationsService } from '../notifications/notifications.service';
+import { resolveOcppConnectorNumber } from '../ocpp/ocpp.evse-id';
 import type { OcppRemoteStartResult } from '../ocpp/ocpp.remote-start.service';
 import { OcppIdTagService } from '../ocpp/ocpp.id-tag.service';
 import { OcppRemoteStartService } from '../ocpp/ocpp.remote-start.service';
@@ -527,7 +529,7 @@ export class SessionsService {
       }
     } catch (error: unknown) {
       this.logger.warn(
-        `RemoteStopTransaction dispatch failed for session ${session.id}: ${resolveErrorMessage(error)}; finalizing server-side`,
+        `RemoteStopTransaction dispatch failed for session ${session.id}: ${resolveErrorMessage(error, 'Unknown session error')}; finalizing server-side`,
       );
     }
   }
@@ -606,7 +608,7 @@ export class SessionsService {
       };
     } catch (error: unknown) {
       this.logger.warn(
-        `Session ${session.id} cost calculation failed: ${resolveErrorMessage(error)}; keeping persisted total`,
+        `Session ${session.id} cost calculation failed: ${resolveErrorMessage(error, 'Unknown session error')}; keeping persisted total`,
       );
 
       return {
@@ -964,45 +966,6 @@ function mapSharedSessionStatusToPrismaEnum(status: SharedSessionStatus): Prisma
 }
 
 /**
- * Resolves the OCPP connector number for one connector by inverting persisted EVSE id formats.
- *
- * This mirrors the candidate EVSE id formats used to resolve inbound OCPP messages
- * (see buildCandidateEvseIds in ocpp.transactions.service.ts): `{chargePointId}-evse-{n}`,
- * `{chargePointId}-{n}`, or a bare number. Legacy EVSE ids with a trailing numeric segment fall
- * back to that segment, and connector number 1 is used as the last resort.
- */
-function resolveOcppConnectorNumber(chargePointId: string, evseId: string): number {
-  const normalizedEvseId = evseId.trim();
-  const prefixes = [`${chargePointId}-evse-`, `${chargePointId}-`];
-
-  for (const prefix of prefixes) {
-    if (normalizedEvseId.startsWith(prefix)) {
-      const candidate = Number(normalizedEvseId.slice(prefix.length));
-      if (Number.isInteger(candidate) && candidate > 0) {
-        return candidate;
-      }
-    }
-  }
-
-  if (/^\d+$/.test(normalizedEvseId)) {
-    const candidate = Number(normalizedEvseId);
-    if (candidate > 0) {
-      return candidate;
-    }
-  }
-
-  const trailingNumberMatch = /-0*(\d+)$/.exec(normalizedEvseId);
-  if (trailingNumberMatch !== null) {
-    const candidate = Number(trailingNumberMatch[1]);
-    if (candidate > 0) {
-      return candidate;
-    }
-  }
-
-  return 1;
-}
-
-/**
  * Normalizes one persisted OCPP transaction id for RemoteStop dispatch, or null when absent.
  *
  * 1.6 sessions persist stringified positive integers, which are converted back to numbers.
@@ -1054,15 +1017,6 @@ function calculatePeakPowerKw(peakPowerWatts: number | null): number | null {
  */
 function isSerializationConflictError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
-}
-
-/** Resolves a safe log/error message from an unknown thrown value. */
-function resolveErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return 'Unknown session error';
 }
 
 /** Maps one selected Prisma session row into a public API session payload. */

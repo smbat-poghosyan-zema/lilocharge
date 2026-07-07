@@ -3,6 +3,7 @@ import { PaymentGateway, PaymentStatus } from '@prisma/client';
 
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { PrismaService } from '../prisma/prisma.service';
+import type { WalletService } from '../wallet/wallet.service';
 import type { ApplePayClient } from './apple-pay.client';
 import type { ArcaClient } from './arca.client';
 import type { GooglePayClient } from './google-pay.client';
@@ -100,6 +101,13 @@ interface NotificationsServiceMock extends Pick<
   >;
 }
 
+interface WalletServiceMock extends Pick<WalletService, 'refundBalance'> {
+  readonly refundBalance: jest.Mock<
+    ReturnType<WalletService['refundBalance']>,
+    Parameters<WalletService['refundBalance']>
+  >;
+}
+
 const SESSION_ID = '22222222-2222-2222-2222-222222222222';
 const USER_ID = '11111111-1111-1111-1111-111111111111';
 
@@ -132,6 +140,7 @@ describe('PaymentsService', () => {
   let idramClientMock: IdramClientMock;
   let notificationsServiceMock: NotificationsServiceMock;
   let prismaMock: PrismaServiceMock;
+  let walletServiceMock: WalletServiceMock;
   let service: PaymentsService;
 
   beforeEach(() => {
@@ -191,6 +200,12 @@ describe('PaymentsService', () => {
         Parameters<NotificationsService['sendPaymentSucceededNotification']>
       >(),
     };
+    walletServiceMock = {
+      refundBalance: jest.fn<
+        ReturnType<WalletService['refundBalance']>,
+        Parameters<WalletService['refundBalance']>
+      >(),
+    };
     service = new PaymentsService(
       prismaMock as unknown as PrismaService,
       notificationsServiceMock as unknown as NotificationsService,
@@ -198,6 +213,7 @@ describe('PaymentsService', () => {
       idramClientMock as unknown as IdramClient,
       applePayClientMock as unknown as ApplePayClient,
       googlePayClientMock as unknown as GooglePayClient,
+      walletServiceMock as unknown as WalletService,
     );
   });
 
@@ -899,21 +915,60 @@ describe('PaymentsService', () => {
     );
   });
 
-  it('checks Idram wallet balance for one user using configured wallet token', async () => {
-    prismaMock.paymentMethod.findFirst.mockResolvedValue({
-      gateway: PaymentGateway.IDRAM,
-      id: 'payment-method-2',
-      token: 'wallet-token-1',
-    });
-    idramClientMock.getBalance.mockResolvedValue({
-      balance: 8200,
-    });
+  it('credits the wallet balance for failed wallet-funded sessions instead of a gateway refund', async () => {
+    prismaMock.payment.findUnique.mockResolvedValue(
+      buildPaymentRecord({
+        capturedAmount: 3800,
+        gateway: PaymentGateway.WALLET,
+        gatewayTransactionId: null,
+        status: PaymentStatus.CAPTURED,
+      }),
+    );
+    prismaMock.payment.updateMany.mockResolvedValue({ count: 1 });
 
-    await expect(service.getIdramWalletBalance(USER_ID)).resolves.toBe(8200);
-    expect(idramClientMock.getBalance).toHaveBeenCalledWith({
-      currency: 'AMD',
-      walletToken: 'wallet-token-1',
+    await service.refundPaymentForSessionFailure(SESSION_ID);
+
+    expect(walletServiceMock.refundBalance).toHaveBeenCalledWith({
+      amount: 3800,
+      sessionId: SESSION_ID,
+      userId: USER_ID,
     });
+    expect(arcaClientMock.refund).not.toHaveBeenCalled();
+    expect(idramClientMock.refund).not.toHaveBeenCalled();
+    // The REFUNDED transition is still applied after the wallet credit.
+    expect(prismaMock.payment.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'payment-1',
+        status: {
+          in: [
+            PaymentStatus.PENDING,
+            PaymentStatus.AUTHORIZED,
+            PaymentStatus.CAPTURED,
+            PaymentStatus.FAILED,
+          ],
+        },
+      },
+      data: {
+        status: PaymentStatus.REFUNDED,
+      },
+    });
+  });
+
+  it('does not credit the wallet when a wallet-funded payment never captured funds', async () => {
+    prismaMock.payment.findUnique.mockResolvedValue(
+      buildPaymentRecord({
+        authorizedAmount: 0,
+        capturedAmount: 0,
+        gateway: PaymentGateway.WALLET,
+        gatewayTransactionId: null,
+        status: PaymentStatus.AUTHORIZED,
+      }),
+    );
+    prismaMock.payment.updateMany.mockResolvedValue({ count: 1 });
+
+    await service.refundPaymentForSessionFailure(SESSION_ID);
+
+    expect(walletServiceMock.refundBalance).not.toHaveBeenCalled();
   });
 
   it('skips refund when payment is already refunded', async () => {

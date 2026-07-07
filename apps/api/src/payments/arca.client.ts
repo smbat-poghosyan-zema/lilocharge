@@ -8,6 +8,8 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 
+import { resolveErrorMessage } from '../common/errors';
+
 const DEFAULT_ARCA_BASE_URL = 'https://payments.arca.am/api/v1';
 
 /** Injection token used for optional ArCa client configuration overrides. */
@@ -177,7 +179,7 @@ export class ArcaClient {
       });
     } catch (error: unknown) {
       throw new ServiceUnavailableException(
-        `ArCa gateway request failed: ${resolveErrorMessage(error)}`,
+        `ArCa gateway request failed: ${resolveErrorMessage(error, 'unknown transport error')}`,
       );
     }
 
@@ -272,15 +274,6 @@ function normalizeOptionalString(value: string | undefined): string | undefined 
   }
 
   return normalizedValue;
-}
-
-/** Resolves a safe log-ready message for unknown thrown values. */
-function resolveErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return 'unknown transport error';
 }
 
 /** Builds one stable ArCa request URL while preserving optional base-path segments. */

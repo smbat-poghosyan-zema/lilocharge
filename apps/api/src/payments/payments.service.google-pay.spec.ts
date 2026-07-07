@@ -2,6 +2,7 @@ import { PaymentGateway, PaymentStatus } from '@prisma/client';
 
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { PrismaService } from '../prisma/prisma.service';
+import type { WalletService } from '../wallet/wallet.service';
 import type { ApplePayClient } from './apple-pay.client';
 import type { ArcaClient } from './arca.client';
 import type { GooglePayClient } from './google-pay.client';
@@ -224,6 +225,7 @@ describe('PaymentsService Google Pay flows', () => {
       idramClientMock as unknown as IdramClient,
       applePayClientMock as unknown as ApplePayClient,
       googlePayClientMock as unknown as GooglePayClient,
+      {} as unknown as WalletService,
     );
   });
 

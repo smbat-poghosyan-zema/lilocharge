@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAppTranslation } from '../../i18n/use-app-translation';
+import { normalizeRouteParam } from '../../utils/route-params';
 import { useOnboardingSession } from '../onboarding/onboarding-session';
 import {
   computeDurationSeconds,
@@ -274,15 +275,6 @@ export function ActiveSessionScreen({
   );
 }
 
-/**
- * Normalizes one expo-router search param into a trimmed string or null.
- */
-function normalizeRouteParam(value: string | string[] | undefined): string | null {
-  const singleValue = Array.isArray(value) ? value[0] : value;
-  const normalizedValue = singleValue?.trim() ?? '';
-
-  return normalizedValue.length > 0 ? normalizedValue : null;
-}
 
 const styles = StyleSheet.create({
   buttonPressed: {

@@ -11,7 +11,9 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 
 import { ApiClientError } from '../../api';
 import { useAppTranslation } from '../../i18n/use-app-translation';
+import { normalizeRouteParam } from '../../utils/route-params';
 import { useOnboardingSession } from '../onboarding/onboarding-session';
+import { formatDramAmount } from '../sessions/session-format';
 import {
   formatCommunityStatusHint,
   useConnectorCommunityStatuses,
@@ -446,16 +448,6 @@ function resolveReportFeedbackLabel(
 }
 
 /**
- * Normalizes one expo-router search param into a trimmed string or null.
- */
-function normalizeRouteParam(value: string | string[] | undefined): string | null {
-  const singleValue = Array.isArray(value) ? value[0] : value;
-  const normalizedValue = singleValue?.trim() ?? '';
-
-  return normalizedValue.length > 0 ? normalizedValue : null;
-}
-
-/**
  * Maps station and connector status values to localized labels.
  */
 function resolveStationStatusLabel(status: StationStatus, t: (key: string) => string): string {
@@ -555,13 +547,6 @@ function formatPricingDetails(
   }
 
   return pricingTokens.length > 0 ? pricingTokens.join(' · ') : t('stations.detail.noPricing');
-}
-
-/**
- * Formats numeric values into Armenian dram strings.
- */
-function formatDramAmount(value: number): string {
-  return Number.isInteger(value) ? `${value} ֏` : `${value.toFixed(2)} ֏`;
 }
 
 /**

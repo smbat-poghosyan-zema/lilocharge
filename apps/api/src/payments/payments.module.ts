@@ -1,7 +1,8 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { WalletModule } from '../wallet/wallet.module';
 import { ApplePayClient } from './apple-pay.client';
 import { ArcaClient } from './arca.client';
 import { GooglePayClient } from './google-pay.client';
@@ -14,7 +15,7 @@ import { WebhookSignatureVerifier } from './webhook-signature.verifier';
 
 /** Feature module providing ArCa/Idram/Apple Pay gateway integrations for setup and session billing flows. */
 @Module({
-  imports: [NotificationsModule, PrismaModule],
+  imports: [NotificationsModule, PrismaModule, forwardRef(() => WalletModule)],
   controllers: [PaymentsController, PaymentWebhooksController],
   providers: [
     ApplePayClient,

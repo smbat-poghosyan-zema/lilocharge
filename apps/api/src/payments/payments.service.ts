@@ -11,6 +11,8 @@ import type {
 import {
   BadRequestException,
   ConflictException,
+  forwardRef,
+  Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -18,8 +20,11 @@ import {
 } from '@nestjs/common';
 import { PaymentGateway, PaymentStatus, Prisma } from '@prisma/client';
 
+import { resolveErrorMessage } from '../common/errors';
+import { parsePositiveIntegerOrDefault } from '../common/parse-positive-integer';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { WalletService } from '../wallet/wallet.service';
 import { ApplePayClient } from './apple-pay.client';
 import { ArcaClient } from './arca.client';
 import { GooglePayClient } from './google-pay.client';
@@ -136,6 +141,10 @@ export class PaymentsService {
     private readonly idramClient: IdramClient,
     private readonly applePayClient: ApplePayClient,
     private readonly googlePayClient: GooglePayClient,
+    // forwardRef breaks the PaymentsModule <-> WalletModule import cycle (WalletService tops up
+    // via the gateway clients this module owns, while refunds credit the wallet balance here).
+    @Inject(forwardRef(() => WalletService))
+    private readonly walletService: WalletService,
   ) {}
 
   /** Exchanges one Apple Pay payment token and persists an Apple Pay payment method for the user. */
@@ -544,7 +553,7 @@ export class PaymentsService {
       });
     } catch (error: unknown) {
       await this.notificationsService.sendPaymentFailedNotification({
-        failureReason: resolveErrorMessage(error),
+        failureReason: resolveErrorMessage(error, 'unknown payment error'),
         sessionId: input.sessionId,
         userId: payment.userId,
       });
@@ -600,8 +609,22 @@ export class PaymentsService {
     }
 
     const refundAmount = resolveRefundAmount(payment);
-    const refundIdempotencyKey = await this.resolveRefundIdempotencyKey(payment);
-    await this.refundForGateway(payment, refundAmount, refundIdempotencyKey);
+
+    if (payment.gateway === PaymentGateway.WALLET) {
+      // Wallet-funded sessions are refunded by crediting the internal balance rather than
+      // through a gateway refund. Only captured funds are returned; a wallet payment that
+      // never captured anything has nothing to credit back.
+      if (refundAmount > 0) {
+        await this.walletService.refundBalance({
+          amount: refundAmount,
+          sessionId,
+          userId: payment.userId,
+        });
+      }
+    } else {
+      const refundIdempotencyKey = await this.resolveRefundIdempotencyKey(payment);
+      await this.refundForGateway(payment, refundAmount, refundIdempotencyKey);
+    }
 
     // Conditional transition: if a concurrent flow (e.g. a REFUNDED webhook) already
     // marked the payment refunded, count === 0 and this is an idempotent no-op.
@@ -614,22 +637,6 @@ export class PaymentsService {
         status: PaymentStatus.REFUNDED,
       },
     });
-  }
-
-  /** Checks one Idram wallet balance for a user with configured Idram payment method. */
-  public async getIdramWalletBalance(userId: string): Promise<number> {
-    const idramMethod = await this.findIdramPaymentMethod(userId);
-
-    if (idramMethod === null) {
-      throw new BadRequestException('Idram payment method is not configured for this user');
-    }
-
-    const balance = await this.idramClient.getBalance({
-      currency: 'AMD',
-      walletToken: idramMethod.token,
-    });
-
-    return balance.balance;
   }
 
   /**
@@ -990,33 +997,6 @@ export class PaymentsService {
     });
   }
 
-  /** Finds one Idram payment method for balance checks, preferring user default configuration. */
-  private async findIdramPaymentMethod(userId: string): Promise<PaymentMethodLookupRecord | null> {
-    const defaultMethod = await this.prismaService.paymentMethod.findFirst({
-      where: {
-        gateway: PaymentGateway.IDRAM,
-        isDefault: true,
-        userId,
-      },
-      select: PAYMENT_METHOD_LOOKUP_SELECT,
-    });
-
-    if (defaultMethod !== null) {
-      return defaultMethod;
-    }
-
-    return this.prismaService.paymentMethod.findFirst({
-      where: {
-        gateway: PaymentGateway.IDRAM,
-        userId,
-      },
-      orderBy: {
-        createdAt: 'asc',
-      },
-      select: PAYMENT_METHOD_LOOKUP_SELECT,
-    });
-  }
-
   /** Finds one payment method by id with gateway/token fields required for capture dispatch. */
   private async findPaymentMethodById(
     paymentMethodId: string,
@@ -1171,20 +1151,6 @@ function mapPaymentGatewayToCode(gateway: PaymentGateway): PaymentGatewayCode {
   }
 }
 
-/** Parses positive integer values and falls back when missing or invalid. */
-function parsePositiveIntegerOrDefault(rawValue: string | undefined, fallback: number): number {
-  if (rawValue === undefined) {
-    return fallback;
-  }
-
-  const parsedValue = Number(rawValue);
-
-  if (!Number.isInteger(parsedValue) || parsedValue <= 0) {
-    return fallback;
-  }
-
-  return parsedValue;
-}
 
 /** Normalizes optional card-last4 values and returns null for blank input. */
 function normalizeCardLast4(cardLast4: string | undefined): string | null {
@@ -1200,13 +1166,4 @@ function normalizeCardLast4(cardLast4: string | undefined): string | null {
 /** Returns whether one unknown error is a Prisma known request error with the given code. */
 function isPrismaKnownRequestError(error: unknown, code: string): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === code;
-}
-
-/** Resolves log-friendly error text for unknown thrown payment-capture failures. */
-function resolveErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return 'unknown payment error';
 }

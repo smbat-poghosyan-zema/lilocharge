@@ -16,6 +16,7 @@ import {
   StationStatus as PrismaStationStatus,
 } from '@prisma/client';
 
+import { buildCandidateEvseIds } from '../ocpp/ocpp.evse-id';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../redis/cache.service';
 
@@ -277,12 +278,6 @@ function resolveDateOrNow(rawIsoDate: string | undefined): Date {
 }
 
 /** Builds deterministic EVSE identifier candidates used to resolve OCPP connector updates. */
-function buildCandidateEvseIds(chargePointId: string, ocppConnectorId: number): readonly string[] {
-  const connectorId = String(ocppConnectorId);
-
-  return [`${chargePointId}-evse-${connectorId}`, `${chargePointId}-${connectorId}`, connectorId];
-}
-
 /** Maps Prisma station status values to the shared station status enum. */
 function mapPrismaStationStatusToSharedEnum(status: PrismaStationStatus): StationStatus {
   switch (status) {

@@ -6,6 +6,7 @@ import type {
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { Language, Prisma } from '@prisma/client';
 
+import { resolveErrorMessage } from '../common/errors';
 import { PrismaService } from '../prisma/prisma.service';
 import { FcmAdminClient } from './fcm-admin.client';
 import { NotificationTemplatesService } from './notification-templates.service';
@@ -239,7 +240,7 @@ export class NotificationsService {
       });
     } catch (error: unknown) {
       this.logger.warn(
-        `Push notification delivery failed for user ${userId}: ${resolveErrorMessage(error)}`,
+        `Push notification delivery failed for user ${userId}: ${resolveErrorMessage(error, 'unknown notification error')}`,
       );
     }
   }
@@ -267,13 +268,4 @@ function normalizeRequiredToken(token: string): string {
   }
 
   return normalizedToken;
-}
-
-/** Resolves log-friendly error text for unknown thrown values. */
-function resolveErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return 'unknown notification error';
 }

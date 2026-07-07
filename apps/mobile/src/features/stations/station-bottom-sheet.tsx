@@ -11,6 +11,7 @@ import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-n
 
 import { useAppTranslation } from '../../i18n/use-app-translation';
 import { isJestRuntime } from '../../utils/is-jest-runtime';
+import { formatDramAmount } from '../sessions/session-format';
 import {
   formatCommunityStatusHint,
   useConnectorCommunityStatuses,
@@ -389,12 +390,6 @@ function formatPricingDetails(
   return pricingTokens.length > 0 ? pricingTokens.join(' · ') : t('stations.map.sheet.noPricing');
 }
 
-/**
- * Formats numeric values into Armenian dram strings.
- */
-function formatDramAmount(value: number): string {
-  return Number.isInteger(value) ? `${value} ֏` : `${value.toFixed(2)} ֏`;
-}
 
 /**
  * Formats average rating and review count as a one-line summary.

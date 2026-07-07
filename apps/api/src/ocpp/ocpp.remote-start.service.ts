@@ -16,6 +16,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 
+import { resolveErrorMessage } from '../common/errors';
 import { RedisService } from '../redis/redis.service';
 import { OCPP_PROTOCOL_2_0_1 } from './ocpp.constants';
 import { buildEpochSecondsSeed, OcppIdAllocator } from './ocpp.id-allocator';
@@ -130,7 +131,7 @@ export class OcppRemoteStartService {
     this.trackingStore = redisService ?? new InMemoryOcppTrackingStore();
     const onAllocatorFallback = (error: unknown): void => {
       this.logger.warn(
-        `Redis id allocation failed; falling back to in-memory counter: ${resolveErrorMessage(error)}`,
+        `Redis id allocation failed; falling back to in-memory counter: ${resolveErrorMessage(error, 'Unknown remote-start error')}`,
       );
     };
     this.sequenceAllocator = new OcppIdAllocator(
@@ -248,7 +249,7 @@ export class OcppRemoteStartService {
         };
       } catch (error: unknown) {
         lastError = error;
-        const message = resolveErrorMessage(error);
+        const message = resolveErrorMessage(error, 'Unknown remote-start error');
         this.logger.warn(
           `RemoteStartTransaction attempt ${attemptCount}/${maxAttempts} failed for ${command.chargePointId} connector ${command.payload.connectorId}: ${message}`,
         );
@@ -262,7 +263,7 @@ export class OcppRemoteStartService {
     }
 
     throw new ServiceUnavailableException(
-      `RemoteStartTransaction failed for ${command.chargePointId} connector ${command.payload.connectorId}: ${resolveErrorMessage(lastError)}`,
+      `RemoteStartTransaction failed for ${command.chargePointId} connector ${command.payload.connectorId}: ${resolveErrorMessage(lastError, 'Unknown remote-start error')}`,
     );
   }
 
@@ -288,7 +289,7 @@ export class OcppRemoteStartService {
 
       return record;
     } catch (error: unknown) {
-      this.logger.warn(`Remote-start tracking lookup failed: ${resolveErrorMessage(error)}`);
+      this.logger.warn(`Remote-start tracking lookup failed: ${resolveErrorMessage(error, 'Unknown remote-start error')}`);
       return null;
     }
   }
@@ -333,7 +334,7 @@ export class OcppRemoteStartService {
 
       return updatedRecord;
     } catch (error: unknown) {
-      this.logger.warn(`Remote-start tracking link failed: ${resolveErrorMessage(error)}`);
+      this.logger.warn(`Remote-start tracking link failed: ${resolveErrorMessage(error, 'Unknown remote-start error')}`);
       return null;
     }
   }
@@ -352,7 +353,7 @@ export class OcppRemoteStartService {
           .sort((left, right) => right.sequence - left.sequence)[0] ?? null
       );
     } catch (error: unknown) {
-      this.logger.warn(`Remote-start tracking search failed: ${resolveErrorMessage(error)}`);
+      this.logger.warn(`Remote-start tracking search failed: ${resolveErrorMessage(error, 'Unknown remote-start error')}`);
       return null;
     }
   }
@@ -388,7 +389,7 @@ export class OcppRemoteStartService {
     } catch (error: unknown) {
       // Tracking is best-effort correlation metadata; a storage outage must not fail an
       // already-accepted remote start.
-      this.logger.error(`Remote-start tracking persist failed: ${resolveErrorMessage(error)}`);
+      this.logger.error(`Remote-start tracking persist failed: ${resolveErrorMessage(error, 'Unknown remote-start error')}`);
     }
 
     return trackedRecord;
@@ -682,15 +683,6 @@ function parseRemoteStartResponse(payload: unknown): OcppRemoteStartTransactionR
   return {
     status: response.status,
   };
-}
-
-/** Resolves a safe log/error message from an unknown thrown value. */
-function resolveErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return 'Unknown remote-start error';
 }
 
 /** Waits for one retry interval in milliseconds. */

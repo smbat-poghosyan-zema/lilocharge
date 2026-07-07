@@ -7,11 +7,13 @@ import type {
 import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma, SessionStatus } from '@prisma/client';
 
+import { resolveErrorMessage } from '../common/errors';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { SessionCostCalculatorService } from '../sessions/session-cost-calculator.service';
 import { SessionSettlementService } from '../sessions/session-settlement.service';
+import { buildCandidateEvseIds } from './ocpp.evse-id';
 import { OcppIdTagService } from './ocpp.id-tag.service';
 import { buildEpochSecondsSeed, OcppIdAllocator } from './ocpp.id-allocator';
 import { OcppRemoteStartService } from './ocpp.remote-start.service';
@@ -126,7 +128,7 @@ export class OcppTransactionsService {
       redisService,
       (error: unknown) => {
         this.logger.warn(
-          `Redis transaction-id allocation failed; falling back to in-memory counter: ${resolveErrorMessage(error)}`,
+          `Redis transaction-id allocation failed; falling back to in-memory counter: ${resolveErrorMessage(error, 'Unknown transaction error')}`,
         );
       },
     );
@@ -363,7 +365,7 @@ export class OcppTransactionsService {
       });
     } catch (error: unknown) {
       this.logger.error(
-        `Settlement failed for session ${session.id} (connector ${session.connectorId}): ${resolveErrorMessage(error)}`,
+        `Settlement failed for session ${session.id} (connector ${session.connectorId}): ${resolveErrorMessage(error, 'Unknown transaction error')}`,
       );
     }
 
@@ -590,7 +592,7 @@ export class OcppTransactionsService {
 
       return pricing.totalCost;
     } catch (error: unknown) {
-      const message = resolveErrorMessage(error);
+      const message = resolveErrorMessage(error, 'Unknown transaction error');
       // Deliberately loud: the session still completes, but a 0 total on a session that may have
       // delivered energy is a billing anomaly operators must be able to find and reconcile.
       this.logger.error(
@@ -709,15 +711,6 @@ function calculatePeakPowerKw(stats: MeterValueEnergyAggregate): number {
   return Math.max(0, peakPowerWatts / WATTS_PER_KILOWATT);
 }
 
-/** Resolves a safe log/error message from an unknown thrown value. */
-function resolveErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return 'Unknown transaction error';
-}
-
 /**
  * Detects PostgreSQL serialization conflicts surfaced by Prisma for SERIALIZABLE transactions.
  * P2034 is Prisma's "transaction failed due to a write conflict or a deadlock" error code.
@@ -731,11 +724,4 @@ function isUuid(rawValue: string): boolean {
   // Any 8-4-4-4-12 hex shape is accepted: existence is verified against the users table, and
   // seeded/imported ids do not always carry RFC 4122 version/variant nibbles.
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawValue);
-}
-
-/** Builds deterministic EVSE identifier candidates used to resolve OCPP connector updates. */
-function buildCandidateEvseIds(chargePointId: string, ocppConnectorId: number): readonly string[] {
-  const connectorId = String(ocppConnectorId);
-
-  return [`${chargePointId}-evse-${connectorId}`, `${chargePointId}-${connectorId}`, connectorId];
 }

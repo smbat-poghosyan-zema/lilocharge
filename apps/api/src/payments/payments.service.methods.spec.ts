@@ -3,6 +3,7 @@ import { PaymentGateway } from '@prisma/client';
 
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { PrismaService } from '../prisma/prisma.service';
+import type { WalletService } from '../wallet/wallet.service';
 import type { ApplePayClient } from './apple-pay.client';
 import type { ArcaClient } from './arca.client';
 import type { GooglePayClient } from './google-pay.client';
@@ -95,6 +96,7 @@ function buildService(prismaMock: PrismaServiceMock): PaymentsService {
     {} as unknown as IdramClient,
     {} as unknown as ApplePayClient,
     {} as unknown as GooglePayClient,
+    {} as unknown as WalletService,
   );
 }
 
