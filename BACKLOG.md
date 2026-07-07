@@ -113,12 +113,31 @@ Derived from [AUDIT-REPORT.md](AUDIT-REPORT.md) (2026-07-02). Every NOT DONE and
 
 # Round 2 — from the 2026-07-07 re-audit
 
+> **Round 2 resolved (2026-07-07):** all Round-2 findings (R1-R23) are implemented on
+> `claude/lilocharge-audit-58jj4m`. The headline R1 seam is welded — a charger's inbound
+> StartTransaction/TransactionEvent now attaches to the API-created session instead of
+> double-booking (proven by a new mixed-flow e2e over a real socket); the concurrency guard
+> and a shared SessionSettlementService (zero-energy refund + wallet deduct) now cover all
+> three session paths; wallet writes are atomic with a balance>=0 constraint and persist-
+> first idempotency; webhook/capture races use conditional transitions; the monitoring
+> gateway authenticates and the mobile client + receipt download carry the token; token
+> refresh + session-context propagation, push lifecycle, and a full logout sweep are wired;
+> K8s carries every required env var, OCPP has a routable ingress, the migration prisma is
+> pinned, and app.json/eas.json are release-buildable. The re-audit round also surfaced a
+> real gap while triaging dead code: wallet-paid session refunds never credited the wallet
+> (now wired). Verified: API 85 unit suites / 719 tests + 7 e2e / 65 tests, mobile 67 suites
+> / 501 tests, tsc + eslint clean everywhere. **Environment-dependent items remain open**
+> (real gateway sandbox validation, native Apple/Google Pay modules, FCM credentials, OCPP
+> hardware, distributed 1000-VU/10k-WS load, K8s cluster rollout, filling the REPLACE_ME
+> production secrets/URLs) — these need credentials/hardware/infra, not code.
+
+
 Independent re-verification (fresh-eyes API/mobile/config audits — see the re-audit
 section of [AUDIT-REPORT.md](AUDIT-REPORT.md)) confirmed Rounds P0-P2 are genuinely done
 and surfaced a new, much smaller round. Priorities: **R-P0** = ship-blocker (money path
 or first-hour device experience), **R-P1** = pre-production hardening, **R-P2** = debt.
 
-## R-P0 — ship-blockers
+## R-P0 — ship-blockers — ✅ done
 
 | # | Task | Area | Effort |
 |---|---|---|---|
@@ -131,7 +150,7 @@ or first-hour device experience), **R-P1** = pre-production hardening, **R-P2** 
 | R7 | **Token refresh + session-context subscription**: use the persisted refresh token on 401/expiry (`/auth/refresh` is never called today) and make `OnboardingSessionProvider` subscribe to storage so a wiped session propagates — users currently break silently one hour after login. | mobile/auth | M |
 | R8 | **Production config completion**: add to K8s manifests + deploy script (and prune ghosts `MAPBOX_TOKEN`/`FCM_SERVER_KEY`): `REFRESH_TOKEN_SECRET` (login 500s), `ARCA/IDRAM_WEBHOOK_SECRET` (callbacks 503), SMS/Twilio vars (OTP silently skipped), FCM service-account vars (push no-ops), uploads S3 vars (503), `CORS_ORIGIN` (+ pick one CORS layer). Reference: `apps/api/.env.example`. | infra/k8s | M |
 
-## R-P1 — pre-production hardening
+## R-P1 — pre-production hardening — ✅ done
 
 | # | Task | Area | Effort |
 |---|---|---|---|
@@ -146,7 +165,7 @@ or first-hour device experience), **R-P1** = pre-production hardening, **R-P2** 
 | R17 | Support string transaction ids for 2.0.1 remote stop (station-assigned UUID-like ids can't be remote-stopped today). | api/ocpp | S |
 | R18 | Multi-replica correctness: move OCPP transaction-id/sequence allocation off in-memory wall-clock counters (collides across HPA replicas); consider prod fail-fast when Redis is absent and when `OCPP_AUTH_MODE=open`. | api/ocpp | M |
 
-## R-P2 — debt and polish
+## R-P2 — debt and polish — ✅ done
 
 | # | Task | Area | Effort |
 |---|---|---|---|
