@@ -116,6 +116,8 @@ export class OcppServerService implements OnModuleInit, OnModuleDestroy {
     }
 
     const authConfig = resolveOcppAuthConfig({
+      NODE_ENV: process.env.NODE_ENV,
+      OCPP_ALLOW_OPEN_AUTH_IN_PRODUCTION: process.env.OCPP_ALLOW_OPEN_AUTH_IN_PRODUCTION,
       OCPP_ALLOWED_IDENTITIES: process.env.OCPP_ALLOWED_IDENTITIES,
       OCPP_AUTH_MODE: process.env.OCPP_AUTH_MODE,
       OCPP_IDENTITY_SECRETS: process.env.OCPP_IDENTITY_SECRETS,

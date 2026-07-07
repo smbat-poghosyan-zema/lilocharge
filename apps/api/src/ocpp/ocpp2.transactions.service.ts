@@ -141,6 +141,29 @@ export class Ocpp2TransactionsService {
       return { idTokenInfo: { status: 'Invalid' } };
     }
 
+    const meterStartWh = extractEnergyRegisterWh(payload.meterValue, 'Transaction.Begin');
+
+    // A Started event answering a tracked RequestStartTransaction is attached to the API session
+    // that dispatched it (matched by EVSE id + idToken) instead of creating a duplicate session.
+    if (payload.evse !== undefined) {
+      const attachedSession = await this.transactionsService.attachTransactionToTrackedRemoteStart({
+        chargePointId,
+        idTag: payload.idToken.idToken,
+        meterStartWh,
+        ocppConnectorId: payload.evse.id,
+        startedAt,
+        transactionId,
+      });
+
+      if (attachedSession !== null) {
+        this.logger.log(
+          `TransactionEvent(Started) attached transaction ${transactionId} to API session ${attachedSession.id} for ${chargePointId}`,
+        );
+
+        return { idTokenInfo: { status: 'Accepted' } };
+      }
+    }
+
     const connectorId = await this.resolveConnectorId(chargePointId, payload.evse);
     if (connectorId === null) {
       this.logger.warn(
@@ -150,14 +173,22 @@ export class Ocpp2TransactionsService {
       return { idTokenInfo: { status: 'Invalid' } };
     }
 
-    const meterStartWh = extractEnergyRegisterWh(payload.meterValue, 'Transaction.Begin');
-    await this.transactionsService.createActiveOcppSession({
+    const createdSession = await this.transactionsService.createActiveOcppSession({
       connectorId,
       meterStartWh,
       startedAt,
       transactionId,
       userId,
     });
+
+    if (createdSession === null) {
+      this.logger.warn(
+        `TransactionEvent(Started) rejected for ${chargePointId} transaction ${transactionId}: connector already has a blocking session (ConcurrentTx)`,
+      );
+
+      return { idTokenInfo: { status: 'ConcurrentTx' } };
+    }
+
     this.logger.log(
       `TransactionEvent(Started) created session for ${chargePointId} transaction ${transactionId}`,
     );

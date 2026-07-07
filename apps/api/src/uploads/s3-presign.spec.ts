@@ -1,3 +1,5 @@
+import { createHash, createHmac } from 'node:crypto';
+
 import { presignS3Url } from './s3-presign';
 
 describe('presignS3Url', () => {
@@ -81,6 +83,48 @@ describe('presignS3Url', () => {
     expect(firstSignature).not.toBe(secondSignature);
   });
 
+  it('signs the content type into PUT URLs so the upload type cannot be swapped', () => {
+    const input = {
+      accessKeyId: 'minio-access-key',
+      contentType: 'image/jpeg',
+      date: new Date('2026-07-06T12:00:00.000Z'),
+      expiresSeconds: 900,
+      host: 'minio.internal:9000',
+      method: 'PUT' as const,
+      path: '/lilocharge-uploads/review-photos/user-1/photo.jpg',
+      protocol: 'https' as const,
+      region: 'us-east-1',
+      secretAccessKey: 'minio-secret-key',
+    };
+
+    const url = presignS3Url(input);
+
+    // content-type joins host in the signed-headers list (';' is percent-encoded in the query).
+    expect(url).toContain('X-Amz-SignedHeaders=content-type%3Bhost');
+    expect(new URL(url).searchParams.get('X-Amz-SignedHeaders')).toBe('content-type;host');
+
+    // The signature matches an independent SigV4 derivation of the same request, so the
+    // pinned expectation stays meaningful rather than a copy of the implementation output.
+    expect(extractSignature(url)).toBe(
+      deriveExpectedSignature({
+        canonicalHeaders: `content-type:image/jpeg\nhost:${input.host}\n`,
+        canonicalPath: input.path,
+        canonicalQuery: new URL(url).search.slice(1).split('&').slice(0, -1).join('&'),
+        date: input.date,
+        method: input.method,
+        region: input.region,
+        secretAccessKey: input.secretAccessKey,
+        signedHeaders: 'content-type;host',
+      }),
+    );
+
+    // Declaring a different content type must produce a different signature.
+    const differentTypeSignature = extractSignature(
+      presignS3Url({ ...input, contentType: 'image/png' }),
+    );
+    expect(extractSignature(url)).not.toBe(differentTypeSignature);
+  });
+
   it('percent-encodes reserved characters in path segments without encoding separators', () => {
     const url = presignS3Url({
       accessKeyId: 'key',
@@ -101,4 +145,39 @@ describe('presignS3Url', () => {
 /** Extracts the X-Amz-Signature value from one presigned URL. */
 function extractSignature(url: string): string {
   return new URL(url).searchParams.get('X-Amz-Signature') ?? '';
+}
+
+/**
+ * Independently derives the expected SigV4 query-presign signature by following the AWS
+ * documentation steps (canonical request -> string to sign -> signing-key HMAC chain).
+ */
+function deriveExpectedSignature(input: {
+  readonly canonicalHeaders: string;
+  readonly canonicalPath: string;
+  readonly canonicalQuery: string;
+  readonly date: Date;
+  readonly method: string;
+  readonly region: string;
+  readonly secretAccessKey: string;
+  readonly signedHeaders: string;
+}): string {
+  const amzDate = input.date
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\.\d{3}Z$/, 'Z');
+  const dateStamp = amzDate.slice(0, 8);
+  const credentialScope = `${dateStamp}/${input.region}/s3/aws4_request`;
+
+  const canonicalRequest = `${input.method}\n${input.canonicalPath}\n${input.canonicalQuery}\n${input.canonicalHeaders}\n${input.signedHeaders}\nUNSIGNED-PAYLOAD`;
+  const hashedCanonicalRequest = createHash('sha256')
+    .update(canonicalRequest, 'utf8')
+    .digest('hex');
+  const stringToSign = `AWS4-HMAC-SHA256\n${amzDate}\n${credentialScope}\n${hashedCanonicalRequest}`;
+
+  const dateKey = createHmac('sha256', `AWS4${input.secretAccessKey}`).update(dateStamp).digest();
+  const regionKey = createHmac('sha256', dateKey).update(input.region).digest();
+  const serviceKey = createHmac('sha256', regionKey).update('s3').digest();
+  const signingKey = createHmac('sha256', serviceKey).update('aws4_request').digest();
+
+  return createHmac('sha256', signingKey).update(stringToSign, 'utf8').digest('hex');
 }

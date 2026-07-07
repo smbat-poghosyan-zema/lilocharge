@@ -55,12 +55,14 @@ export type {
   ProblemReportResponse,
 } from './problem-report';
 export {
+  SESSION_MONITOR_ERROR_EVENT,
   SESSION_MONITOR_SUBSCRIBE_EVENT,
   SESSION_MONITOR_UNSUBSCRIBE_EVENT,
   SESSION_MONITOR_UPDATE_EVENT,
 } from './session-monitoring';
 export type {
   SessionMonitorClientToServerEvents,
+  SessionMonitorErrorEvent,
   SessionMonitorRoomRequest,
   SessionMonitorServerToClientEvents,
   SessionMonitorUpdateEvent,

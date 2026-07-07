@@ -3,11 +3,15 @@ import { createHash, createHmac } from 'node:crypto';
 const AWS_SIGNING_ALGORITHM = 'AWS4-HMAC-SHA256';
 const S3_SERVICE_NAME = 's3';
 const UNSIGNED_PAYLOAD = 'UNSIGNED-PAYLOAD';
-const SIGNED_HEADERS = 'host';
 
 /** Input describing one S3 request to presign with AWS Signature Version 4 query parameters. */
 export interface PresignS3UrlInput {
   readonly accessKeyId: string;
+  /**
+   * When set, the `content-type` header is signed alongside `host`, so the presigned URL
+   * only accepts uploads that send exactly this Content-Type header.
+   */
+  readonly contentType?: string;
   /** Signing timestamp; the URL is valid from this instant for `expiresSeconds`. */
   readonly date: Date;
   readonly expiresSeconds: number;
@@ -24,7 +28,9 @@ export interface PresignS3UrlInput {
 /**
  * Presigns one S3 request using the AWS Signature Version 4 query-parameter scheme
  * (`X-Amz-Algorithm`, `X-Amz-Credential`, `X-Amz-Date`, `X-Amz-Expires`,
- * `X-Amz-SignedHeaders=host`, `X-Amz-Signature`) with an `UNSIGNED-PAYLOAD` content hash.
+ * `X-Amz-SignedHeaders`, `X-Amz-Signature`) with an `UNSIGNED-PAYLOAD` content hash.
+ * `host` is always signed; `content-type` is additionally signed when `contentType` is
+ * provided, constraining what the holder of the URL may upload.
  *
  * Implemented with node:crypto only (no AWS SDK) and validated against the canonical
  * AWS documentation presigned-GET vector in `s3-presign.spec.ts`. Works with any
@@ -36,21 +42,28 @@ export function presignS3Url(input: PresignS3UrlInput): string {
   const credentialScope = `${dateStamp}/${input.region}/${S3_SERVICE_NAME}/aws4_request`;
   const canonicalPath = encodeCanonicalPath(input.path);
 
+  // Canonical header names are listed alphabetically ('content-type' sorts before 'host').
+  const canonicalHeaderLines =
+    input.contentType === undefined
+      ? [`host:${input.host}`]
+      : [`content-type:${input.contentType.trim()}`, `host:${input.host}`];
+  const signedHeaders = input.contentType === undefined ? 'host' : 'content-type;host';
+
   const canonicalQuery = [
     `X-Amz-Algorithm=${AWS_SIGNING_ALGORITHM}`,
     `X-Amz-Credential=${uriEncode(`${input.accessKeyId}/${credentialScope}`)}`,
     `X-Amz-Date=${amzDate}`,
     `X-Amz-Expires=${input.expiresSeconds}`,
-    `X-Amz-SignedHeaders=${SIGNED_HEADERS}`,
+    `X-Amz-SignedHeaders=${uriEncode(signedHeaders)}`,
   ].join('&');
 
   const canonicalRequest = [
     input.method,
     canonicalPath,
     canonicalQuery,
-    `host:${input.host}`,
+    ...canonicalHeaderLines,
     '',
-    SIGNED_HEADERS,
+    signedHeaders,
     UNSIGNED_PAYLOAD,
   ].join('\n');
 

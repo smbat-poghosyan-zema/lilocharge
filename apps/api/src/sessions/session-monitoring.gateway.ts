@@ -1,4 +1,5 @@
 import {
+  SESSION_MONITOR_ERROR_EVENT,
   SESSION_MONITOR_SUBSCRIBE_EVENT,
   SESSION_MONITOR_UNSUBSCRIBE_EVENT,
   SESSION_MONITOR_UPDATE_EVENT,
@@ -8,14 +9,18 @@ import {
   type SessionMonitorUpdateEvent,
 } from '@lilocharge/shared-types';
 import { Logger } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import {
   ConnectedSocket,
   MessageBody,
+  OnGatewayConnection,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
-import type { Server, Socket } from 'socket.io';
+import type { DefaultEventsMap, Server, Socket } from 'socket.io';
+
+import { PrismaService } from '../prisma/prisma.service';
 
 const SESSION_MONITORING_ROOM_PREFIX = 'session:';
 const DEFAULT_SOCKET_CORS_ORIGINS: readonly string[] = [
@@ -23,12 +28,33 @@ const DEFAULT_SOCKET_CORS_ORIGINS: readonly string[] = [
   'http://localhost:19006',
 ];
 
+/** Per-connection state stamped onto sockets after a successful handshake authentication. */
+interface SessionMonitorSocketData {
+  userId?: string;
+}
+
+/** JWT claims required on access tokens (mirrors the HTTP JwtAuthGuard contract). */
+interface AccessTokenPayload {
+  readonly sub: string;
+  readonly email: string;
+  readonly tokenType: string;
+}
+
 type SessionMonitorSocket = Socket<
   SessionMonitorClientToServerEvents,
-  SessionMonitorServerToClientEvents
+  SessionMonitorServerToClientEvents,
+  DefaultEventsMap,
+  SessionMonitorSocketData
 >;
 
-/** Socket.IO gateway that manages session-specific subscription rooms and live update broadcasts. */
+/**
+ * Socket.IO gateway that manages session-specific subscription rooms and live update broadcasts.
+ *
+ * Connections must present a valid access token as `handshake.auth.token` (the socket.io auth
+ * convention; the mobile client sends `auth: { token }`), validated with the same secret and
+ * claims (`tokenType: 'access'`) as the HTTP JwtAuthGuard. Subscriptions are only granted for
+ * sessions owned by the token's `sub`; everything else is rejected with a monitor error event.
+ */
 @WebSocketGateway({
   cors: {
     credentials: true,
@@ -36,13 +62,36 @@ type SessionMonitorSocket = Socket<
   },
   transports: ['websocket'],
 })
-export class SessionMonitoringGateway {
+export class SessionMonitoringGateway implements OnGatewayConnection {
   private readonly logger: Logger = new Logger(SessionMonitoringGateway.name);
+
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly prismaService: PrismaService,
+  ) {}
 
   @WebSocketServer()
   public server!: Server<SessionMonitorClientToServerEvents, SessionMonitorServerToClientEvents>;
 
-  /** Subscribes one websocket client to one room for the requested session id. */
+  /** Authenticates one incoming socket connection and stamps the resolved user id onto it. */
+  public async handleConnection(client: SessionMonitorSocket): Promise<void> {
+    const userId = await this.resolveAuthenticatedUserId(client);
+
+    if (userId === null) {
+      this.logger.warn('Socket connection rejected: missing or invalid access token');
+      client.emit(SESSION_MONITOR_ERROR_EVENT, {
+        event: SESSION_MONITOR_ERROR_EVENT,
+        message: 'Unauthorized: a valid access token is required (handshake.auth.token)',
+        sessionId: null,
+      });
+      client.disconnect(true);
+      return;
+    }
+
+    client.data.userId = userId;
+  }
+
+  /** Subscribes one authenticated client to the room for one session it owns. */
   @SubscribeMessage(SESSION_MONITOR_SUBSCRIBE_EVENT)
   public async handleSessionMonitorSubscribe(
     @ConnectedSocket() client: SessionMonitorSocket,
@@ -50,6 +99,35 @@ export class SessionMonitoringGateway {
   ): Promise<void> {
     const sessionId = normalizeSessionId(payload.sessionId);
     if (sessionId === null) {
+      return;
+    }
+
+    const userId = client.data.userId;
+    if (userId === undefined) {
+      // Defense in depth: connections without stamped auth state must never join rooms.
+      client.disconnect(true);
+      return;
+    }
+
+    const ownedSession = await this.prismaService.session.findFirst({
+      where: {
+        id: sessionId,
+        userId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (ownedSession === null) {
+      this.logger.warn(
+        `Socket client subscription rejected: session ${sessionId} is not owned by the authenticated user`,
+      );
+      client.emit(SESSION_MONITOR_ERROR_EVENT, {
+        event: SESSION_MONITOR_ERROR_EVENT,
+        message: 'Subscription rejected: session not found for the authenticated user',
+        sessionId,
+      });
       return;
     }
 
@@ -78,6 +156,42 @@ export class SessionMonitoringGateway {
       .to(resolveSessionRoomName(payload.sessionId))
       .emit(SESSION_MONITOR_UPDATE_EVENT, payload);
   }
+
+  /** Validates the handshake access token and returns its subject, or null when invalid. */
+  private async resolveAuthenticatedUserId(client: SessionMonitorSocket): Promise<string | null> {
+    const token = extractHandshakeToken(client);
+
+    if (token === null) {
+      return null;
+    }
+
+    try {
+      const tokenPayload = await this.jwtService.verifyAsync<AccessTokenPayload>(token, {
+        secret: process.env.JWT_SECRET,
+      });
+
+      if (tokenPayload.tokenType !== 'access' || typeof tokenPayload.sub !== 'string') {
+        return null;
+      }
+
+      return tokenPayload.sub;
+    } catch {
+      return null;
+    }
+  }
+}
+
+/** Extracts the access token from the socket.io handshake auth payload. */
+function extractHandshakeToken(client: SessionMonitorSocket): string | null {
+  const rawToken: unknown = client.handshake.auth?.['token'];
+
+  if (typeof rawToken !== 'string') {
+    return null;
+  }
+
+  const token = rawToken.trim();
+
+  return token.length > 0 ? token : null;
 }
 
 /** Creates a deterministic socket room name for one session id. */

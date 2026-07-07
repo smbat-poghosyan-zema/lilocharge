@@ -7,6 +7,7 @@ import {
 } from '@lilocharge/shared-types';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { Test, type TestingModule } from '@nestjs/testing';
+import { JwtService } from '@nestjs/jwt';
 import { ValidationPipe } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { io, type Socket } from 'socket.io-client';
@@ -37,6 +38,7 @@ describe('SessionMonitoring (E2E) - Real-Time Session Updates and Cost Calculati
   let sessionMonitoringService: SessionMonitoringService;
   let socketClient: Socket;
   let serverUrl: string;
+  let accessToken: string;
 
   beforeAll(async () => {
     process.env.DATABASE_URL =
@@ -69,6 +71,14 @@ describe('SessionMonitoring (E2E) - Real-Time Session Updates and Cost Calculati
     prismaService = moduleFixture.get<PrismaService>(PrismaService);
     sessionMonitoringService =
       moduleFixture.get<SessionMonitoringService>(SessionMonitoringService);
+
+    // The monitoring gateway now authenticates connections via handshake.auth.token and only
+    // allows subscribing to sessions owned by the token subject.
+    const jwtService = moduleFixture.get<JwtService>(JwtService);
+    accessToken = await jwtService.signAsync(
+      { sub: TEST_USER_ID, email: 'monitoring-e2e@lilocharge.am', tokenType: 'access' },
+      { secret: process.env.JWT_SECRET, expiresIn: '1h' },
+    );
 
     const address = app.getHttpServer().address();
     const port = typeof address === 'string' ? 3000 : (address?.port ?? 3000);
@@ -193,6 +203,7 @@ describe('SessionMonitoring (E2E) - Real-Time Session Updates and Cost Calculati
       const client = io(serverUrl, {
         transports: ['websocket'],
         reconnection: false,
+        auth: { token: accessToken },
       });
 
       const timeout = setTimeout(() => {

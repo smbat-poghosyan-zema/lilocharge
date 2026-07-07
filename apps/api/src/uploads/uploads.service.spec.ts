@@ -111,8 +111,22 @@ describe('UploadsService', () => {
       );
       expect(uploadUrl.searchParams.get('X-Amz-Date')).toMatch(/^\d{8}T\d{6}Z$/);
       expect(uploadUrl.searchParams.get('X-Amz-Expires')).toBe('900');
-      expect(uploadUrl.searchParams.get('X-Amz-SignedHeaders')).toBe('host');
+      // The declared content type is signed so the URL only accepts that upload type.
+      expect(uploadUrl.searchParams.get('X-Amz-SignedHeaders')).toBe('content-type;host');
       expect(uploadUrl.searchParams.get('X-Amz-Signature')).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it('signs the content type for every whitelisted upload type', () => {
+      configureUploadsEnv();
+      const service = new UploadsService();
+
+      for (const contentType of ['image/jpeg', 'image/png', 'image/webp'] as const) {
+        const upload = service.createReviewPhotoUpload(USER_ID, { contentType });
+
+        expect(new URL(upload.uploadUrl).searchParams.get('X-Amz-SignedHeaders')).toBe(
+          'content-type;host',
+        );
+      }
     });
 
     it('derives extensions from each whitelisted content type', () => {

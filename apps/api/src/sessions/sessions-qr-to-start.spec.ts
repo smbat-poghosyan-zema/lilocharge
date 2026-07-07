@@ -21,6 +21,7 @@ import { PaymentsService } from '../payments/payments.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import { SessionCostCalculatorService } from './session-cost-calculator.service';
+import { SessionSettlementService } from './session-settlement.service';
 import { SessionsService } from './sessions.service';
 
 /**
@@ -183,6 +184,12 @@ describe('SessionsService - QR Scan to Session Start', () => {
     const ocppIdTagService = new OcppIdTagService();
     const ocppRemoteStopService = new OcppRemoteStopService(ocppRegistryService);
 
+    const sessionSettlementService = new SessionSettlementService(
+      mockPrismaService as unknown as PrismaService,
+      mockPaymentsService,
+      mockWalletService,
+    );
+
     sessionsService = new SessionsService(
       mockPrismaService as unknown as PrismaService,
       mockPaymentsService,
@@ -192,6 +199,7 @@ describe('SessionsService - QR Scan to Session Start', () => {
       ocppRemoteStartService,
       ocppRemoteStopService,
       ocppIdTagService,
+      sessionSettlementService,
     );
 
     // Set up mock OCPP charge point

@@ -46,9 +46,10 @@ interface PrismaPaymentMethodDelegateMock {
 }
 
 interface PrismaPaymentDelegateMock {
-  readonly create: jest.Mock<Promise<{ readonly id: string }>, [unknown]>;
+  readonly create: jest.Mock<Promise<PaymentRecord>, [unknown]>;
   readonly findUnique: jest.Mock<Promise<PaymentRecord | null>, [unknown]>;
   readonly update: jest.Mock<Promise<{ readonly id: string }>, [unknown]>;
+  readonly updateMany: jest.Mock<Promise<{ readonly count: number }>, [unknown]>;
 }
 
 interface PrismaServiceMock {
@@ -162,9 +163,10 @@ describe('PaymentsService Apple Pay flows', () => {
   beforeEach(() => {
     prismaMock = {
       payment: {
-        create: jest.fn<Promise<{ readonly id: string }>, [unknown]>(),
+        create: jest.fn<Promise<PaymentRecord>, [unknown]>(),
         findUnique: jest.fn<Promise<PaymentRecord | null>, [unknown]>(),
         update: jest.fn<Promise<{ readonly id: string }>, [unknown]>(),
+        updateMany: jest.fn<Promise<{ readonly count: number }>, [unknown]>(),
       },
       paymentMethod: {
         create: jest.fn<Promise<PaymentMethodRecord>, [unknown]>(),
@@ -281,7 +283,15 @@ describe('PaymentsService Apple Pay flows', () => {
     arcaClientMock.preAuthorize.mockResolvedValue({
       gatewayTransactionId: 'arca-tx-1',
     });
-    prismaMock.payment.create.mockResolvedValue({ id: 'payment-1' });
+    prismaMock.payment.create.mockResolvedValue(
+      buildPaymentRecord({
+        authorizedAmount: 0,
+        gatewayTransactionId: null,
+        preauthIdempotencyKey: 'preauth-key-1',
+        status: PaymentStatus.PENDING,
+      }),
+    );
+    prismaMock.payment.updateMany.mockResolvedValue({ count: 1 });
 
     await service.preAuthorizeArcaForSession({
       amount: 6200,
@@ -294,24 +304,38 @@ describe('PaymentsService Apple Pay flows', () => {
       cardToken: 'apple-tokenized-card-1',
       currency: 'AMD',
       description: 'LiloCharge session pre-authorization',
-      idempotencyKey: expect.stringMatching(UUID_PATTERN) as unknown as string,
+      idempotencyKey: 'preauth-key-1',
       orderId: SESSION_ID,
     });
+    // The PENDING row persists the pre-auth key before the gateway call.
     expect(prismaMock.payment.create).toHaveBeenCalledWith({
       data: {
         amount: 6200,
-        authorizedAmount: 6200,
+        authorizedAmount: 0,
         capturedAmount: 0,
         gateway: PaymentGateway.APPLE_PAY,
-        gatewayTransactionId: 'arca-tx-1',
+        gatewayTransactionId: null,
         paymentMethodId: 'payment-method-1',
         preauthIdempotencyKey: expect.stringMatching(UUID_PATTERN) as unknown as string,
         sessionId: SESSION_ID,
-        status: PaymentStatus.AUTHORIZED,
+        status: PaymentStatus.PENDING,
         userId: USER_ID,
       },
-      select: {
-        id: true,
+      select: expect.any(Object) as never,
+    });
+    // Success transitions the PENDING row to AUTHORIZED conditionally.
+    expect(prismaMock.payment.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'payment-1',
+        status: { in: [PaymentStatus.PENDING, PaymentStatus.FAILED] },
+      },
+      data: {
+        amount: 6200,
+        authorizedAmount: 6200,
+        gateway: PaymentGateway.APPLE_PAY,
+        gatewayTransactionId: 'arca-tx-1',
+        paymentMethodId: 'payment-method-1',
+        status: PaymentStatus.AUTHORIZED,
       },
     });
     expect(idramClientMock.getBalance).not.toHaveBeenCalled();
@@ -327,7 +351,7 @@ describe('PaymentsService Apple Pay flows', () => {
     arcaClientMock.capture.mockResolvedValue({
       gatewayTransactionId: 'arca-tx-1',
     });
-    prismaMock.payment.update.mockResolvedValue({ id: 'payment-1' });
+    prismaMock.payment.updateMany.mockResolvedValue({ count: 1 });
 
     await service.captureAuthorizedPaymentForSession({
       amount: 3900,
@@ -352,7 +376,7 @@ describe('PaymentsService Apple Pay flows', () => {
     arcaClientMock.refund.mockResolvedValue({
       gatewayTransactionId: 'arca-tx-1',
     });
-    prismaMock.payment.update.mockResolvedValue({ id: 'payment-1' });
+    prismaMock.payment.updateMany.mockResolvedValue({ count: 1 });
 
     await service.refundPaymentForSessionFailure(SESSION_ID);
 

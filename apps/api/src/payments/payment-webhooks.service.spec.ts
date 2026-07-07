@@ -1,9 +1,5 @@
 import type { PaymentGatewayWebhookPayload } from '@lilocharge/shared-types';
-import {
-  NotFoundException,
-  ServiceUnavailableException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { PaymentStatus } from '@prisma/client';
 
 import type { PrismaService } from '../prisma/prisma.service';
@@ -24,6 +20,7 @@ interface PrismaPaymentDelegateMock {
   readonly findFirst: jest.Mock<Promise<WebhookPaymentRecord | null>, [unknown]>;
   readonly findUnique: jest.Mock<Promise<WebhookPaymentRecord | null>, [unknown]>;
   readonly update: jest.Mock<Promise<{ readonly id: string }>, [unknown]>;
+  readonly updateMany: jest.Mock<Promise<{ readonly count: number }>, [unknown]>;
 }
 
 interface PrismaServiceMock {
@@ -66,6 +63,7 @@ describe('PaymentWebhooksService', () => {
         findFirst: jest.fn<Promise<WebhookPaymentRecord | null>, [unknown]>(),
         findUnique: jest.fn<Promise<WebhookPaymentRecord | null>, [unknown]>(),
         update: jest.fn<Promise<{ readonly id: string }>, [unknown]>(),
+        updateMany: jest.fn<Promise<{ readonly count: number }>, [unknown]>(),
       },
     };
     service = new PaymentWebhooksService(
@@ -95,7 +93,7 @@ describe('PaymentWebhooksService', () => {
       id: 'payment-1',
       status: PaymentStatus.AUTHORIZED,
     });
-    prismaMock.payment.update.mockResolvedValue({ id: 'payment-1' });
+    prismaMock.payment.updateMany.mockResolvedValue({ count: 1 });
 
     await expect(
       service.processGatewayCallback({
@@ -111,18 +109,17 @@ describe('PaymentWebhooksService', () => {
       },
       select: expect.any(Object) as unknown as object,
     });
-    expect(prismaMock.payment.update).toHaveBeenCalledWith({
+    // The transition is a compare-and-swap on the status we validated against.
+    expect(prismaMock.payment.updateMany).toHaveBeenCalledWith({
       where: {
         id: 'payment-1',
+        status: PaymentStatus.AUTHORIZED,
       },
       data: {
         amount: 4200,
         capturedAmount: 4200,
         gatewayTransactionId: 'arca-tx-1',
         status: PaymentStatus.CAPTURED,
-      },
-      select: {
-        id: true,
       },
     });
   });
@@ -135,7 +132,7 @@ describe('PaymentWebhooksService', () => {
       id: 'payment-1',
       status: PaymentStatus.CAPTURED,
     });
-    prismaMock.payment.update.mockResolvedValue({ id: 'payment-1' });
+    prismaMock.payment.updateMany.mockResolvedValue({ count: 1 });
 
     await expect(
       service.processGatewayCallback({
@@ -151,16 +148,14 @@ describe('PaymentWebhooksService', () => {
       },
       select: expect.any(Object) as unknown as object,
     });
-    expect(prismaMock.payment.update).toHaveBeenCalledWith({
+    expect(prismaMock.payment.updateMany).toHaveBeenCalledWith({
       where: {
         id: 'payment-1',
+        status: PaymentStatus.CAPTURED,
       },
       data: {
         gatewayTransactionId: 'arca-tx-1',
         status: PaymentStatus.REFUNDED,
-      },
-      select: {
-        id: true,
       },
     });
   });
@@ -208,7 +203,7 @@ describe('PaymentWebhooksService', () => {
     expect(prismaMock.payment.update).not.toHaveBeenCalled();
   });
 
-  it('returns 404 when no payment matches the callback identifiers', async () => {
+  it('acknowledges verified callbacks for unknown orders with 200 so gateways stop retrying', async () => {
     const payload = buildWebhookPayload({ orderId: 'wallet-topup-not-a-session' });
     prismaMock.payment.findFirst.mockResolvedValue(null);
 
@@ -218,10 +213,26 @@ describe('PaymentWebhooksService', () => {
         payload,
         signature: signPayload(payload, ARCA_SECRET),
       }),
-    ).rejects.toBeInstanceOf(NotFoundException);
+    ).resolves.toEqual({ received: true });
 
+    // The malformed order id never reaches the sessionId lookup and nothing is written.
     expect(prismaMock.payment.findUnique).not.toHaveBeenCalled();
     expect(prismaMock.payment.update).not.toHaveBeenCalled();
+    expect(prismaMock.payment.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('still rejects unsigned callbacks for unknown orders before any lookup', async () => {
+    const payload = buildWebhookPayload({ orderId: 'wallet-topup-not-a-session' });
+
+    await expect(
+      service.processGatewayCallback({
+        gateway: 'ARCA',
+        payload,
+        signature: signPayload(payload, 'wrong-secret'),
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    expect(prismaMock.payment.findFirst).not.toHaveBeenCalled();
   });
 
   it('acknowledges duplicate callbacks without a second status transition', async () => {
@@ -241,6 +252,7 @@ describe('PaymentWebhooksService', () => {
     ).resolves.toEqual({ received: true });
 
     expect(prismaMock.payment.update).not.toHaveBeenCalled();
+    expect(prismaMock.payment.updateMany).not.toHaveBeenCalled();
   });
 
   it('acknowledges out-of-order authorization callbacks after capture without downgrading', async () => {
@@ -260,5 +272,78 @@ describe('PaymentWebhooksService', () => {
     ).resolves.toEqual({ received: true });
 
     expect(prismaMock.payment.update).not.toHaveBeenCalled();
+    expect(prismaMock.payment.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('drops a capture callback that loses the race to a terminal refund transition', async () => {
+    const payload = buildWebhookPayload();
+    prismaMock.payment.findFirst.mockResolvedValue({
+      gatewayTransactionId: 'arca-tx-1',
+      id: 'payment-1',
+      status: PaymentStatus.AUTHORIZED,
+    });
+    // The conditional write loses: someone transitioned the payment mid-flight...
+    prismaMock.payment.updateMany.mockResolvedValue({ count: 0 });
+    // ...and the re-read shows the terminal REFUNDED status, which CAPTURED must not overwrite.
+    prismaMock.payment.findUnique.mockResolvedValue({
+      gatewayTransactionId: 'arca-tx-1',
+      id: 'payment-1',
+      status: PaymentStatus.REFUNDED,
+    });
+
+    await expect(
+      service.processGatewayCallback({
+        gateway: 'ARCA',
+        payload,
+        signature: signPayload(payload, ARCA_SECRET),
+      }),
+    ).resolves.toEqual({ received: true });
+
+    expect(prismaMock.payment.updateMany).toHaveBeenCalledTimes(1);
+    expect(prismaMock.payment.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'payment-1', status: PaymentStatus.AUTHORIZED },
+      }),
+    );
+  });
+
+  it('retries a lost race and applies the transition when it is still allowed', async () => {
+    const payload = buildWebhookPayload();
+    prismaMock.payment.findFirst.mockResolvedValue({
+      gatewayTransactionId: 'arca-tx-1',
+      id: 'payment-1',
+      status: PaymentStatus.PENDING,
+    });
+    // First conditional write loses to a concurrent AUTHORIZED transition...
+    prismaMock.payment.updateMany
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 });
+    // ...the re-read shows AUTHORIZED, from which CAPTURED is still a legal transition.
+    prismaMock.payment.findUnique.mockResolvedValue({
+      gatewayTransactionId: 'arca-tx-1',
+      id: 'payment-1',
+      status: PaymentStatus.AUTHORIZED,
+    });
+
+    await expect(
+      service.processGatewayCallback({
+        gateway: 'ARCA',
+        payload,
+        signature: signPayload(payload, ARCA_SECRET),
+      }),
+    ).resolves.toEqual({ received: true });
+
+    expect(prismaMock.payment.updateMany).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: { id: 'payment-1', status: PaymentStatus.PENDING },
+      }),
+    );
+    expect(prismaMock.payment.updateMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: { id: 'payment-1', status: PaymentStatus.AUTHORIZED },
+      }),
+    );
   });
 });

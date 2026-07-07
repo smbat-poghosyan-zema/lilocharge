@@ -21,6 +21,13 @@ export type OcppHandshakeAuthDecision =
 
 /** Environment variables consumed by the OCPP charge-point authentication policy. */
 export interface OcppAuthEnvironment {
+  readonly NODE_ENV?: string;
+  /**
+   * Escape hatch: set to `true` to allow `OCPP_AUTH_MODE=open` while NODE_ENV=production
+   * (e.g. an isolated staging cluster reusing production settings). Anything else keeps the
+   * production fail-fast behavior.
+   */
+  readonly OCPP_ALLOW_OPEN_AUTH_IN_PRODUCTION?: string;
   readonly OCPP_ALLOWED_IDENTITIES?: string;
   readonly OCPP_AUTH_MODE?: string;
   readonly OCPP_IDENTITY_SECRETS?: string;
@@ -31,12 +38,25 @@ const REJECT_REASON = 'Unauthorized charge point';
 /**
  * Resolves the charge-point authentication policy from environment variables.
  *
- * Fails fast (throws) on unknown modes, on `allowlist` mode without a usable allowlist, and on
- * `basic` mode without a valid identity-to-secret JSON map, so misconfigured deployments do not
- * silently fall back to an open server.
+ * Fails fast (throws) on unknown modes, on `allowlist` mode without a usable allowlist, on
+ * `basic` mode without a valid identity-to-secret JSON map, and on `open` mode in production
+ * (unless the documented OCPP_ALLOW_OPEN_AUTH_IN_PRODUCTION escape hatch is set), so
+ * misconfigured deployments do not silently expose an open central system.
  */
 export function resolveOcppAuthConfig(environment: OcppAuthEnvironment): OcppAuthConfig {
   const mode = resolveOcppAuthMode(environment.OCPP_AUTH_MODE);
+
+  if (
+    mode === 'open' &&
+    environment.NODE_ENV === 'production' &&
+    environment.OCPP_ALLOW_OPEN_AUTH_IN_PRODUCTION?.trim().toLowerCase() !== 'true'
+  ) {
+    throw new Error(
+      'OCPP_AUTH_MODE=open is not allowed in production: any charge point identity would be ' +
+        'accepted without credentials. Set OCPP_AUTH_MODE=allowlist or OCPP_AUTH_MODE=basic, ' +
+        'or (only for isolated environments) set OCPP_ALLOW_OPEN_AUTH_IN_PRODUCTION=true.',
+    );
+  }
 
   if (mode === 'allowlist') {
     const allowedIdentities = parseAllowedIdentities(environment.OCPP_ALLOWED_IDENTITIES);

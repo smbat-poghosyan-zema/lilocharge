@@ -6,9 +6,15 @@ import type {
   WalletTransactionResponse,
   WalletTransactionsResponse,
 } from '@lilocharge/shared-types';
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import { PaymentGateway, WalletTransactionType } from '@prisma/client';
+import { PaymentGateway, WalletTransactionStatus, WalletTransactionType } from '@prisma/client';
 
 import { ArcaClient } from '../payments/arca.client';
 import { IdramClient } from '../payments/idram.client';
@@ -92,6 +98,8 @@ export interface RefundWalletBalanceInput {
  */
 @Injectable()
 export class WalletService {
+  private readonly logger: Logger = new Logger(WalletService.name);
+
   constructor(
     private readonly prismaService: PrismaService,
     private readonly arcaClient: ArcaClient,
@@ -126,8 +134,10 @@ export class WalletService {
   /**
    * Tops up wallet balance via ArCa or Idram payment gateway.
    * Resolves the caller's stored payment method (never forwarding raw ids as gateway
-   * tokens), charges the gateway with per-operation idempotency keys, and records the
-   * wallet transaction atomically with the balance update.
+   * tokens), persists a PENDING ledger row carrying every gateway idempotency key BEFORE
+   * the first gateway call (so a crash between gateway capture and wallet credit leaves a
+   * durable record that reconciliation can complete with the same keys instead of
+   * double-charging), then credits the balance atomically and completes the row.
    */
   public async topUp(input: TopUpWalletInput): Promise<WalletTopUpResponse> {
     if (input.amount <= 0) {
@@ -137,75 +147,90 @@ export class WalletService {
     const paymentMethod = await this.resolveTopUpPaymentMethod(input);
     const wallet = await this.getOrCreateWallet(input.userId);
     const gateway = input.gateway === 'ARCA' ? PaymentGateway.ARCA : PaymentGateway.IDRAM;
-    const orderId = `wallet-topup-${randomUUID()}`;
-    // The key of the money-moving operation (ArCa capture / Idram debit) is persisted on
-    // the wallet transaction so operational retries or reconciliation can reuse it.
+    // The key of the money-moving operation (ArCa capture / Idram debit). The pre-auth leg
+    // and order id are derived from values persisted on the same PENDING row, so every key
+    // sent to a gateway is durable before the gateway ever sees it.
     const idempotencyKey = randomUUID();
+
+    const pendingTransaction = await this.prismaService.walletTransaction.create({
+      data: {
+        walletId: wallet.id,
+        type: WalletTransactionType.TOP_UP,
+        status: WalletTransactionStatus.PENDING,
+        amount: input.amount,
+        balanceBefore: 0,
+        balanceAfter: 0,
+        gateway,
+        idempotencyKey,
+        description: `Wallet top-up via ${input.gateway}`,
+      },
+      select: { id: true },
+    });
+    const orderId = `wallet-topup-${pendingTransaction.id}`;
 
     let gatewayTransactionId: string | null = null;
 
-    // Process payment via gateway
-    if (gateway === PaymentGateway.ARCA) {
-      // For ArCa, use preAuthorize followed by immediate capture
-      const preAuthResult = await this.arcaClient.preAuthorize({
-        amount: input.amount,
-        cardToken: paymentMethod.token,
-        currency: 'AMD',
-        description: 'Wallet top-up',
-        idempotencyKey: randomUUID(),
-        orderId,
-      });
-      gatewayTransactionId = preAuthResult.gatewayTransactionId;
+    try {
+      // Process payment via gateway
+      if (gateway === PaymentGateway.ARCA) {
+        // For ArCa, use preAuthorize followed by immediate capture
+        const preAuthResult = await this.arcaClient.preAuthorize({
+          amount: input.amount,
+          cardToken: paymentMethod.token,
+          currency: 'AMD',
+          description: 'Wallet top-up',
+          idempotencyKey: `${idempotencyKey}-preauth`,
+          orderId,
+        });
+        gatewayTransactionId = preAuthResult.gatewayTransactionId;
 
-      // Immediately capture the pre-authorized amount
-      await this.arcaClient.capture({
-        amount: input.amount,
-        gatewayTransactionId,
-        idempotencyKey,
-      });
-    } else {
-      // For Idram, use debitWallet for direct charge
-      const debitResult = await this.idramClient.debitWallet({
-        amount: input.amount,
-        currency: 'AMD',
-        description: 'Wallet top-up',
-        idempotencyKey,
-        orderId,
-        walletToken: paymentMethod.token,
-      });
-      gatewayTransactionId = debitResult.gatewayTransactionId;
+        // Immediately capture the pre-authorized amount
+        await this.arcaClient.capture({
+          amount: input.amount,
+          gatewayTransactionId,
+          idempotencyKey,
+        });
+      } else {
+        // For Idram, use debitWallet for direct charge
+        const debitResult = await this.idramClient.debitWallet({
+          amount: input.amount,
+          currency: 'AMD',
+          description: 'Wallet top-up',
+          idempotencyKey,
+          orderId,
+          walletToken: paymentMethod.token,
+        });
+        gatewayTransactionId = debitResult.gatewayTransactionId;
+      }
+    } catch (error: unknown) {
+      await this.markTopUpTransactionFailed(pendingTransaction.id);
+      throw error;
     }
 
-    // Update wallet balance atomically with transaction record
+    // Credit the wallet atomically: claim the PENDING row first (so the credit can never
+    // be applied twice for the same gateway operation), then apply an atomic increment and
+    // derive the ledger balances from the post-increment read inside the same transaction.
     const result = await this.prismaService.$transaction(async (tx) => {
-      const currentWallet = await tx.wallet.findUnique({
-        where: { id: wallet.id },
-        select: { balance: true },
+      const claimed = await tx.walletTransaction.updateMany({
+        where: { id: pendingTransaction.id, status: WalletTransactionStatus.PENDING },
+        data: { status: WalletTransactionStatus.COMPLETED, gatewayTransactionId },
       });
 
-      if (currentWallet === null) {
-        throw new NotFoundException('Wallet not found');
+      if (claimed.count === 0) {
+        throw new ConflictException('Wallet top-up has already been finalized');
       }
-
-      const newBalance = currentWallet.balance + input.amount;
 
       const updatedWallet = await tx.wallet.update({
         where: { id: wallet.id },
-        data: { balance: newBalance },
+        data: { balance: { increment: input.amount } },
         select: WALLET_RESPONSE_SELECT,
       });
 
-      const transaction = await tx.walletTransaction.create({
+      const transaction = await tx.walletTransaction.update({
+        where: { id: pendingTransaction.id },
         data: {
-          walletId: wallet.id,
-          type: WalletTransactionType.TOP_UP,
-          amount: input.amount,
-          balanceBefore: currentWallet.balance,
-          balanceAfter: newBalance,
-          gateway,
-          gatewayTransactionId,
-          idempotencyKey,
-          description: `Wallet top-up via ${input.gateway}`,
+          balanceBefore: updatedWallet.balance - input.amount,
+          balanceAfter: updatedWallet.balance,
         },
         select: WALLET_TRANSACTION_RESPONSE_SELECT,
       });
@@ -218,6 +243,26 @@ export class WalletService {
       newBalance: result.wallet.balance,
       transaction: mapWalletTransactionRecordToResponse(result.transaction),
     };
+  }
+
+  /**
+   * Best-effort transition of one PENDING top-up ledger row to FAILED after a gateway
+   * error. Failures here are swallowed so the original gateway error propagates; the row
+   * then stays PENDING with its persisted keys for reconciliation.
+   */
+  private async markTopUpTransactionFailed(transactionId: string): Promise<void> {
+    try {
+      await this.prismaService.walletTransaction.updateMany({
+        where: { id: transactionId, status: WalletTransactionStatus.PENDING },
+        data: { status: WalletTransactionStatus.FAILED },
+      });
+    } catch (error: unknown) {
+      this.logger.warn(
+        `Failed to mark wallet top-up transaction ${transactionId} as FAILED: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 
   /**
@@ -266,7 +311,11 @@ export class WalletService {
 
   /**
    * Deducts balance from wallet for charging session payment.
-   * Validates sufficient balance before deduction.
+   *
+   * The deduction is a race-safe conditional decrement: it only succeeds when the balance
+   * still covers the amount at write time, so concurrent deductions can never lose an
+   * update or drive the balance negative (a DB CHECK constraint backs this invariant up).
+   * Ledger balances are derived from a post-decrement read inside the same transaction.
    */
   public async deductBalance(input: DeductWalletBalanceInput): Promise<WalletTransactionResponse> {
     if (input.amount <= 0) {
@@ -280,6 +329,17 @@ export class WalletService {
     }
 
     const result = await this.prismaService.$transaction(async (tx) => {
+      const deducted = await tx.wallet.updateMany({
+        where: { id: wallet.id, balance: { gte: input.amount } },
+        data: { balance: { decrement: input.amount } },
+      });
+
+      if (deducted.count === 0) {
+        // A concurrent deduction won the race and the remaining balance no longer covers
+        // this amount (or the wallet row disappeared).
+        throw new BadRequestException('Insufficient wallet balance');
+      }
+
       const currentWallet = await tx.wallet.findUnique({
         where: { id: wallet.id },
         select: { balance: true },
@@ -289,24 +349,14 @@ export class WalletService {
         throw new NotFoundException('Wallet not found');
       }
 
-      if (currentWallet.balance < input.amount) {
-        throw new BadRequestException('Insufficient wallet balance');
-      }
-
-      const newBalance = currentWallet.balance - input.amount;
-
-      await tx.wallet.update({
-        where: { id: wallet.id },
-        data: { balance: newBalance },
-      });
-
       const transaction = await tx.walletTransaction.create({
         data: {
           walletId: wallet.id,
           type: WalletTransactionType.DEDUCTION,
+          status: WalletTransactionStatus.COMPLETED,
           amount: input.amount,
-          balanceBefore: currentWallet.balance,
-          balanceAfter: newBalance,
+          balanceBefore: currentWallet.balance + input.amount,
+          balanceAfter: currentWallet.balance,
           sessionId: input.sessionId,
           description: `Payment for charging session`,
         },
@@ -321,7 +371,9 @@ export class WalletService {
 
   /**
    * Refunds balance back to wallet (e.g., partial refund for cancelled session).
-   * Creates a REFUND transaction and increases wallet balance.
+   * Creates a REFUND transaction and increases wallet balance via an atomic increment,
+   * deriving ledger balances from the post-increment result so concurrent writers can
+   * never lose an update.
    */
   public async refundBalance(input: RefundWalletBalanceInput): Promise<WalletTransactionResponse> {
     if (input.amount <= 0) {
@@ -331,29 +383,20 @@ export class WalletService {
     const wallet = await this.getOrCreateWallet(input.userId);
 
     const result = await this.prismaService.$transaction(async (tx) => {
-      const currentWallet = await tx.wallet.findUnique({
+      const updatedWallet = await tx.wallet.update({
         where: { id: wallet.id },
+        data: { balance: { increment: input.amount } },
         select: { balance: true },
-      });
-
-      if (currentWallet === null) {
-        throw new NotFoundException('Wallet not found');
-      }
-
-      const newBalance = currentWallet.balance + input.amount;
-
-      await tx.wallet.update({
-        where: { id: wallet.id },
-        data: { balance: newBalance },
       });
 
       const transaction = await tx.walletTransaction.create({
         data: {
           walletId: wallet.id,
           type: WalletTransactionType.REFUND,
+          status: WalletTransactionStatus.COMPLETED,
           amount: input.amount,
-          balanceBefore: currentWallet.balance,
-          balanceAfter: newBalance,
+          balanceBefore: updatedWallet.balance - input.amount,
+          balanceAfter: updatedWallet.balance,
           sessionId: input.sessionId,
           description: `Refund for session ${input.sessionId}`,
         },
@@ -383,6 +426,8 @@ export class WalletService {
 
     const where: Prisma.WalletTransactionWhereInput = {
       walletId: wallet.id,
+      // PENDING/FAILED top-up rows are internal idempotency bookkeeping, not history.
+      status: WalletTransactionStatus.COMPLETED,
       ...(options?.type && { type: options.type }),
     };
 

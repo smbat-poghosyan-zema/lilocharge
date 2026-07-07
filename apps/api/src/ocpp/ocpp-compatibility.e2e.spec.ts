@@ -837,4 +837,93 @@ describe('OCPP 1.6-J Compatibility (E2E) - Charge Point Communication', () => {
       await expect(ocppClient!.call('UnsupportedAction', {})).rejects.toThrow();
     });
   });
+
+  describe('App-initiated remote start ↔ charger StartTransaction linking (R1)', () => {
+    it('attaches the charger StartTransaction to the API session instead of creating a duplicate', async () => {
+      // GIVEN an API-created session in AUTHORIZED state (as SessionsService.startSession leaves it
+      // just before dispatching RemoteStart) and a connected charge point.
+      const apiSession = await prismaService.session.create({
+        data: {
+          id: '55555555-5555-5555-5555-555555555555',
+          userId: TEST_USER_ID,
+          connectorId: TEST_CONNECTOR_ID,
+          status: 'AUTHORIZED',
+        },
+        select: { id: true },
+      });
+
+      ocppClient = await createOcppClient(TEST_CHARGE_POINT_ID);
+      await ocppClient.call(OcppAction.BOOT_NOTIFICATION, {
+        chargePointVendor: 'ABB',
+        chargePointModel: 'Terra 54',
+      });
+
+      // The charge point answers RemoteStart by opening a transaction with the same idTag it received
+      // (a real 1.6 charger's behaviour).
+      let remoteStartIdTag: string | null = null;
+      ocppClient.handle(OcppAction.REMOTE_START_TRANSACTION, (options) => {
+        const params = options.params as { idTag: string };
+        remoteStartIdTag = params.idTag;
+        return Promise.resolve({ status: 'Accepted' });
+      });
+
+      const issuedIdTag = await idTagService.issueIdTag(TEST_USER_ID);
+
+      // WHEN the app dispatches RemoteStart carrying the sessionId (as SessionsService does).
+      const remoteStartResult = await remoteStartService.remoteStartTransaction({
+        chargePointId: TEST_CHARGE_POINT_ID,
+        sessionId: apiSession.id,
+        payload: {
+          connectorId: TEST_CONNECTOR_ID_OCPP,
+          idTag: issuedIdTag,
+        },
+      });
+      expect(remoteStartResult.status).toBe('Accepted');
+      expect(remoteStartIdTag).toBe(issuedIdTag);
+
+      // AND the charger reports the transaction it opened.
+      const startResponse = (await ocppClient.call(OcppAction.START_TRANSACTION, {
+        connectorId: TEST_CONNECTOR_ID_OCPP,
+        idTag: issuedIdTag,
+        meterStart: 1000,
+        timestamp: new Date().toISOString(),
+      })) as OcppStartTransactionResponse;
+      expect(startResponse.idTagInfo.status).toBe('Accepted');
+
+      // THEN exactly ONE session exists for the connector — the API session, now carrying the
+      // charger's transaction id — not a duplicate charger-local session.
+      const sessions = await prismaService.session.findMany({
+        where: { connectorId: TEST_CONNECTOR_ID },
+        select: { id: true, status: true, transactionId: true, meterStart: true },
+      });
+      expect(sessions).toHaveLength(1);
+      expect(sessions[0]?.id).toBe(apiSession.id);
+      expect(sessions[0]?.status).toBe('ACTIVE');
+      expect(sessions[0]?.transactionId).toBe(String(startResponse.transactionId));
+      expect(sessions[0]?.meterStart).toBe(1000);
+    });
+
+    it('creates a charger-local session when no tracked remote start matches', async () => {
+      // A charger-initiated (non-app) StartTransaction still creates its own session.
+      ocppClient = await createOcppClient(TEST_CHARGE_POINT_ID);
+      await ocppClient.call(OcppAction.BOOT_NOTIFICATION, {
+        chargePointVendor: 'ABB',
+        chargePointModel: 'Terra 54',
+      });
+
+      const startResponse = (await ocppClient.call(OcppAction.START_TRANSACTION, {
+        connectorId: TEST_CONNECTOR_ID_OCPP,
+        idTag: await idTagService.issueIdTag(TEST_USER_ID),
+        meterStart: 0,
+        timestamp: new Date().toISOString(),
+      })) as OcppStartTransactionResponse;
+
+      expect(startResponse.idTagInfo.status).toBe('Accepted');
+      const sessions = await prismaService.session.findMany({
+        where: { connectorId: TEST_CONNECTOR_ID },
+        select: { id: true },
+      });
+      expect(sessions).toHaveLength(1);
+    });
+  });
 });

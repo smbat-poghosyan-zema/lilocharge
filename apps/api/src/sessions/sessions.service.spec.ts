@@ -21,6 +21,7 @@ import type {
   SessionCostCalculationResult,
   SessionCostCalculatorService,
 } from './session-cost-calculator.service';
+import { SessionSettlementService } from './session-settlement.service';
 import { SessionsService } from './sessions.service';
 
 interface SessionRecord {
@@ -225,6 +226,14 @@ describe('SessionsService', () => {
 
   /** Builds one SessionsService instance from the shared mocks and a wallet mock override. */
   function buildService(walletServiceMock: unknown): SessionsService {
+    // The settlement service is constructed for real on top of the shared mocks so these tests
+    // exercise the exact billing rules production uses (zero-energy refund, wallet, gateway).
+    const sessionSettlementService = new SessionSettlementService(
+      prismaMock as unknown as PrismaService,
+      paymentsServiceMock as unknown as PaymentsService,
+      walletServiceMock as WalletService,
+    );
+
     return new SessionsService(
       prismaMock as unknown as PrismaService,
       paymentsServiceMock as unknown as PaymentsService,
@@ -234,6 +243,7 @@ describe('SessionsService', () => {
       ocppRemoteStartServiceMock as unknown as OcppRemoteStartService,
       ocppRemoteStopServiceMock as unknown as OcppRemoteStopService,
       ocppIdTagServiceMock as unknown as OcppIdTagService,
+      sessionSettlementService,
     );
   }
 
@@ -794,6 +804,9 @@ describe('SessionsService', () => {
           connectorId: 2,
           idTag: 'aabbccddeeff00112233',
         },
+        // The session id rides along so the charger's answering StartTransaction is attached
+        // to this API session instead of creating a duplicate.
+        sessionId: SESSION_ID,
       });
       expect(session.status).toBe(SharedSessionStatus.ACTIVE);
     });
@@ -897,10 +910,38 @@ describe('SessionsService', () => {
       expect(ocppRemoteStopServiceMock.remoteStopTransaction).not.toHaveBeenCalled();
     });
 
+    it('dispatches RemoteStop with 2.0.1 station-assigned string transaction ids verbatim', async () => {
+      const stationAssignedTransactionId = 'b7a3c9f0-9d5e-4f7a-8a3f-transaction-0001';
+      prismaMock.session.findFirst.mockResolvedValue(
+        buildSessionRecord({
+          energyDelivered: 18,
+          startTime: START_TIME,
+          status: PrismaSessionStatus.ACTIVE,
+          transactionId: stationAssignedTransactionId,
+        }),
+      );
+
+      await service.stopSession(USER_ID, SESSION_ID, {
+        endedAt: '2026-02-17T12:35:00.000Z',
+      });
+
+      expect(ocppRemoteStopServiceMock.remoteStopTransaction).toHaveBeenCalledWith({
+        chargePointId: CHARGE_POINT_ID,
+        payload: {
+          transactionId: stationAssignedTransactionId,
+        },
+      });
+    });
+
     it('still finalizes the session server-side when the charge point is unreachable', async () => {
       ocppRemoteStopServiceMock.remoteStopTransaction.mockRejectedValue(
         new NotFoundException(`Charge point ${CHARGE_POINT_ID} is not connected`),
       );
+      costCalculatorServiceMock.calculateSessionCost.mockResolvedValue({
+        chargingDurationMinutes: 30,
+        idleDurationMinutes: 0,
+        totalCost: 3500,
+      });
 
       const session = await service.stopSession(USER_ID, SESSION_ID, {
         endedAt: '2026-02-17T12:35:00.000Z',

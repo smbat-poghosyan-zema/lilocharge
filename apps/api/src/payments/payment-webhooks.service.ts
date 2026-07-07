@@ -5,7 +5,7 @@ import type {
 } from '@lilocharge/shared-types';
 import {
   Injectable,
-  NotFoundException,
+  Logger,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -69,6 +69,12 @@ const ALLOWED_STATUS_TRANSITIONS: Record<PaymentStatus, readonly PaymentStatus[]
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
+ * Maximum conditional-update attempts when concurrent writers (synchronous capture,
+ * another webhook delivery) transition the payment between our read and write.
+ */
+const MAX_TRANSITION_ATTEMPTS = 3;
+
+/**
  * Service processing signed ArCa/Idram webhook callbacks into payment status updates.
  *
  * Callbacks are only processed after HMAC verification against the per-gateway secret
@@ -78,6 +84,8 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
  */
 @Injectable()
 export class PaymentWebhooksService {
+  private readonly logger: Logger = new Logger(PaymentWebhooksService.name);
+
   constructor(
     private readonly prismaService: PrismaService,
     private readonly signatureVerifier: WebhookSignatureVerifier,
@@ -113,29 +121,70 @@ export class PaymentWebhooksService {
     const payment = await this.findPaymentForCallback(input.payload);
 
     if (payment === null) {
-      throw new NotFoundException(
-        `Payment not found for ${gatewayConfig.label} webhook order ${input.payload.orderId}`,
+      // The signature already proved the callback comes from the gateway; a 4xx here would
+      // only make the gateway retry an order we will never know (e.g. created against
+      // another environment), so acknowledge and keep an operator-visible trace.
+      this.logger.warn(
+        `No payment matches ${gatewayConfig.label} webhook order ${input.payload.orderId} (transaction ${input.payload.gatewayTransactionId}); acknowledging without processing`,
       );
-    }
 
-    const targetStatus = mapWebhookStatusToPaymentStatus(input.payload.status);
-
-    if (!ALLOWED_STATUS_TRANSITIONS[payment.status].includes(targetStatus)) {
-      // Duplicate or out-of-order delivery: acknowledge so the gateway stops retrying.
       return { received: true };
     }
 
-    await this.prismaService.payment.update({
-      where: {
-        id: payment.id,
-      },
-      data: buildPaymentUpdateData(input.payload, targetStatus),
-      select: {
-        id: true,
-      },
-    });
+    const targetStatus = mapWebhookStatusToPaymentStatus(input.payload.status);
+    await this.applyStatusTransition(payment, input.payload, targetStatus);
 
     return { received: true };
+  }
+
+  /**
+   * Applies one forward-only status transition with a conditional compare-and-swap write.
+   *
+   * The update only matches while the payment still has the status we validated against
+   * the transition table, so a concurrent synchronous capture or another webhook delivery
+   * can never be overwritten blindly. On a lost race (count === 0) the payment is re-read
+   * and the transition re-evaluated; disallowed transitions are dropped (acknowledged
+   * upstream) exactly like duplicate or out-of-order deliveries.
+   */
+  private async applyStatusTransition(
+    payment: WebhookPaymentRecord,
+    payload: PaymentGatewayWebhookPayload,
+    targetStatus: PaymentStatus,
+  ): Promise<void> {
+    let currentPayment: WebhookPaymentRecord | null = payment;
+
+    for (let attempt = 0; attempt < MAX_TRANSITION_ATTEMPTS; attempt += 1) {
+      if (
+        currentPayment === null ||
+        !ALLOWED_STATUS_TRANSITIONS[currentPayment.status].includes(targetStatus)
+      ) {
+        // Duplicate or out-of-order delivery: acknowledge so the gateway stops retrying.
+        return;
+      }
+
+      const updated = await this.prismaService.payment.updateMany({
+        where: {
+          id: currentPayment.id,
+          status: currentPayment.status,
+        },
+        data: buildPaymentUpdateData(payload, targetStatus),
+      });
+
+      if (updated.count > 0) {
+        return;
+      }
+
+      // Someone else transitioned the payment between our read and write; re-read and
+      // reconcile against the forward-only transition table.
+      currentPayment = await this.prismaService.payment.findUnique({
+        where: { id: currentPayment.id },
+        select: WEBHOOK_PAYMENT_SELECT,
+      });
+    }
+
+    this.logger.warn(
+      `Gave up applying webhook status ${targetStatus} to payment ${payment.id} after ${MAX_TRANSITION_ATTEMPTS} contended attempts`,
+    );
   }
 
   /**
@@ -188,8 +237,8 @@ function mapWebhookStatusToPaymentStatus(status: PaymentWebhookStatus): PaymentS
 function buildPaymentUpdateData(
   payload: PaymentGatewayWebhookPayload,
   targetStatus: PaymentStatus,
-): Prisma.PaymentUpdateInput {
-  const updateData: Prisma.PaymentUpdateInput = {
+): Prisma.PaymentUpdateManyMutationInput {
+  const updateData: Prisma.PaymentUpdateManyMutationInput = {
     gatewayTransactionId: payload.gatewayTransactionId,
     status: targetStatus,
   };

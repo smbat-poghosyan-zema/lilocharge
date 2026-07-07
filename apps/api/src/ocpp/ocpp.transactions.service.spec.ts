@@ -2,23 +2,29 @@ import type {
   OcppStartTransactionRequest,
   OcppStopTransactionRequest,
 } from '@lilocharge/shared-types';
-import { SessionStatus } from '@prisma/client';
+import { Prisma, SessionStatus } from '@prisma/client';
 
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { PaymentsService } from '../payments/payments.service';
+import type { WalletService } from '../wallet/wallet.service';
 import type {
   SessionCostCalculationResult,
   SessionCostCalculatorService,
 } from '../sessions/session-cost-calculator.service';
+import { SessionSettlementService } from '../sessions/session-settlement.service';
 import { OcppIdTagService } from './ocpp.id-tag.service';
-import type { OcppRemoteStartService } from './ocpp.remote-start.service';
+import type {
+  OcppRemoteStartService,
+  OcppTrackedRemoteStartTransaction,
+} from './ocpp.remote-start.service';
 import { OcppTransactionsService } from './ocpp.transactions.service';
 
 interface SessionStopLookupRecord {
   readonly connectorId: string | null;
   readonly createdAt: Date;
   readonly id: string;
+  readonly meterStart?: number | null;
   readonly startTime: Date | null;
   readonly status: SessionStatus;
   readonly userId: string;
@@ -43,8 +49,10 @@ interface PrismaUserDelegateMock {
 }
 
 interface PrismaSessionDelegateMock {
+  readonly count: jest.Mock<Promise<number>, [unknown]>;
   readonly create: jest.Mock<Promise<{ readonly id: string }>, [unknown]>;
   readonly findFirst: jest.Mock<Promise<SessionStopLookupRecord | null>, [unknown]>;
+  readonly findUnique: jest.Mock<Promise<unknown>, [unknown]>;
   readonly update: jest.Mock<Promise<{ readonly id: string }>, [unknown]>;
 }
 
@@ -52,9 +60,20 @@ interface PrismaMeterValueDelegateMock {
   readonly aggregate: jest.Mock<Promise<MeterValueAggregateRecord>, [unknown]>;
 }
 
+interface PrismaPaymentDelegateMock {
+  readonly create: jest.Mock<Promise<{ readonly id: string }>, [unknown]>;
+}
+
+interface PrismaPaymentMethodDelegateMock {
+  readonly findFirst: jest.Mock<Promise<{ readonly id: string } | null>, [unknown]>;
+}
+
 interface PrismaServiceMock {
+  readonly $transaction: jest.Mock<Promise<unknown>, [(tx: unknown) => Promise<unknown>, unknown?]>;
   readonly connector: PrismaConnectorDelegateMock;
   readonly meterValue: PrismaMeterValueDelegateMock;
+  readonly payment: PrismaPaymentDelegateMock;
+  readonly paymentMethod: PrismaPaymentMethodDelegateMock;
   readonly session: PrismaSessionDelegateMock;
   readonly user: PrismaUserDelegateMock;
 }
@@ -79,10 +98,24 @@ interface OcppRemoteStartServiceMock extends Pick<
   >;
 }
 
-interface PaymentsServiceMock extends Pick<PaymentsService, 'captureAuthorizedPaymentForSession'> {
+interface PaymentsServiceMock extends Pick<
+  PaymentsService,
+  'captureAuthorizedPaymentForSession' | 'refundPaymentForSessionFailure'
+> {
   readonly captureAuthorizedPaymentForSession: jest.Mock<
     ReturnType<PaymentsService['captureAuthorizedPaymentForSession']>,
     Parameters<PaymentsService['captureAuthorizedPaymentForSession']>
+  >;
+  readonly refundPaymentForSessionFailure: jest.Mock<
+    ReturnType<PaymentsService['refundPaymentForSessionFailure']>,
+    Parameters<PaymentsService['refundPaymentForSessionFailure']>
+  >;
+}
+
+interface WalletServiceMock extends Pick<WalletService, 'deductBalance'> {
+  readonly deductBalance: jest.Mock<
+    ReturnType<WalletService['deductBalance']>,
+    Parameters<WalletService['deductBalance']>
   >;
 }
 
@@ -101,6 +134,7 @@ interface NotificationsServiceMock extends Pick<
 }
 
 const USER_ID = '11111111-1111-4111-8111-111111111111';
+const API_SESSION_ID = '55555555-5555-4555-8555-555555555555';
 
 /** Builds one valid OCPP StartTransaction payload fixture. */
 function buildStartPayload(
@@ -139,9 +173,46 @@ function buildCostCalculationResult(
   };
 }
 
+/** Builds one tracked remote-start record fixture linked to an API session. */
+function buildTrackedRemoteStart(
+  overrides?: Partial<OcppTrackedRemoteStartTransaction>,
+): OcppTrackedRemoteStartTransaction {
+  return {
+    attemptCount: 1,
+    chargePointId: 'ev-armenia-001',
+    connectorId: 1,
+    expiresAt: '2026-02-17T12:05:00.000Z',
+    idTag: USER_ID,
+    remoteStartRequestId: 'tracking-1',
+    requestedAt: '2026-02-17T12:00:00.000Z',
+    sequence: 1,
+    sessionId: API_SESSION_ID,
+    transactionId: 7001,
+    updatedAt: '2026-02-17T12:00:00.000Z',
+    ...overrides,
+  };
+}
+
+/** Builds one active session lookup fixture for the stop/finalization paths. */
+function buildStopLookupRecord(
+  overrides?: Partial<SessionStopLookupRecord>,
+): SessionStopLookupRecord {
+  return {
+    connectorId: 'connector-1',
+    createdAt: new Date('2026-02-17T11:59:55.000Z'),
+    id: 'session-1',
+    meterStart: null,
+    startTime: new Date('2026-02-17T12:00:00.000Z'),
+    status: SessionStatus.ACTIVE,
+    userId: USER_ID,
+    ...overrides,
+  };
+}
+
 describe('OcppTransactionsService', () => {
   let notificationsServiceMock: NotificationsServiceMock;
   let paymentsServiceMock: PaymentsServiceMock;
+  let walletServiceMock: WalletServiceMock;
   let sessionCostCalculatorServiceMock: SessionCostCalculatorServiceMock;
   let prismaMock: PrismaServiceMock;
   let remoteStartServiceMock: OcppRemoteStartServiceMock;
@@ -149,15 +220,30 @@ describe('OcppTransactionsService', () => {
 
   beforeEach(() => {
     prismaMock = {
+      $transaction: jest
+        .fn<Promise<unknown>, [(tx: unknown) => Promise<unknown>, unknown?]>()
+        .mockImplementation(async (callback) => callback(prismaMock)),
       connector: {
         findFirst: jest.fn<Promise<{ readonly id: string } | null>, [unknown]>(),
       },
       meterValue: {
         aggregate: jest.fn<Promise<MeterValueAggregateRecord>, [unknown]>(),
       },
+      payment: {
+        create: jest.fn<Promise<{ readonly id: string }>, [unknown]>().mockResolvedValue({
+          id: 'payment-1',
+        }),
+      },
+      paymentMethod: {
+        findFirst: jest
+          .fn<Promise<{ readonly id: string } | null>, [unknown]>()
+          .mockResolvedValue(null),
+      },
       session: {
+        count: jest.fn<Promise<number>, [unknown]>().mockResolvedValue(0),
         create: jest.fn<Promise<{ readonly id: string }>, [unknown]>(),
         findFirst: jest.fn<Promise<SessionStopLookupRecord | null>, [unknown]>(),
+        findUnique: jest.fn<Promise<unknown>, [unknown]>(),
         update: jest.fn<Promise<{ readonly id: string }>, [unknown]>(),
       },
       user: {
@@ -171,15 +257,27 @@ describe('OcppTransactionsService', () => {
       >(),
     };
     remoteStartServiceMock = {
-      linkTransactionIdToTrackedRemoteStart: jest.fn<
-        ReturnType<OcppRemoteStartService['linkTransactionIdToTrackedRemoteStart']>,
-        Parameters<OcppRemoteStartService['linkTransactionIdToTrackedRemoteStart']>
-      >(),
+      linkTransactionIdToTrackedRemoteStart: jest
+        .fn<
+          ReturnType<OcppRemoteStartService['linkTransactionIdToTrackedRemoteStart']>,
+          Parameters<OcppRemoteStartService['linkTransactionIdToTrackedRemoteStart']>
+        >()
+        .mockResolvedValue(null),
     };
     paymentsServiceMock = {
       captureAuthorizedPaymentForSession: jest.fn<
         ReturnType<PaymentsService['captureAuthorizedPaymentForSession']>,
         Parameters<PaymentsService['captureAuthorizedPaymentForSession']>
+      >(),
+      refundPaymentForSessionFailure: jest.fn<
+        ReturnType<PaymentsService['refundPaymentForSessionFailure']>,
+        Parameters<PaymentsService['refundPaymentForSessionFailure']>
+      >(),
+    };
+    walletServiceMock = {
+      deductBalance: jest.fn<
+        ReturnType<WalletService['deductBalance']>,
+        Parameters<WalletService['deductBalance']>
       >(),
     };
     notificationsServiceMock = {
@@ -192,10 +290,17 @@ describe('OcppTransactionsService', () => {
         Parameters<NotificationsService['sendSessionStartedNotification']>
       >(),
     };
+    // Real settlement service over the shared mocks so the charger-stop path is asserted
+    // against the exact rules the API stop path uses.
+    const sessionSettlementService = new SessionSettlementService(
+      prismaMock as unknown as PrismaService,
+      paymentsServiceMock as unknown as PaymentsService,
+      walletServiceMock as unknown as WalletService,
+    );
     service = new OcppTransactionsService(
       prismaMock as unknown as PrismaService,
       sessionCostCalculatorServiceMock as unknown as SessionCostCalculatorService,
-      paymentsServiceMock as unknown as PaymentsService,
+      sessionSettlementService,
       notificationsServiceMock as unknown as NotificationsService,
       remoteStartServiceMock as unknown as OcppRemoteStartService,
       new OcppIdTagService(),
@@ -206,7 +311,6 @@ describe('OcppTransactionsService', () => {
     prismaMock.connector.findFirst.mockResolvedValue({ id: 'connector-1' });
     prismaMock.user.findUnique.mockResolvedValue({ id: USER_ID });
     prismaMock.session.create.mockResolvedValue({ id: 'session-1' });
-    remoteStartServiceMock.linkTransactionIdToTrackedRemoteStart.mockResolvedValue(null);
 
     const response = await service.handleStartTransaction('ev-armenia-001', buildStartPayload());
 
@@ -259,6 +363,160 @@ describe('OcppTransactionsService', () => {
     expect(notificationsServiceMock.sendSessionStartedNotification).not.toHaveBeenCalled();
   });
 
+  describe('remote-start attach path (no duplicate sessions)', () => {
+    it('attaches the inbound transaction to the tracked API session instead of creating one', async () => {
+      prismaMock.connector.findFirst.mockResolvedValue({ id: 'connector-1' });
+      prismaMock.user.findUnique.mockResolvedValue({ id: USER_ID });
+      remoteStartServiceMock.linkTransactionIdToTrackedRemoteStart.mockImplementation((input) =>
+        Promise.resolve(buildTrackedRemoteStart({ transactionId: input.transactionId })),
+      );
+      prismaMock.session.findUnique.mockResolvedValue({
+        id: API_SESSION_ID,
+        startTime: null,
+        status: SessionStatus.AUTHORIZED,
+      });
+      prismaMock.session.update.mockResolvedValue({ id: API_SESSION_ID });
+
+      const response = await service.handleStartTransaction('ev-armenia-001', buildStartPayload());
+
+      expect(response.idTagInfo.status).toBe('Accepted');
+      expect(response.transactionId).toBeGreaterThan(0);
+      // The API session is updated in place: transaction id + meterStart attached, and the
+      // AUTHORIZED session is activated because the charger beat the API's own transition.
+      expect(prismaMock.session.update).toHaveBeenCalledWith({
+        where: { id: API_SESSION_ID },
+        data: {
+          meterStart: 12800,
+          startTime: new Date('2026-02-17T12:00:00.000Z'),
+          status: SessionStatus.ACTIVE,
+          transactionId: String(response.transactionId),
+        },
+        select: { id: true },
+      });
+      expect(prismaMock.session.create).not.toHaveBeenCalled();
+      // The API start path already sends the session-started notification for this session.
+      expect(notificationsServiceMock.sendSessionStartedNotification).not.toHaveBeenCalled();
+    });
+
+    it('keeps an already ACTIVE API session active and preserves its start time', async () => {
+      prismaMock.connector.findFirst.mockResolvedValue({ id: 'connector-1' });
+      prismaMock.user.findUnique.mockResolvedValue({ id: USER_ID });
+      remoteStartServiceMock.linkTransactionIdToTrackedRemoteStart.mockImplementation((input) =>
+        Promise.resolve(buildTrackedRemoteStart({ transactionId: input.transactionId })),
+      );
+      const apiStartTime = new Date('2026-02-17T11:59:00.000Z');
+      prismaMock.session.findUnique.mockResolvedValue({
+        id: API_SESSION_ID,
+        startTime: apiStartTime,
+        status: SessionStatus.ACTIVE,
+      });
+      prismaMock.session.update.mockResolvedValue({ id: API_SESSION_ID });
+
+      await service.handleStartTransaction('ev-armenia-001', buildStartPayload());
+
+      expect(prismaMock.session.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            startTime: apiStartTime,
+            status: SessionStatus.ACTIVE,
+          }) as Record<string, unknown>,
+        }),
+      );
+      expect(prismaMock.session.create).not.toHaveBeenCalled();
+    });
+
+    it('falls back to session creation when the tracked session is already terminal', async () => {
+      prismaMock.connector.findFirst.mockResolvedValue({ id: 'connector-1' });
+      prismaMock.user.findUnique.mockResolvedValue({ id: USER_ID });
+      remoteStartServiceMock.linkTransactionIdToTrackedRemoteStart.mockImplementation((input) =>
+        Promise.resolve(buildTrackedRemoteStart({ transactionId: input.transactionId })),
+      );
+      prismaMock.session.findUnique.mockResolvedValue({
+        id: API_SESSION_ID,
+        startTime: null,
+        status: SessionStatus.CANCELLED,
+      });
+      prismaMock.session.create.mockResolvedValue({ id: 'session-new' });
+
+      const response = await service.handleStartTransaction('ev-armenia-001', buildStartPayload());
+
+      expect(response.idTagInfo.status).toBe('Accepted');
+      expect(prismaMock.session.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('falls back to session creation when the tracking record carries no session id', async () => {
+      prismaMock.connector.findFirst.mockResolvedValue({ id: 'connector-1' });
+      prismaMock.user.findUnique.mockResolvedValue({ id: USER_ID });
+      remoteStartServiceMock.linkTransactionIdToTrackedRemoteStart.mockImplementation((input) =>
+        Promise.resolve(
+          buildTrackedRemoteStart({ sessionId: null, transactionId: input.transactionId }),
+        ),
+      );
+      prismaMock.session.create.mockResolvedValue({ id: 'session-new' });
+
+      const response = await service.handleStartTransaction('ev-armenia-001', buildStartPayload());
+
+      expect(response.idTagInfo.status).toBe('Accepted');
+      expect(prismaMock.session.update).not.toHaveBeenCalled();
+      expect(prismaMock.session.create).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('one-session-per-connector guard on charger-local starts', () => {
+    it('answers ConcurrentTx and creates nothing when the connector already has a blocking session', async () => {
+      prismaMock.connector.findFirst.mockResolvedValue({ id: 'connector-1' });
+      prismaMock.user.findUnique.mockResolvedValue({ id: USER_ID });
+      prismaMock.session.count.mockResolvedValue(1);
+
+      const response = await service.handleStartTransaction('ev-armenia-001', buildStartPayload());
+
+      expect(response).toEqual({
+        idTagInfo: {
+          status: 'ConcurrentTx',
+        },
+        transactionId: 0,
+      });
+      expect(prismaMock.session.count).toHaveBeenCalledWith({
+        where: {
+          connectorId: 'connector-1',
+          status: {
+            in: [SessionStatus.PENDING, SessionStatus.AUTHORIZED, SessionStatus.ACTIVE],
+          },
+        },
+      });
+      expect(prismaMock.session.create).not.toHaveBeenCalled();
+      expect(notificationsServiceMock.sendSessionStartedNotification).not.toHaveBeenCalled();
+    });
+
+    it('runs the guard and insert inside one serializable transaction', async () => {
+      prismaMock.connector.findFirst.mockResolvedValue({ id: 'connector-1' });
+      prismaMock.user.findUnique.mockResolvedValue({ id: USER_ID });
+      prismaMock.session.create.mockResolvedValue({ id: 'session-1' });
+
+      await service.handleStartTransaction('ev-armenia-001', buildStartPayload());
+
+      expect(prismaMock.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      });
+    });
+
+    it('answers ConcurrentTx when the serializable transaction hits a write conflict (P2034)', async () => {
+      prismaMock.connector.findFirst.mockResolvedValue({ id: 'connector-1' });
+      prismaMock.user.findUnique.mockResolvedValue({ id: USER_ID });
+      prismaMock.$transaction.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('write conflict', {
+          clientVersion: '5.22.0',
+          code: 'P2034',
+        }),
+      );
+
+      const response = await service.handleStartTransaction('ev-armenia-001', buildStartPayload());
+
+      expect(response.idTagInfo.status).toBe('ConcurrentTx');
+      expect(notificationsServiceMock.sendSessionStartedNotification).not.toHaveBeenCalled();
+    });
+  });
+
   it('accepts Authorize requests when the idTag resolves to an existing user', async () => {
     prismaMock.user.findUnique.mockResolvedValue({ id: USER_ID });
 
@@ -297,15 +555,8 @@ describe('OcppTransactionsService', () => {
     });
   });
 
-  it('completes a session on StopTransaction and stores final cost from pricing calculation', async () => {
-    prismaMock.session.findFirst.mockResolvedValue({
-      connectorId: 'connector-1',
-      createdAt: new Date('2026-02-17T11:59:55.000Z'),
-      id: 'session-1',
-      startTime: new Date('2026-02-17T12:00:00.000Z'),
-      status: SessionStatus.ACTIVE,
-      userId: USER_ID,
-    });
+  it('completes a session on StopTransaction and captures the gateway pre-authorization', async () => {
+    prismaMock.session.findFirst.mockResolvedValue(buildStopLookupRecord());
     prismaMock.meterValue.aggregate.mockResolvedValue({
       _max: {
         energyActiveImport: 15_200,
@@ -344,10 +595,107 @@ describe('OcppTransactionsService', () => {
       amount: 3900,
       sessionId: 'session-1',
     });
+    expect(walletServiceMock.deductBalance).not.toHaveBeenCalled();
+    expect(paymentsServiceMock.refundPaymentForSessionFailure).not.toHaveBeenCalled();
     expect(notificationsServiceMock.sendSessionCompletedNotification).toHaveBeenCalledWith({
       sessionId: 'session-1',
       totalCostAmd: 3900,
       userId: USER_ID,
+    });
+  });
+
+  describe('charger-stop settlement parity with the API stop path', () => {
+    it('bills wallet-default users from their wallet with a wallet payment record', async () => {
+      prismaMock.session.findFirst.mockResolvedValue(buildStopLookupRecord());
+      prismaMock.meterValue.aggregate.mockResolvedValue({
+        _max: {
+          energyActiveImport: 15_200,
+          powerActiveImport: 7_600,
+        },
+        _min: {
+          energyActiveImport: 12_800,
+        },
+      });
+      sessionCostCalculatorServiceMock.calculateSessionCost.mockResolvedValue(
+        buildCostCalculationResult({ totalCost: 3900 }),
+      );
+      prismaMock.session.update.mockResolvedValue({ id: 'session-1' });
+      prismaMock.paymentMethod.findFirst.mockResolvedValue({ id: 'wallet-pm-1' });
+
+      await service.handleStopTransaction('ev-armenia-001', buildStopPayload());
+
+      expect(walletServiceMock.deductBalance).toHaveBeenCalledWith({
+        amount: 3900,
+        sessionId: 'session-1',
+        userId: USER_ID,
+      });
+      expect(prismaMock.payment.create).toHaveBeenCalledTimes(1);
+      expect(paymentsServiceMock.captureAuthorizedPaymentForSession).not.toHaveBeenCalled();
+      expect(paymentsServiceMock.refundPaymentForSessionFailure).not.toHaveBeenCalled();
+    });
+
+    it('bills zero and refunds the pre-authorization for zero-energy charger stops', async () => {
+      prismaMock.session.findFirst.mockResolvedValue(
+        buildStopLookupRecord({ meterStart: 15_200 }),
+      );
+      prismaMock.meterValue.aggregate.mockResolvedValue({
+        _max: {
+          energyActiveImport: null,
+          powerActiveImport: null,
+        },
+        _min: {
+          energyActiveImport: null,
+        },
+      });
+      sessionCostCalculatorServiceMock.calculateSessionCost.mockResolvedValue(
+        buildCostCalculationResult({ totalCost: 750 }),
+      );
+      prismaMock.session.update.mockResolvedValue({ id: 'session-1' });
+
+      await service.handleStopTransaction('ev-armenia-001', buildStopPayload());
+
+      // Time/session fees computed by the calculator must NOT be billed for zero energy.
+      expect(prismaMock.session.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            energyDelivered: 0,
+            totalCost: 0,
+          }) as Record<string, unknown>,
+        }),
+      );
+      expect(paymentsServiceMock.refundPaymentForSessionFailure).toHaveBeenCalledWith('session-1');
+      expect(paymentsServiceMock.captureAuthorizedPaymentForSession).not.toHaveBeenCalled();
+      expect(walletServiceMock.deductBalance).not.toHaveBeenCalled();
+      expect(notificationsServiceMock.sendSessionCompletedNotification).toHaveBeenCalledWith({
+        sessionId: 'session-1',
+        totalCostAmd: 0,
+        userId: USER_ID,
+      });
+    });
+
+    it('still completes the session when settlement fails (charger cannot receive an error)', async () => {
+      prismaMock.session.findFirst.mockResolvedValue(buildStopLookupRecord());
+      prismaMock.meterValue.aggregate.mockResolvedValue({
+        _max: {
+          energyActiveImport: 15_200,
+          powerActiveImport: 7_600,
+        },
+        _min: {
+          energyActiveImport: 12_800,
+        },
+      });
+      sessionCostCalculatorServiceMock.calculateSessionCost.mockResolvedValue(
+        buildCostCalculationResult({ totalCost: 3900 }),
+      );
+      prismaMock.session.update.mockResolvedValue({ id: 'session-1' });
+      paymentsServiceMock.captureAuthorizedPaymentForSession.mockRejectedValue(
+        new Error('gateway timeout'),
+      );
+
+      const response = await service.handleStopTransaction('ev-armenia-001', buildStopPayload());
+
+      expect(response).toEqual({});
+      expect(prismaMock.session.update).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -365,14 +713,7 @@ describe('OcppTransactionsService', () => {
   });
 
   it('falls back to zero final cost when pricing calculation fails', async () => {
-    prismaMock.session.findFirst.mockResolvedValue({
-      connectorId: 'connector-1',
-      createdAt: new Date('2026-02-17T11:59:55.000Z'),
-      id: 'session-1',
-      startTime: new Date('2026-02-17T12:00:00.000Z'),
-      status: SessionStatus.ACTIVE,
-      userId: USER_ID,
-    });
+    prismaMock.session.findFirst.mockResolvedValue(buildStopLookupRecord());
     prismaMock.meterValue.aggregate.mockResolvedValue({
       _max: {
         energyActiveImport: 15_200,

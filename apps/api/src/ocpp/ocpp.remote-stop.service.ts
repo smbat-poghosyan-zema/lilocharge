@@ -24,11 +24,21 @@ const DEFAULT_REMOTE_STOP_TIMEOUT_MS = 10_000;
 const INVALID_CALL_HANDLER_MESSAGE =
   'RemoteStopTransaction cannot be sent because the charge point client is missing a call handler';
 
+/**
+ * Protocol-neutral RemoteStop payload accepted from API callers.
+ *
+ * 1.6 transaction ids are positive integers; 2.0.1 transaction ids are station-assigned opaque
+ * strings (frequently UUID-like). The wire payload is derived per negotiated subprotocol.
+ */
+export interface OcppRemoteStopCommandPayload {
+  readonly transactionId: number | string;
+}
+
 /** Input payload used to dispatch one outbound OCPP RemoteStopTransaction command. */
 export interface OcppRemoteStopCommand {
   readonly chargePointId: string;
   readonly maxAttempts?: number;
-  readonly payload: OcppRemoteStopTransactionRequest;
+  readonly payload: OcppRemoteStopCommandPayload;
   readonly retryDelayMs?: number;
   readonly timeoutMs?: number;
 }
@@ -76,17 +86,18 @@ export class OcppRemoteStopService {
       'timeoutMs',
     );
     // The wire command depends on the negotiated subprotocol: 1.6 clients get
-    // RemoteStopTransaction with an integer transactionId, 2.0.1 clients get
-    // RequestStopTransaction with the same transaction id serialized as a string. Known
-    // limitation: the API-facing command payload is integer-based, so 2.0.1 transactions whose
-    // station-assigned id is not a positive integer cannot be addressed through this path (the
-    // sessions API already skips dispatch for them and finalizes server-side).
+    // RemoteStopTransaction with an integer transactionId (the OCPP 1.6 schema requires it, so
+    // numeric strings are coerced and anything non-numeric is rejected here), while 2.0.1 clients
+    // get RequestStopTransaction carrying the transaction id verbatim as a string — 2.0.1
+    // stations assign opaque (often UUID-like) transaction ids that must round-trip untouched.
     const isOcpp2Client = client.protocol === OCPP_PROTOCOL_2_0_1;
     const wireAction: string = isOcpp2Client
       ? Ocpp2Action.REQUEST_STOP_TRANSACTION
       : OcppAction.REMOTE_STOP_TRANSACTION;
     const wirePayload: OcppRemoteStopTransactionRequest | Ocpp2RequestStopTransactionRequest =
-      isOcpp2Client ? { transactionId: String(command.payload.transactionId) } : command.payload;
+      isOcpp2Client
+        ? buildOcpp2RequestStopPayload(command.payload)
+        : buildOcpp16RemoteStopPayload(command.payload);
     let lastError: unknown;
 
     for (let attemptCount = 1; attemptCount <= maxAttempts; attemptCount += 1) {
@@ -135,10 +146,50 @@ export class OcppRemoteStopService {
 }
 
 /** Validates one RemoteStopTransaction request payload before dispatching outbound RPC calls. */
-function assertRemoteStopPayload(payload: OcppRemoteStopTransactionRequest): void {
-  if (!Number.isInteger(payload.transactionId) || payload.transactionId <= 0) {
-    throw new BadRequestException('RemoteStopTransaction transactionId must be a positive integer');
+function assertRemoteStopPayload(payload: OcppRemoteStopCommandPayload): void {
+  if (typeof payload.transactionId === 'number') {
+    if (!Number.isInteger(payload.transactionId) || payload.transactionId <= 0) {
+      throw new BadRequestException(
+        'RemoteStopTransaction transactionId must be a positive integer',
+      );
+    }
+
+    return;
   }
+
+  if (payload.transactionId.trim().length === 0) {
+    throw new BadRequestException('RemoteStopTransaction transactionId is required');
+  }
+}
+
+/** Builds one OCPP 1.6 RemoteStopTransaction wire payload with the required integer id. */
+function buildOcpp16RemoteStopPayload(
+  payload: OcppRemoteStopCommandPayload,
+): OcppRemoteStopTransactionRequest {
+  const transactionId =
+    typeof payload.transactionId === 'number'
+      ? payload.transactionId
+      : Number(payload.transactionId.trim());
+
+  if (!Number.isInteger(transactionId) || transactionId <= 0) {
+    throw new BadRequestException(
+      'RemoteStopTransaction transactionId must be a positive integer for OCPP 1.6 charge points',
+    );
+  }
+
+  return { transactionId };
+}
+
+/** Builds one OCPP 2.0.1 RequestStopTransaction wire payload carrying the id as a string. */
+function buildOcpp2RequestStopPayload(
+  payload: OcppRemoteStopCommandPayload,
+): Ocpp2RequestStopTransactionRequest {
+  return {
+    transactionId:
+      typeof payload.transactionId === 'number'
+        ? String(payload.transactionId)
+        : payload.transactionId.trim(),
+  };
 }
 
 /** Resolves and validates one positive-integer option value with fallback defaults. */

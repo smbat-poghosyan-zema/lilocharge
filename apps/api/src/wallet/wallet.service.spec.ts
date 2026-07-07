@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { PaymentGateway, WalletTransactionType } from '@prisma/client';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { PaymentGateway, WalletTransactionStatus, WalletTransactionType } from '@prisma/client';
 
 import type { ArcaClient } from '../payments/arca.client';
 import type { IdramClient } from '../payments/idram.client';
@@ -81,6 +81,8 @@ describe('WalletService', () => {
       walletTransaction: {
         create: jest.fn(),
         findMany: jest.fn(),
+        update: jest.fn(),
+        updateMany: jest.fn(),
       },
       $transaction: jest.fn(),
     } as never;
@@ -135,25 +137,32 @@ describe('WalletService', () => {
   });
 
   describe('topUp', () => {
-    let txWalletTransactionCreate: jest.Mock;
+    const PENDING_TRANSACTION_ID = '66666666-6666-6666-6666-666666666666';
+
+    let txClaimUpdateMany: jest.Mock;
+    let txWalletUpdate: jest.Mock;
+    let txWalletTransactionUpdate: jest.Mock;
 
     const mockTopUpTransaction = (input: {
       readonly newBalance: number;
       readonly transaction: WalletTransactionRecord;
       readonly wallet: WalletRecord;
     }): void => {
-      txWalletTransactionCreate = jest.fn().mockResolvedValue(input.transaction);
+      (prismaService.walletTransaction.create as jest.Mock).mockResolvedValue({
+        id: PENDING_TRANSACTION_ID,
+      });
+      txClaimUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+      txWalletUpdate = jest.fn().mockResolvedValue({ ...input.wallet, balance: input.newBalance });
+      txWalletTransactionUpdate = jest.fn().mockResolvedValue(input.transaction);
       (prismaService.$transaction as jest.Mock).mockImplementation(
         (callback: (tx: never) => Promise<unknown>) => {
           return callback({
             wallet: {
-              findUnique: jest.fn().mockResolvedValue({ balance: input.wallet.balance }),
-              update: jest
-                .fn()
-                .mockResolvedValue({ ...input.wallet, balance: input.newBalance }),
+              update: txWalletUpdate,
             },
             walletTransaction: {
-              create: txWalletTransactionCreate,
+              update: txWalletTransactionUpdate,
+              updateMany: txClaimUpdateMany,
             },
           } as never);
         },
@@ -204,7 +213,7 @@ describe('WalletService', () => {
         currency: 'AMD',
         description: 'Wallet top-up',
         idempotencyKey: expect.stringMatching(UUID_PATTERN),
-        orderId: expect.stringMatching(/^wallet-topup-[0-9a-f-]{36}$/),
+        orderId: `wallet-topup-${PENDING_TRANSACTION_ID}`,
       });
       expect(arcaClient.capture).toHaveBeenCalledWith({
         amount: 5000,
@@ -215,14 +224,101 @@ describe('WalletService', () => {
       const preAuthorizeKey = arcaClient.preAuthorize.mock.calls[0]?.[0]?.idempotencyKey;
       const captureKey = arcaClient.capture.mock.calls[0]?.[0]?.idempotencyKey;
       expect(preAuthorizeKey).not.toBe(captureKey);
-      expect(txWalletTransactionCreate).toHaveBeenCalledWith(
+      expect(preAuthorizeKey).toBe(`${captureKey ?? ''}-preauth`);
+
+      // The PENDING ledger row (with every idempotency key) is persisted BEFORE the first
+      // gateway call so a crash mid-flow can never lose the key and double-charge on retry.
+      const createMock = prismaService.walletTransaction.create as jest.Mock;
+      expect(createMock).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            gatewayTransactionId: 'arca-tx-123',
+            status: WalletTransactionStatus.PENDING,
             idempotencyKey: captureKey,
+            type: WalletTransactionType.TOP_UP,
           }),
         }),
       );
+      const createOrder = createMock.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER;
+      const preAuthOrder =
+        (arcaClient.preAuthorize as jest.Mock).mock.invocationCallOrder[0] ?? 0;
+      expect(createOrder).toBeLessThan(preAuthOrder);
+
+      // Completion claims the PENDING row conditionally so the credit can never run twice.
+      expect(txClaimUpdateMany).toHaveBeenCalledWith({
+        where: { id: PENDING_TRANSACTION_ID, status: WalletTransactionStatus.PENDING },
+        data: {
+          status: WalletTransactionStatus.COMPLETED,
+          gatewayTransactionId: 'arca-tx-123',
+        },
+      });
+      expect(txWalletUpdate).toHaveBeenCalledWith({
+        where: { id: WALLET_ID },
+        data: { balance: { increment: 5000 } },
+        select: expect.any(Object),
+      });
+      expect(txWalletTransactionUpdate).toHaveBeenCalledWith({
+        where: { id: PENDING_TRANSACTION_ID },
+        data: { balanceBefore: 10000, balanceAfter: 15000 },
+        select: expect.any(Object),
+      });
+    });
+
+    it('should mark the pending ledger row FAILED and rethrow when the gateway call fails', async () => {
+      const wallet = buildWalletRecord();
+      (prismaService.paymentMethod.findFirst as jest.Mock).mockResolvedValue({
+        gateway: PaymentGateway.ARCA,
+        id: PAYMENT_METHOD_ID,
+        token: 'stored-card-token-1',
+      });
+      (prismaService.wallet.findUnique as jest.Mock).mockResolvedValue(wallet);
+      (prismaService.walletTransaction.create as jest.Mock).mockResolvedValue({
+        id: PENDING_TRANSACTION_ID,
+      });
+      (arcaClient.preAuthorize as jest.Mock).mockRejectedValue(new Error('gateway down'));
+      (prismaService.walletTransaction.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+
+      await expect(
+        service.topUp({
+          userId: USER_ID,
+          amount: 5000,
+          gateway: 'ARCA',
+          paymentMethodId: PAYMENT_METHOD_ID,
+        }),
+      ).rejects.toThrow('gateway down');
+
+      expect(prismaService.walletTransaction.updateMany).toHaveBeenCalledWith({
+        where: { id: PENDING_TRANSACTION_ID, status: WalletTransactionStatus.PENDING },
+        data: { status: WalletTransactionStatus.FAILED },
+      });
+      expect(prismaService.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('should throw ConflictException without crediting when the pending row was already finalized', async () => {
+      const wallet = buildWalletRecord();
+      const transaction = buildTransactionRecord();
+      (prismaService.paymentMethod.findFirst as jest.Mock).mockResolvedValue({
+        gateway: PaymentGateway.ARCA,
+        id: PAYMENT_METHOD_ID,
+        token: 'stored-card-token-1',
+      });
+      (prismaService.wallet.findUnique as jest.Mock).mockResolvedValue(wallet);
+      (arcaClient.preAuthorize as jest.Mock).mockResolvedValue({
+        gatewayTransactionId: 'arca-tx-123',
+      });
+      (arcaClient.capture as jest.Mock).mockResolvedValue(undefined);
+      mockTopUpTransaction({ newBalance: 15000, transaction, wallet });
+      txClaimUpdateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.topUp({
+          userId: USER_ID,
+          amount: 5000,
+          gateway: 'ARCA',
+          paymentMethodId: PAYMENT_METHOD_ID,
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      expect(txWalletUpdate).not.toHaveBeenCalled();
     });
 
     it('should top up wallet via IDRAM gateway using the stored payment-method token', async () => {
@@ -334,7 +430,7 @@ describe('WalletService', () => {
   });
 
   describe('deductBalance', () => {
-    it('should deduct balance for session payment', async () => {
+    it('should deduct balance with a race-safe conditional decrement', async () => {
       const wallet = buildWalletRecord({ balance: 10000 });
       const transaction = buildTransactionRecord({
         type: WalletTransactionType.DEDUCTION,
@@ -347,16 +443,18 @@ describe('WalletService', () => {
       // eslint-disable-next-line @typescript-eslint/unbound-method
       (prismaService.wallet.findUnique as jest.Mock).mockResolvedValue(wallet);
 
+      const txWalletUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+      const txWalletTransactionCreate = jest.fn().mockResolvedValue(transaction);
       // eslint-disable-next-line @typescript-eslint/unbound-method
       (prismaService.$transaction as jest.Mock).mockImplementation(
         (callback: (tx: never) => Promise<unknown>) => {
           return callback({
             wallet: {
-              findUnique: jest.fn().mockResolvedValue({ balance: 10000 }),
-              update: jest.fn().mockResolvedValue({ ...wallet, balance: 8000 }),
+              findUnique: jest.fn().mockResolvedValue({ balance: 8000 }),
+              updateMany: txWalletUpdateMany,
             },
             walletTransaction: {
-              create: jest.fn().mockResolvedValue(transaction),
+              create: txWalletTransactionCreate,
             },
           } as never);
         },
@@ -371,6 +469,52 @@ describe('WalletService', () => {
       expect(result.amount).toBe(2000);
       expect(result.balanceAfter).toBe(8000);
       expect(result.sessionId).toBe(SESSION_ID);
+      // The decrement only applies while the balance still covers the amount, so two
+      // concurrent deducts can never both succeed on the same funds.
+      expect(txWalletUpdateMany).toHaveBeenCalledWith({
+        where: { id: WALLET_ID, balance: { gte: 2000 } },
+        data: { balance: { decrement: 2000 } },
+      });
+      expect(txWalletTransactionCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            balanceBefore: 10000,
+            balanceAfter: 8000,
+            status: WalletTransactionStatus.COMPLETED,
+            type: WalletTransactionType.DEDUCTION,
+          }),
+        }),
+      );
+    });
+
+    it('should reject with insufficient balance when a concurrent deduction wins the conditional write', async () => {
+      const wallet = buildWalletRecord({ balance: 10000 });
+      (prismaService.wallet.findUnique as jest.Mock).mockResolvedValue(wallet);
+
+      const txWalletTransactionCreate = jest.fn();
+      (prismaService.$transaction as jest.Mock).mockImplementation(
+        (callback: (tx: never) => Promise<unknown>) => {
+          return callback({
+            wallet: {
+              findUnique: jest.fn().mockResolvedValue({ balance: 500 }),
+              updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+            },
+            walletTransaction: {
+              create: txWalletTransactionCreate,
+            },
+          } as never);
+        },
+      );
+
+      await expect(
+        service.deductBalance({
+          userId: USER_ID,
+          amount: 2000,
+          sessionId: SESSION_ID,
+        }),
+      ).rejects.toThrow('Insufficient wallet balance');
+
+      expect(txWalletTransactionCreate).not.toHaveBeenCalled();
     });
 
     it('should throw BadRequestException for insufficient balance', async () => {
@@ -412,16 +556,17 @@ describe('WalletService', () => {
       // eslint-disable-next-line @typescript-eslint/unbound-method
       (prismaService.wallet.findUnique as jest.Mock).mockResolvedValue(wallet);
 
+      const txWalletUpdate = jest.fn().mockResolvedValue({ balance: 6500 });
+      const txWalletTransactionCreate = jest.fn().mockResolvedValue(transaction);
       // eslint-disable-next-line @typescript-eslint/unbound-method
       (prismaService.$transaction as jest.Mock).mockImplementation(
         (callback: (tx: never) => Promise<unknown>) => {
           return callback({
             wallet: {
-              findUnique: jest.fn().mockResolvedValue({ balance: 5000 }),
-              update: jest.fn().mockResolvedValue({ ...wallet, balance: 6500 }),
+              update: txWalletUpdate,
             },
             walletTransaction: {
-              create: jest.fn().mockResolvedValue(transaction),
+              create: txWalletTransactionCreate,
             },
           } as never);
         },
@@ -436,6 +581,21 @@ describe('WalletService', () => {
       expect(result.amount).toBe(1500);
       expect(result.balanceAfter).toBe(6500);
       expect(result.type).toBe(WalletTransactionType.REFUND);
+      // The credit is an atomic increment; ledger balances derive from its result.
+      expect(txWalletUpdate).toHaveBeenCalledWith({
+        where: { id: WALLET_ID },
+        data: { balance: { increment: 1500 } },
+        select: { balance: true },
+      });
+      expect(txWalletTransactionCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            balanceBefore: 5000,
+            balanceAfter: 6500,
+            status: WalletTransactionStatus.COMPLETED,
+          }),
+        }),
+      );
     });
 
     it('should throw BadRequestException for non-positive amount', async () => {
@@ -481,6 +641,8 @@ describe('WalletService', () => {
       expect(prismaService.walletTransaction.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
+            // PENDING/FAILED bookkeeping rows never surface in user-visible history.
+            status: WalletTransactionStatus.COMPLETED,
             type: WalletTransactionType.TOP_UP,
           }),
         }),

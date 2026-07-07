@@ -17,12 +17,7 @@ import {
   NotFoundException,
   StreamableFile,
 } from '@nestjs/common';
-import {
-  PaymentGateway,
-  PaymentStatus,
-  Prisma,
-  SessionStatus as PrismaSessionStatus,
-} from '@prisma/client';
+import { Prisma, SessionStatus as PrismaSessionStatus } from '@prisma/client';
 import PDFDocument from 'pdfkit';
 
 import { NotificationsService } from '../notifications/notifications.service';
@@ -35,6 +30,7 @@ import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletService } from '../wallet/wallet.service';
 import { SessionCostCalculatorService } from './session-cost-calculator.service';
+import { SessionSettlementService } from './session-settlement.service';
 
 const CONNECTOR_NOT_FOUND_MESSAGE = 'Connector not found';
 const END_TIME_BEFORE_START_TIME_MESSAGE = 'Session end time cannot be before start time';
@@ -140,6 +136,7 @@ export class SessionsService {
     private readonly ocppRemoteStartService: OcppRemoteStartService,
     private readonly ocppRemoteStopService: OcppRemoteStopService,
     private readonly ocppIdTagService: OcppIdTagService,
+    private readonly sessionSettlementService: SessionSettlementService,
   ) {}
 
   /** Creates one pending charging session for a user with optional vehicle and connector links. */
@@ -244,7 +241,8 @@ export class SessionsService {
     }
 
     // Check if user has a wallet payment method set as default
-    const hasWalletPaymentMethod = await this.hasWalletAsDefaultPaymentMethod(userId);
+    const hasWalletPaymentMethod =
+      await this.sessionSettlementService.hasWalletAsDefaultPaymentMethod(userId);
 
     if (hasWalletPaymentMethod) {
       // For wallet payment: check sufficient balance upfront (no pre-auth)
@@ -296,13 +294,17 @@ export class SessionsService {
     await this.dispatchRemoteStopForSession(session);
 
     const finalization = await this.resolveSessionFinalization(session, endedAt);
-    // Zero-energy sessions (charger fault, cable never engaged, EV rejected charge) must not be
-    // billed: the total is forced to zero and any gateway pre-authorization is released below.
-    const billableEnergyKwh = finalization.energyDeliveredKwh ?? session.energyDelivered;
-    const isZeroEnergySession = billableEnergyKwh <= 0;
+    // The settlement decision (zero-energy refund vs wallet deduction vs gateway capture, and
+    // the total to persist) is shared with the OCPP charger-stop path via the settlement service
+    // so both stop paths bill identically.
+    const settlementDecision = await this.sessionSettlementService.resolveSettlement({
+      billableEnergyKwh: finalization.energyDeliveredKwh ?? session.energyDelivered,
+      computedTotalCost: finalization.totalCost,
+      userId,
+    });
     const completionData: Prisma.SessionUpdateInput = {
       endTime: endedAt,
-      totalCost: isZeroEnergySession ? 0 : finalization.totalCost,
+      totalCost: settlementDecision.totalCost,
     };
 
     if (finalization.energyDeliveredKwh !== null) {
@@ -323,42 +325,11 @@ export class SessionsService {
       totalCostAmd: completedSession.totalCost,
       userId: completedSession.userId,
     });
-
-    if (isZeroEnergySession) {
-      // Auto-refund: release the pre-authorized amount instead of capturing anything. Wallet-funded
-      // sessions have no payment record before capture, so the refund call is a safe no-op there.
-      this.logger.warn(
-        `Session ${completedSession.id} completed with zero energy delivered; refunding pre-authorization`,
-      );
-      await this.paymentsService.refundPaymentForSessionFailure(completedSession.id);
-
-      return mapSessionRecordToResponse(completedSession);
-    }
-
-    // Check if user has wallet payment method
-    const hasWalletPaymentMethod = await this.hasWalletAsDefaultPaymentMethod(userId);
-
-    if (hasWalletPaymentMethod) {
-      // Deduct from wallet and create payment record
-      await this.walletService.deductBalance({
-        amount: completedSession.totalCost,
-        sessionId: completedSession.id,
-        userId: completedSession.userId,
-      });
-
-      // Create payment record for wallet transaction
-      await this.createWalletPaymentRecord({
-        amount: completedSession.totalCost,
-        sessionId: completedSession.id,
-        userId: completedSession.userId,
-      });
-    } else {
-      // Use traditional payment gateway capture
-      await this.paymentsService.captureAuthorizedPaymentForSession({
-        amount: completedSession.totalCost,
-        sessionId: completedSession.id,
-      });
-    }
+    await this.sessionSettlementService.settleCompletedSession({
+      decision: settlementDecision,
+      sessionId: completedSession.id,
+      userId: completedSession.userId,
+    });
 
     return mapSessionRecordToResponse(completedSession);
   }
@@ -491,6 +462,10 @@ export class SessionsService {
           connectorId: binding.ocppConnectorId,
           idTag,
         },
+        // The tracking record carries the API session id so the charger's answering
+        // StartTransaction / TransactionEvent(Started) attaches its transaction to THIS session
+        // instead of creating a duplicate one.
+        sessionId: session.id,
       });
     } catch (error: unknown) {
       if (error instanceof NotFoundException) {
@@ -512,12 +487,14 @@ export class SessionsService {
   /**
    * Sends one OCPP RemoteStopTransaction command for sessions started through OCPP.
    *
-   * Dispatch only applies when the session carries an OCPP transaction id. Failures (charge point
-   * offline, timeout, or Rejected response) are logged and tolerated so the session can still be
-   * finalized server-side with a computed cost.
+   * Dispatch only applies when the session carries an OCPP transaction id. Both id shapes flow
+   * through: 1.6 integer ids (persisted as numeric strings) and 2.0.1 station-assigned string
+   * ids — the remote-stop service builds the wire payload per negotiated protocol. Failures
+   * (charge point offline, timeout, or Rejected response) are logged and tolerated so the
+   * session can still be finalized server-side with a computed cost.
    */
   private async dispatchRemoteStopForSession(session: SessionRecord): Promise<void> {
-    const transactionId = parseOcppTransactionId(session.transactionId);
+    const transactionId = normalizeOcppTransactionId(session.transactionId);
 
     if (transactionId === null) {
       return;
@@ -641,26 +618,6 @@ export class SessionsService {
   }
 
   /**
-   * Checks if user has a WALLET payment method set as default.
-   * @param userId - User ID to check
-   * @returns true if user has wallet as default payment method
-   */
-  private async hasWalletAsDefaultPaymentMethod(userId: string): Promise<boolean> {
-    const defaultWalletMethod = await this.prismaService.paymentMethod.findFirst({
-      where: {
-        userId,
-        gateway: PaymentGateway.WALLET,
-        isDefault: true,
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    return defaultWalletMethod !== null;
-  }
-
-  /**
    * Gets the minimum required wallet balance to start a session.
    * This is a conservative estimate to prevent session start with near-zero balance.
    * @returns Minimum balance in AMD (default 1000 AMD ≈ $2.50)
@@ -674,48 +631,6 @@ export class SessionsService {
       }
     }
     return 1000; // Default: 1000 AMD
-  }
-
-  /**
-   * Creates a Payment record for wallet-based session payments.
-   * Wallet payments are immediately captured (no pre-auth/capture flow).
-   * @param input - Payment details
-   */
-  private async createWalletPaymentRecord(input: {
-    readonly amount: number;
-    readonly sessionId: string;
-    readonly userId: string;
-  }): Promise<void> {
-    const walletPaymentMethod = await this.prismaService.paymentMethod.findFirst({
-      where: {
-        userId: input.userId,
-        gateway: PaymentGateway.WALLET,
-        isDefault: true,
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    if (walletPaymentMethod === null) {
-      throw new BadRequestException('Wallet payment method not found');
-    }
-
-    await this.prismaService.payment.create({
-      data: {
-        userId: input.userId,
-        sessionId: input.sessionId,
-        paymentMethodId: walletPaymentMethod.id,
-        gateway: PaymentGateway.WALLET,
-        status: PaymentStatus.CAPTURED,
-        amount: input.amount,
-        authorizedAmount: input.amount,
-        capturedAmount: input.amount,
-      },
-      select: {
-        id: true,
-      },
-    });
   }
 
   /**
@@ -1087,18 +1002,29 @@ function resolveOcppConnectorNumber(chargePointId: string, evseId: string): numb
   return 1;
 }
 
-/** Parses one persisted OCPP transaction id string into a positive integer, or null when absent. */
-function parseOcppTransactionId(rawTransactionId: string | null): number | null {
+/**
+ * Normalizes one persisted OCPP transaction id for RemoteStop dispatch, or null when absent.
+ *
+ * 1.6 sessions persist stringified positive integers, which are converted back to numbers.
+ * 2.0.1 sessions persist the station-assigned opaque string id verbatim, which must flow
+ * through untouched so RequestStopTransaction can address the transaction.
+ */
+function normalizeOcppTransactionId(rawTransactionId: string | null): number | string | null {
   if (rawTransactionId === null) {
     return null;
   }
 
-  const transactionId = Number(rawTransactionId.trim());
-  if (!Number.isInteger(transactionId) || transactionId <= 0) {
+  const normalized = rawTransactionId.trim();
+  if (normalized.length === 0) {
     return null;
   }
 
-  return transactionId;
+  const numericTransactionId = Number(normalized);
+  if (Number.isInteger(numericTransactionId) && numericTransactionId > 0) {
+    return numericTransactionId;
+  }
+
+  return normalized;
 }
 
 /** Calculates delivered energy in kWh from meter-value aggregates, or null without meter data. */

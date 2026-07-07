@@ -58,4 +58,16 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       await this.client.del(keys);
     }
   }
+
+  /** Atomically increments an integer counter key and returns the new value. */
+  public async incr(key: string): Promise<number> {
+    return this.client.incr(key);
+  }
+
+  /** Sets a value only when the key does not exist yet; returns true when the value was set. */
+  public async setNx(key: string, value: string): Promise<boolean> {
+    const result = await this.client.set(key, value, { NX: true });
+
+    return result === 'OK';
+  }
 }

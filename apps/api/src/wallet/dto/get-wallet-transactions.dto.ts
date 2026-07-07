@@ -1,4 +1,4 @@
-import { IsEnum, IsInt, IsOptional, Min } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator';
 
 /**
  * Query parameters for fetching paginated wallet transaction history.
@@ -12,6 +12,7 @@ export class GetWalletTransactionsDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(100)
   readonly limit?: number;
 
   @IsOptional()

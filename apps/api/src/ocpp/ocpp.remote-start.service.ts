@@ -18,6 +18,7 @@ import {
 
 import { RedisService } from '../redis/redis.service';
 import { OCPP_PROTOCOL_2_0_1 } from './ocpp.constants';
+import { buildEpochSecondsSeed, OcppIdAllocator } from './ocpp.id-allocator';
 import { OcppRegistryService } from './ocpp.registry.service';
 import type { OcppRpcCallOptions, OcppServerClient } from './ocpp.server.types';
 
@@ -29,6 +30,12 @@ const MILLISECONDS_PER_SECOND = 1000;
 
 /** Redis key prefix for tracked remote-start correlation records. */
 export const OCPP_REMOTE_START_KEY_PREFIX = 'ocpp:remote-start';
+
+/** Redis counter key for cross-replica remoteStartId allocation (2.0.1 RequestStartTransaction). */
+export const OCPP_REMOTE_START_ID_SEQUENCE_KEY = 'ocpp:remote-start-id:seq';
+
+/** Redis counter key for cross-replica tracking-record sequence allocation. */
+export const OCPP_REMOTE_START_TRACKING_SEQUENCE_KEY = 'ocpp:remote-start-tracking:seq';
 
 const INVALID_CALL_HANDLER_MESSAGE =
   'RemoteStartTransaction cannot be sent because the charge point client is missing a call handler';
@@ -52,6 +59,12 @@ export interface OcppRemoteStartCommand {
   readonly maxAttempts?: number;
   readonly payload: OcppRemoteStartTransactionRequest;
   readonly retryDelayMs?: number;
+  /**
+   * API session the remote start was dispatched for. When set, the tracking record carries it so
+   * the inbound StartTransaction/TransactionEvent(Started) handler attaches the charger-assigned
+   * transaction to this session instead of creating a duplicate.
+   */
+  readonly sessionId?: string;
   readonly timeoutMs?: number;
   readonly trackingTtlMs?: number;
 }
@@ -75,7 +88,10 @@ export interface OcppTrackedRemoteStartTransaction {
   readonly requestedAt: string;
   /** Monotonic ordering hint used to pick the newest matching record deterministically. */
   readonly sequence: number;
-  readonly transactionId: number | null;
+  /** API session the remote start was dispatched for, or null for untracked callers. */
+  readonly sessionId: string | null;
+  /** 1.6 integer transaction id or 2.0.1 station-assigned string transaction id. */
+  readonly transactionId: number | string | null;
   readonly updatedAt: string;
 }
 
@@ -84,7 +100,8 @@ export interface OcppTransactionTrackingLinkInput {
   readonly chargePointId: string;
   readonly connectorId: number;
   readonly idTag: string;
-  readonly transactionId: number;
+  /** 1.6 integer transaction id or 2.0.1 station-assigned string transaction id. */
+  readonly transactionId: number | string;
 }
 
 /**
@@ -103,19 +120,44 @@ export interface OcppTransactionTrackingLinkInput {
 export class OcppRemoteStartService {
   private readonly logger: Logger = new Logger(OcppRemoteStartService.name);
   private readonly trackingStore: OcppRemoteStartTrackingStore;
-  private nextSequence: number = Date.now();
-  private nextRemoteStartId: number = Math.max(1, Math.floor(Date.now() / MILLISECONDS_PER_SECOND));
+  private readonly sequenceAllocator: OcppIdAllocator;
+  private readonly remoteStartIdAllocator: OcppIdAllocator;
 
   constructor(
     private readonly registryService: OcppRegistryService,
     @Optional() redisService?: RedisService,
   ) {
     this.trackingStore = redisService ?? new InMemoryOcppTrackingStore();
+    const onAllocatorFallback = (error: unknown): void => {
+      this.logger.warn(
+        `Redis id allocation failed; falling back to in-memory counter: ${resolveErrorMessage(error)}`,
+      );
+    };
+    this.sequenceAllocator = new OcppIdAllocator(
+      OCPP_REMOTE_START_TRACKING_SEQUENCE_KEY,
+      Date.now(),
+      redisService,
+      onAllocatorFallback,
+    );
+    this.remoteStartIdAllocator = new OcppIdAllocator(
+      OCPP_REMOTE_START_ID_SEQUENCE_KEY,
+      buildEpochSecondsSeed(),
+      redisService,
+      onAllocatorFallback,
+    );
 
     if (redisService === undefined) {
-      this.logger.warn(
-        'RedisService unavailable; remote-start tracking falls back to in-memory storage (records are lost on restart)',
-      );
+      const message =
+        'RedisService unavailable; remote-start tracking and id allocation fall back to ' +
+        'in-memory storage (records are lost on restart and ids can collide across replicas)';
+
+      // In production this is a real correctness hazard for multi-replica deployments, so it is
+      // surfaced at error level instead of the warn used in dev/test setups.
+      if (process.env.NODE_ENV === 'production') {
+        this.logger.error(message);
+      } else {
+        this.logger.warn(message);
+      }
     }
   }
 
@@ -166,7 +208,7 @@ export class OcppRemoteStartService {
       : OcppAction.REMOTE_START_TRANSACTION;
     const wirePayload: OcppRemoteStartTransactionRequest | Ocpp2RequestStartTransactionRequest =
       isOcpp2Client
-        ? buildOcpp2RequestStartPayload(command.payload, this.allocateRemoteStartId())
+        ? buildOcpp2RequestStartPayload(command.payload, await this.remoteStartIdAllocator.next())
         : command.payload;
     let lastError: unknown;
 
@@ -194,6 +236,7 @@ export class OcppRemoteStartService {
           attemptCount,
           chargePointId: command.chargePointId,
           payload: command.payload,
+          sessionId: command.sessionId ?? null,
           trackingTtlMs,
         });
 
@@ -298,7 +341,7 @@ export class OcppRemoteStartService {
   /** Finds one tracked remote-start request by charge point id and linked OCPP transaction id. */
   public async findTrackedRemoteStartTransactionByTransactionId(
     chargePointId: string,
-    transactionId: number,
+    transactionId: number | string,
   ): Promise<OcppTrackedRemoteStartTransaction | null> {
     try {
       const records = await this.readTrackedRecords(chargePointId);
@@ -319,6 +362,7 @@ export class OcppRemoteStartService {
     readonly attemptCount: number;
     readonly chargePointId: string;
     readonly payload: OcppRemoteStartTransactionRequest;
+    readonly sessionId: string | null;
     readonly trackingTtlMs: number;
   }): Promise<OcppTrackedRemoteStartTransaction> {
     const now = new Date();
@@ -330,7 +374,8 @@ export class OcppRemoteStartService {
       idTag: input.payload.idTag,
       remoteStartRequestId: randomUUID(),
       requestedAt: now.toISOString(),
-      sequence: this.allocateSequence(),
+      sequence: await this.sequenceAllocator.next(),
+      sessionId: input.sessionId,
       transactionId: null,
       updatedAt: now.toISOString(),
     };
@@ -375,20 +420,6 @@ export class OcppRemoteStartService {
       .filter((record): record is OcppTrackedRemoteStartTransaction => record !== null);
   }
 
-  /** Allocates one monotonically increasing sequence value for record ordering. */
-  private allocateSequence(): number {
-    this.nextSequence += 1;
-
-    return this.nextSequence;
-  }
-
-  /** Allocates one positive integer remoteStartId for 2.0.1 RequestStartTransaction commands. */
-  private allocateRemoteStartId(): number {
-    const allocated = this.nextRemoteStartId;
-    this.nextRemoteStartId += 1;
-
-    return allocated;
-  }
 }
 
 /** Builds one OCPP 2.0.1 RequestStartTransaction wire payload from the protocol-neutral command. */
@@ -529,13 +560,22 @@ function parseTrackedRecord(rawRecord: string | null): OcppTrackedRemoteStartTra
     typeof record.updatedAt === 'string' &&
     typeof record.attemptCount === 'number' &&
     typeof record.sequence === 'number' &&
-    (record.transactionId === null || typeof record.transactionId === 'number');
+    (record.sessionId === undefined ||
+      record.sessionId === null ||
+      typeof record.sessionId === 'string') &&
+    (record.transactionId === null ||
+      typeof record.transactionId === 'number' ||
+      typeof record.transactionId === 'string');
 
   if (!hasValidShape) {
     return null;
   }
 
-  return record as OcppTrackedRemoteStartTransaction;
+  return {
+    ...(record as OcppTrackedRemoteStartTransaction),
+    // Records persisted before session correlation existed carry no sessionId field.
+    sessionId: record.sessionId ?? null,
+  };
 }
 
 /** Validates one RemoteStartTransaction request payload before dispatching outbound RPC calls. */
@@ -559,8 +599,16 @@ function assertTransactionTrackingLinkInput(input: OcppTransactionTrackingLinkIn
     throw new BadRequestException('idTag is required');
   }
 
-  if (!Number.isInteger(input.transactionId) || input.transactionId <= 0) {
-    throw new BadRequestException('transactionId must be a positive integer');
+  // 1.6 assigns positive integer transaction ids; 2.0.1 stations assign opaque string ids.
+  const isValidTransactionId =
+    typeof input.transactionId === 'number'
+      ? Number.isInteger(input.transactionId) && input.transactionId > 0
+      : input.transactionId.trim().length > 0;
+
+  if (!isValidTransactionId) {
+    throw new BadRequestException(
+      'transactionId must be a positive integer or a non-empty string',
+    );
   }
 }
 

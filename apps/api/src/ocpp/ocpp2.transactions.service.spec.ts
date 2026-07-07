@@ -21,12 +21,17 @@ const TEST_TRANSACTION_ID = 'tx-2fa1c7de-0001';
 interface TransactionsServiceMock
   extends Pick<
     OcppTransactionsService,
+    | 'attachTransactionToTrackedRemoteStart'
     | 'createActiveOcppSession'
     | 'finalizeStoppedSession'
     | 'findSessionByTransactionId'
     | 'resolveConnectorId'
     | 'resolveUserId'
   > {
+  readonly attachTransactionToTrackedRemoteStart: jest.Mock<
+    ReturnType<OcppTransactionsService['attachTransactionToTrackedRemoteStart']>,
+    Parameters<OcppTransactionsService['attachTransactionToTrackedRemoteStart']>
+  >;
   readonly createActiveOcppSession: jest.Mock<
     ReturnType<OcppTransactionsService['createActiveOcppSession']>,
     Parameters<OcppTransactionsService['createActiveOcppSession']>
@@ -94,6 +99,12 @@ describe('Ocpp2TransactionsService', () => {
 
   beforeEach(() => {
     transactionsServiceMock = {
+      attachTransactionToTrackedRemoteStart: jest
+        .fn<
+          ReturnType<OcppTransactionsService['attachTransactionToTrackedRemoteStart']>,
+          Parameters<OcppTransactionsService['attachTransactionToTrackedRemoteStart']>
+        >()
+        .mockResolvedValue(null),
       createActiveOcppSession: jest
         .fn<
           ReturnType<OcppTransactionsService['createActiveOcppSession']>,
@@ -257,6 +268,33 @@ describe('Ocpp2TransactionsService', () => {
 
       expect(response).toEqual({});
       expect(transactionsServiceMock.createActiveOcppSession).not.toHaveBeenCalled();
+    });
+
+    it('attaches the transaction to a tracked remote-start API session instead of creating one', async () => {
+      transactionsServiceMock.attachTransactionToTrackedRemoteStart.mockResolvedValue({
+        id: TEST_SESSION_ID,
+      });
+
+      const response = await service.handleTransactionEvent('CP-201', buildTransactionEvent());
+
+      expect(response).toEqual({ idTokenInfo: { status: 'Accepted' } });
+      expect(transactionsServiceMock.attachTransactionToTrackedRemoteStart).toHaveBeenCalledWith({
+        chargePointId: 'CP-201',
+        idTag: 'a1b2c3d4e5f601234567',
+        meterStartWh: null,
+        ocppConnectorId: 1,
+        startedAt: new Date('2026-02-17T12:00:00.000Z'),
+        transactionId: TEST_TRANSACTION_ID,
+      });
+      expect(transactionsServiceMock.createActiveOcppSession).not.toHaveBeenCalled();
+    });
+
+    it('answers ConcurrentTx and creates nothing when the connector already has a blocking session', async () => {
+      transactionsServiceMock.createActiveOcppSession.mockResolvedValue(null);
+
+      const response = await service.handleTransactionEvent('CP-201', buildTransactionEvent());
+
+      expect(response).toEqual({ idTokenInfo: { status: 'ConcurrentTx' } });
     });
   });
 

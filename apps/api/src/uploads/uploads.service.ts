@@ -73,6 +73,9 @@ export class UploadsService {
 
     const uploadUrl = presignS3Url({
       accessKeyId: this.config.accessKeyId,
+      // Signing the content type constrains the 15-minute URL to uploads of exactly the
+      // declared type; the client must send a matching Content-Type header on the PUT.
+      contentType: request.contentType,
       date: signedAt,
       expiresSeconds: UPLOAD_URL_EXPIRES_SECONDS,
       host: this.config.host,

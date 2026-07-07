@@ -13,10 +13,10 @@ import {
   ConflictException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
-import { PaymentGateway, PaymentStatus } from '@prisma/client';
+import { PaymentGateway, PaymentStatus, Prisma } from '@prisma/client';
 
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -32,6 +32,32 @@ const SUPPORTED_PAYMENT_GATEWAYS: PaymentGateway[] = [
   PaymentGateway.IDRAM,
   PaymentGateway.APPLE_PAY,
   PaymentGateway.GOOGLE_PAY,
+];
+
+/**
+ * Statuses a synchronous capture may transition from. REFUNDED is terminal: a refund
+ * webhook landing between the capture read and write must never be overwritten by
+ * CAPTURED. CAPTURED itself stays capturable so retried captures can correct the amount.
+ */
+const CAPTURE_ALLOWED_PRIOR_STATUSES: PaymentStatus[] = [
+  PaymentStatus.PENDING,
+  PaymentStatus.AUTHORIZED,
+  PaymentStatus.CAPTURED,
+  PaymentStatus.FAILED,
+];
+
+/** Statuses a session-failure refund may transition from (everything but terminal REFUNDED). */
+const REFUND_ALLOWED_PRIOR_STATUSES: PaymentStatus[] = [
+  PaymentStatus.PENDING,
+  PaymentStatus.AUTHORIZED,
+  PaymentStatus.CAPTURED,
+  PaymentStatus.FAILED,
+];
+
+/** Statuses a pre-authorization may transition from (forward-only into AUTHORIZED). */
+const PREAUTH_ALLOWED_PRIOR_STATUSES: PaymentStatus[] = [
+  PaymentStatus.PENDING,
+  PaymentStatus.FAILED,
 ];
 
 const PAYMENT_LOOKUP_SELECT = {
@@ -101,6 +127,8 @@ export interface CaptureAuthorizedPaymentInput {
 /** Service orchestrating ArCa/Idram payment pre-auth, capture, refund, and balance-check flows. */
 @Injectable()
 export class PaymentsService {
+  private readonly logger: Logger = new Logger(PaymentsService.name);
+
   constructor(
     private readonly prismaService: PrismaService,
     private readonly notificationsService: NotificationsService,
@@ -380,7 +408,14 @@ export class PaymentsService {
     return mapPaymentMethodRecordToResponse(updatedMethod);
   }
 
-  /** Pre-authorizes one session payment and stores one authorized payment record in Prisma. */
+  /**
+   * Pre-authorizes one session payment and stores one authorized payment record in Prisma.
+   *
+   * The pre-auth idempotency key is persisted on a durable PENDING payment row BEFORE the
+   * first gateway call, so a crash after the gateway accepted the pre-authorization can
+   * never mint a second key (double-authorizing the card) on retry. The final transition
+   * to AUTHORIZED is conditional and forward-only.
+   */
   public async preAuthorizeArcaForSession(input: PreAuthorizeArcaForSessionInput): Promise<void> {
     const existingPayment = await this.findPaymentBySessionId(input.sessionId);
 
@@ -405,7 +440,10 @@ export class PaymentsService {
       );
     }
 
-    const preauthIdempotencyKey = existingPayment?.preauthIdempotencyKey ?? randomUUID();
+    const payment =
+      existingPayment ?? (await this.createPendingPaymentForPreAuth(input, paymentMethod, amount));
+    const preauthIdempotencyKey = await this.resolvePreauthIdempotencyKey(payment);
+
     const gatewayTransactionId = await this.preAuthorizeForGateway({
       amount,
       idempotencyKey: preauthIdempotencyKey,
@@ -413,31 +451,13 @@ export class PaymentsService {
       sessionId: input.sessionId,
     });
 
-    if (existingPayment === null) {
-      await this.prismaService.payment.create({
-        data: {
-          amount,
-          authorizedAmount: amount,
-          capturedAmount: 0,
-          gateway: paymentMethod.gateway,
-          gatewayTransactionId,
-          paymentMethodId: paymentMethod.id,
-          preauthIdempotencyKey,
-          sessionId: input.sessionId,
-          status: PaymentStatus.AUTHORIZED,
-          userId: input.userId,
-        },
-        select: {
-          id: true,
-        },
-      });
-
-      return;
-    }
-
-    await this.prismaService.payment.update({
+    // Conditional forward-only transition: only a payment that is still PENDING/FAILED may
+    // become AUTHORIZED here. count === 0 means a concurrent flow (webhook or another
+    // pre-auth) already advanced the record - leave the winner's state untouched.
+    const authorized = await this.prismaService.payment.updateMany({
       where: {
-        id: existingPayment.id,
+        id: payment.id,
+        status: { in: PREAUTH_ALLOWED_PRIOR_STATUSES },
       },
       data: {
         amount,
@@ -445,13 +465,54 @@ export class PaymentsService {
         gateway: paymentMethod.gateway,
         gatewayTransactionId,
         paymentMethodId: paymentMethod.id,
-        preauthIdempotencyKey,
         status: PaymentStatus.AUTHORIZED,
       },
-      select: {
-        id: true,
-      },
     });
+
+    if (authorized.count === 0) {
+      this.logger.warn(
+        `Payment ${payment.id} for session ${input.sessionId} was transitioned concurrently; skipping AUTHORIZED update`,
+      );
+    }
+  }
+
+  /**
+   * Creates the durable PENDING payment row that carries the pre-auth idempotency key
+   * before any gateway call. When a concurrent pre-authorization creates the row first
+   * (unique session id), the winner's row is reused instead of failing.
+   */
+  private async createPendingPaymentForPreAuth(
+    input: PreAuthorizeArcaForSessionInput,
+    paymentMethod: PaymentMethodLookupRecord,
+    amount: number,
+  ): Promise<PaymentLookupRecord> {
+    try {
+      return await this.prismaService.payment.create({
+        data: {
+          amount,
+          authorizedAmount: 0,
+          capturedAmount: 0,
+          gateway: paymentMethod.gateway,
+          gatewayTransactionId: null,
+          paymentMethodId: paymentMethod.id,
+          preauthIdempotencyKey: randomUUID(),
+          sessionId: input.sessionId,
+          status: PaymentStatus.PENDING,
+          userId: input.userId,
+        },
+        select: PAYMENT_LOOKUP_SELECT,
+      });
+    } catch (error: unknown) {
+      if (isPrismaKnownRequestError(error, 'P2002')) {
+        const concurrentPayment = await this.findPaymentBySessionId(input.sessionId);
+
+        if (concurrentPayment !== null) {
+          return concurrentPayment;
+        }
+      }
+
+      throw error;
+    }
   }
 
   /** Captures one authorized session payment amount via the recorded gateway after session completion. */
@@ -490,7 +551,7 @@ export class PaymentsService {
       throw error;
     }
 
-    const updateData: Prisma.PaymentUpdateInput = {
+    const updateData: Prisma.PaymentUpdateManyMutationInput = {
       amount: input.amount,
       capturedAmount: input.amount,
       status: PaymentStatus.CAPTURED,
@@ -500,15 +561,29 @@ export class PaymentsService {
       updateData.gatewayTransactionId = gatewayTransactionId;
     }
 
-    await this.prismaService.payment.update({
+    // Conditional transition: a FAILED/REFUNDED webhook may land between the read above
+    // and this write. REFUNDED is terminal, so the CAPTURED write only applies while the
+    // record is still in a capturable status; count === 0 means someone else transitioned
+    // the record and the winner's state is preserved.
+    const captured = await this.prismaService.payment.updateMany({
       where: {
         id: payment.id,
+        status: { in: CAPTURE_ALLOWED_PRIOR_STATUSES },
       },
       data: updateData,
-      select: {
-        id: true,
-      },
     });
+
+    if (captured.count === 0) {
+      const currentPayment = await this.findPaymentBySessionId(input.sessionId);
+      this.logger.warn(
+        `Payment ${payment.id} for session ${input.sessionId} transitioned to ${
+          currentPayment?.status ?? 'unknown'
+        } during capture; leaving the record untouched`,
+      );
+
+      return;
+    }
+
     await this.notificationsService.sendPaymentSucceededNotification({
       paymentAmountAmd: input.amount,
       sessionId: input.sessionId,
@@ -528,15 +603,15 @@ export class PaymentsService {
     const refundIdempotencyKey = await this.resolveRefundIdempotencyKey(payment);
     await this.refundForGateway(payment, refundAmount, refundIdempotencyKey);
 
-    await this.prismaService.payment.update({
+    // Conditional transition: if a concurrent flow (e.g. a REFUNDED webhook) already
+    // marked the payment refunded, count === 0 and this is an idempotent no-op.
+    await this.prismaService.payment.updateMany({
       where: {
         id: payment.id,
+        status: { in: REFUND_ALLOWED_PRIOR_STATUSES },
       },
       data: {
         status: PaymentStatus.REFUNDED,
-      },
-      select: {
-        id: true,
       },
     });
   }
@@ -753,8 +828,49 @@ export class PaymentsService {
   }
 
   /**
-   * Resolves the capture idempotency key for one payment, generating and persisting a fresh
-   * UUID before the first gateway attempt so any retry after a failure reuses the same key.
+   * Resolves the pre-auth idempotency key for one payment, claiming a fresh UUID with a
+   * conditional write (only where no key exists yet) so concurrent pre-authorizations
+   * always converge on a single key before the first gateway attempt.
+   */
+  private async resolvePreauthIdempotencyKey(payment: PaymentLookupRecord): Promise<string> {
+    if (payment.preauthIdempotencyKey !== null) {
+      return payment.preauthIdempotencyKey;
+    }
+
+    const preauthIdempotencyKey = randomUUID();
+    const claimed = await this.prismaService.payment.updateMany({
+      where: {
+        id: payment.id,
+        preauthIdempotencyKey: null,
+      },
+      data: {
+        preauthIdempotencyKey,
+      },
+    });
+
+    if (claimed.count > 0) {
+      return preauthIdempotencyKey;
+    }
+
+    // A concurrent flow claimed the key first - re-read and reuse the winner's key.
+    const winner = await this.prismaService.payment.findUnique({
+      where: { id: payment.id },
+      select: { preauthIdempotencyKey: true },
+    });
+
+    if (winner?.preauthIdempotencyKey == null) {
+      throw new InternalServerErrorException(
+        `Pre-auth idempotency key for payment ${payment.id} could not be claimed or read back`,
+      );
+    }
+
+    return winner.preauthIdempotencyKey;
+  }
+
+  /**
+   * Resolves the capture idempotency key for one payment, claiming a fresh UUID with a
+   * conditional write (only where no key exists yet) BEFORE the first gateway attempt so
+   * retries and concurrent captures always reuse one single key.
    */
   private async resolveCaptureIdempotencyKey(payment: PaymentLookupRecord): Promise<string> {
     if (payment.captureIdempotencyKey !== null) {
@@ -762,24 +878,39 @@ export class PaymentsService {
     }
 
     const captureIdempotencyKey = randomUUID();
-    await this.prismaService.payment.update({
+    const claimed = await this.prismaService.payment.updateMany({
       where: {
         id: payment.id,
+        captureIdempotencyKey: null,
       },
       data: {
         captureIdempotencyKey,
       },
-      select: {
-        id: true,
-      },
     });
 
-    return captureIdempotencyKey;
+    if (claimed.count > 0) {
+      return captureIdempotencyKey;
+    }
+
+    // A concurrent capture claimed the key first - re-read and reuse the winner's key.
+    const winner = await this.prismaService.payment.findUnique({
+      where: { id: payment.id },
+      select: { captureIdempotencyKey: true },
+    });
+
+    if (winner?.captureIdempotencyKey == null) {
+      throw new InternalServerErrorException(
+        `Capture idempotency key for payment ${payment.id} could not be claimed or read back`,
+      );
+    }
+
+    return winner.captureIdempotencyKey;
   }
 
   /**
-   * Resolves the refund idempotency key for one payment, generating and persisting a fresh
-   * UUID before the first gateway attempt so any retry after a failure reuses the same key.
+   * Resolves the refund idempotency key for one payment, claiming a fresh UUID with a
+   * conditional write (only where no key exists yet) BEFORE the first gateway attempt so
+   * retries and concurrent refunds always reuse one single key.
    */
   private async resolveRefundIdempotencyKey(payment: PaymentLookupRecord): Promise<string> {
     if (payment.refundIdempotencyKey !== null) {
@@ -787,19 +918,33 @@ export class PaymentsService {
     }
 
     const refundIdempotencyKey = randomUUID();
-    await this.prismaService.payment.update({
+    const claimed = await this.prismaService.payment.updateMany({
       where: {
         id: payment.id,
+        refundIdempotencyKey: null,
       },
       data: {
         refundIdempotencyKey,
       },
-      select: {
-        id: true,
-      },
     });
 
-    return refundIdempotencyKey;
+    if (claimed.count > 0) {
+      return refundIdempotencyKey;
+    }
+
+    // A concurrent refund claimed the key first - re-read and reuse the winner's key.
+    const winner = await this.prismaService.payment.findUnique({
+      where: { id: payment.id },
+      select: { refundIdempotencyKey: true },
+    });
+
+    if (winner?.refundIdempotencyKey == null) {
+      throw new InternalServerErrorException(
+        `Refund idempotency key for payment ${payment.id} could not be claimed or read back`,
+      );
+    }
+
+    return winner.refundIdempotencyKey;
   }
 
   /** Finds one session-scoped payment record by unique session id. */
@@ -1050,6 +1195,11 @@ function normalizeCardLast4(cardLast4: string | undefined): string | null {
   }
 
   return normalizedValue;
+}
+
+/** Returns whether one unknown error is a Prisma known request error with the given code. */
+function isPrismaKnownRequestError(error: unknown, code: string): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === code;
 }
 
 /** Resolves log-friendly error text for unknown thrown payment-capture failures. */

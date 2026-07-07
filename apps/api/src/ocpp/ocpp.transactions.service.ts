@@ -4,15 +4,16 @@ import type {
   OcppStopTransactionRequest,
   OcppStopTransactionResponse,
 } from '@lilocharge/shared-types';
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
-import { SessionStatus } from '@prisma/client';
+import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/common';
+import { Prisma, SessionStatus } from '@prisma/client';
 
 import { NotificationsService } from '../notifications/notifications.service';
-import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { SessionCostCalculatorService } from '../sessions/session-cost-calculator.service';
+import { SessionSettlementService } from '../sessions/session-settlement.service';
 import { OcppIdTagService } from './ocpp.id-tag.service';
+import { buildEpochSecondsSeed, OcppIdAllocator } from './ocpp.id-allocator';
 import { OcppRemoteStartService } from './ocpp.remote-start.service';
 
 const OCPP_CONNECTOR_LOOKUP_SELECT = {
@@ -36,6 +37,26 @@ const SESSION_STOP_LOOKUP_SELECT = {
 const WATT_HOURS_PER_KILOWATT_HOUR = 1000;
 const WATTS_PER_KILOWATT = 1000;
 
+/** Redis counter key for cross-replica OCPP 1.6 transaction-id allocation. */
+export const OCPP_TRANSACTION_ID_SEQUENCE_KEY = 'ocpp:txid:seq';
+
+/**
+ * Session lifecycle states that make a connector unavailable for a new session (must stay in
+ * sync with the API-side guard in sessions.service.ts).
+ */
+const CONNECTOR_BLOCKING_SESSION_STATUSES: readonly SessionStatus[] = [
+  SessionStatus.PENDING,
+  SessionStatus.AUTHORIZED,
+  SessionStatus.ACTIVE,
+];
+
+/** Terminal states an API session can no longer be attached to by an inbound transaction. */
+const TERMINAL_SESSION_STATUSES: readonly SessionStatus[] = [
+  SessionStatus.COMPLETED,
+  SessionStatus.FAILED,
+  SessionStatus.CANCELLED,
+];
+
 /** Session lookup record shared by OCPP finalization flows (1.6 StopTransaction, 2.0.1 Ended). */
 export type OcppSessionLookupRecord = Prisma.SessionGetPayload<{
   select: typeof SESSION_STOP_LOOKUP_SELECT;
@@ -48,6 +69,18 @@ export interface OcppActiveSessionCreateInput {
   readonly startedAt: Date;
   readonly transactionId: string;
   readonly userId: string;
+}
+
+/** Input used to attach one inbound OCPP transaction to the API session that requested it. */
+export interface OcppTransactionAttachInput {
+  readonly chargePointId: string;
+  readonly idTag: string;
+  readonly meterStartWh: number | null;
+  /** OCPP-side connector/EVSE number the transaction started on (matches the dispatched command). */
+  readonly ocppConnectorId: number;
+  readonly startedAt: Date;
+  /** 1.6 integer transaction id or 2.0.1 station-assigned string transaction id. */
+  readonly transactionId: number | string;
 }
 
 /** OCPP 1.6-J Authorize request payload (not yet present in shared types). */
@@ -76,22 +109,49 @@ interface MeterValueEnergyAggregate {
 @Injectable()
 export class OcppTransactionsService {
   private readonly logger: Logger = new Logger(OcppTransactionsService.name);
-  private nextTransactionId: number = Math.max(1, Math.floor(Date.now() / 1000));
+  private readonly transactionIdAllocator: OcppIdAllocator;
 
   constructor(
     private readonly prismaService: PrismaService,
     private readonly sessionCostCalculatorService: SessionCostCalculatorService,
-    private readonly paymentsService: PaymentsService,
+    private readonly sessionSettlementService: SessionSettlementService,
     private readonly notificationsService: NotificationsService,
     private readonly remoteStartService: OcppRemoteStartService,
     private readonly idTagService: OcppIdTagService,
-  ) {}
+    @Optional() redisService?: RedisService,
+  ) {
+    this.transactionIdAllocator = new OcppIdAllocator(
+      OCPP_TRANSACTION_ID_SEQUENCE_KEY,
+      buildEpochSecondsSeed(),
+      redisService,
+      (error: unknown) => {
+        this.logger.warn(
+          `Redis transaction-id allocation failed; falling back to in-memory counter: ${resolveErrorMessage(error)}`,
+        );
+      },
+    );
+
+    if (redisService === undefined) {
+      const message =
+        'RedisService unavailable; OCPP transaction-id allocation falls back to an in-memory ' +
+        'counter that can collide across replicas';
+
+      if (process.env.NODE_ENV === 'production') {
+        this.logger.error(message);
+      } else {
+        this.logger.warn(message);
+      }
+    }
+  }
 
   /**
    * Handles one inbound OCPP StartTransaction payload.
    *
-   * When connector and user references are valid, this creates one active session, allocates a
-   * central-system transaction id, and links it to tracked remote-start state for later lookups.
+   * When the transaction answers a tracked RemoteStartTransaction dispatched for an API session,
+   * the allocated transaction id is ATTACHED to that session (no duplicate row is created), so
+   * meter values, RemoteStop, and billing all target the session the user is paying for. Only
+   * genuinely charger-local starts create a fresh session, and those go through the
+   * one-session-per-connector guard (ConcurrentTx when the connector is already held).
    */
   public async handleStartTransaction(
     chargePointId: string,
@@ -118,8 +178,26 @@ export class OcppTransactionsService {
       return buildInvalidStartTransactionResponse();
     }
 
-    const transactionId = this.allocateTransactionId();
-    await this.createActiveOcppSession({
+    const transactionId = await this.allocateTransactionId();
+    const attachedSession = await this.attachTransactionToTrackedRemoteStart({
+      chargePointId,
+      idTag: payload.idTag,
+      meterStartWh: payload.meterStart,
+      ocppConnectorId: payload.connectorId,
+      startedAt,
+      transactionId,
+    });
+
+    if (attachedSession !== null) {
+      return {
+        idTagInfo: {
+          status: 'Accepted',
+        },
+        transactionId,
+      };
+    }
+
+    const createdSession = await this.createActiveOcppSession({
       connectorId,
       meterStartWh: payload.meterStart,
       startedAt,
@@ -127,12 +205,18 @@ export class OcppTransactionsService {
       userId,
     });
 
-    await this.remoteStartService.linkTransactionIdToTrackedRemoteStart({
-      chargePointId,
-      connectorId: payload.connectorId,
-      idTag: payload.idTag,
-      transactionId,
-    });
+    if (createdSession === null) {
+      this.logger.warn(
+        `StartTransaction rejected for ${chargePointId} connector ${payload.connectorId}: connector already has a blocking session (ConcurrentTx)`,
+      );
+
+      return {
+        idTagInfo: {
+          status: 'ConcurrentTx',
+        },
+        transactionId: 0,
+      };
+    }
 
     return {
       idTagInfo: {
@@ -211,7 +295,8 @@ export class OcppTransactionsService {
    *
    * Shared by 1.6 StopTransaction and 2.0.1 TransactionEvent(Ended): computes energy/peak
    * metrics, calculates tariff cost, persists completed session totals, sends the completion
-   * notification, and captures the pre-authorized payment.
+   * notification, and settles the payment through the shared settlement service (gateway
+   * capture, wallet deduction, or zero-energy refund — identical to the API stop path).
    */
   public async finalizeStoppedSession(
     session: OcppSessionLookupRecord,
@@ -238,12 +323,17 @@ export class OcppTransactionsService {
       calculateEnergyDeliveredFromRegisters(session.meterStart, meterStopWh) ??
       calculateEnergyDeliveredKwh(meterStats);
     const peakPowerKw = calculatePeakPowerKw(meterStats);
-    const totalCost = await this.calculateFinalCost({
+    const computedTotalCost = await this.calculateFinalCost({
       connectorId: session.connectorId,
       energyDeliveredKwh,
       sessionId: session.id,
       startedAt: session.startTime ?? session.createdAt,
       stoppedAt,
+    });
+    const settlementDecision = await this.sessionSettlementService.resolveSettlement({
+      billableEnergyKwh: energyDeliveredKwh,
+      computedTotalCost,
+      userId: session.userId,
     });
 
     await this.prismaService.session.update({
@@ -253,45 +343,162 @@ export class OcppTransactionsService {
         energyDelivered: energyDeliveredKwh,
         peakPower: peakPowerKw,
         status: SessionStatus.COMPLETED,
-        totalCost,
+        totalCost: settlementDecision.totalCost,
       },
     });
     await this.notificationsService.sendSessionCompletedNotification({
       sessionId: session.id,
-      totalCostAmd: totalCost,
+      totalCostAmd: settlementDecision.totalCost,
       userId: session.userId,
     });
-    await this.captureCompletedSessionPayment(session.id, totalCost, session.connectorId);
 
-    return totalCost;
+    // A charge point cannot receive an HTTP error, so settlement failures (gateway outage,
+    // insufficient wallet balance) must not fail the OCPP acknowledgement: the session is
+    // completed with its persisted total and the failure surfaces loudly for reconciliation.
+    try {
+      await this.sessionSettlementService.settleCompletedSession({
+        decision: settlementDecision,
+        sessionId: session.id,
+        userId: session.userId,
+      });
+    } catch (error: unknown) {
+      this.logger.error(
+        `Settlement failed for session ${session.id} (connector ${session.connectorId}): ${resolveErrorMessage(error)}`,
+      );
+    }
+
+    return settlementDecision.totalCost;
   }
 
   /**
    * Creates one ACTIVE session for a charge-point-initiated transaction start and sends the
    * session-started notification. Shared by 1.6 StartTransaction and 2.0.1 TransactionEvent(Started).
+   *
+   * The conflict check and the insert run inside one SERIALIZABLE transaction (mirroring the API
+   * create path in sessions.service.ts) so a charger-local start can never produce a second
+   * blocking session on a connector. Returns null when the connector is already held — callers
+   * must answer the charge point per protocol (ConcurrentTx) and must NOT create a session.
+   * The remote-start ATTACH path never calls this method, so answering a tracked remote start
+   * does not trip the guard.
    */
   public async createActiveOcppSession(
     input: OcppActiveSessionCreateInput,
-  ): Promise<{ readonly id: string }> {
-    const createdSession = await this.prismaService.session.create({
-      data: {
-        connectorId: input.connectorId,
-        meterStart: input.meterStartWh,
-        startTime: input.startedAt,
-        status: SessionStatus.ACTIVE,
-        transactionId: input.transactionId,
-        userId: input.userId,
-      },
-      select: {
-        id: true,
-      },
-    });
+  ): Promise<{ readonly id: string } | null> {
+    let createdSession: { readonly id: string } | null;
+
+    try {
+      createdSession = await this.prismaService.$transaction(
+        async (transaction) => {
+          const conflictingSessionCount = await transaction.session.count({
+            where: {
+              connectorId: input.connectorId,
+              status: { in: [...CONNECTOR_BLOCKING_SESSION_STATUSES] },
+            },
+          });
+
+          if (conflictingSessionCount > 0) {
+            return null;
+          }
+
+          return transaction.session.create({
+            data: {
+              connectorId: input.connectorId,
+              meterStart: input.meterStartWh,
+              startTime: input.startedAt,
+              status: SessionStatus.ACTIVE,
+              transactionId: input.transactionId,
+              userId: input.userId,
+            },
+            select: {
+              id: true,
+            },
+          });
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error: unknown) {
+      if (isSerializationConflictError(error)) {
+        return null;
+      }
+
+      throw error;
+    }
+
+    if (createdSession === null) {
+      return null;
+    }
+
     await this.notificationsService.sendSessionStartedNotification({
       sessionId: createdSession.id,
       userId: input.userId,
     });
 
     return createdSession;
+  }
+
+  /**
+   * Attaches one inbound charger transaction to the API session whose RemoteStart requested it.
+   *
+   * Consumption goes through {@link OcppRemoteStartService.linkTransactionIdToTrackedRemoteStart}
+   * — the single tracking-consumption path — which links the newest PENDING record matching
+   * (charge point, connector, idTag) and thereby prevents double-firing: a linked record is no
+   * longer pending, so a retried StartTransaction cannot match it again.
+   *
+   * Returns the attached session, or null when no tracked remote start references a live API
+   * session (true charger-local start, expired tracking, or a session already in a terminal
+   * state) — callers then fall back to the guarded create path.
+   */
+  public async attachTransactionToTrackedRemoteStart(
+    input: OcppTransactionAttachInput,
+  ): Promise<{ readonly id: string } | null> {
+    const trackedRemoteStart = await this.remoteStartService.linkTransactionIdToTrackedRemoteStart({
+      chargePointId: input.chargePointId,
+      connectorId: input.ocppConnectorId,
+      idTag: input.idTag,
+      transactionId: input.transactionId,
+    });
+
+    if (trackedRemoteStart === null || trackedRemoteStart.sessionId === null) {
+      return null;
+    }
+
+    const session = await this.prismaService.session.findUnique({
+      where: { id: trackedRemoteStart.sessionId },
+      select: {
+        id: true,
+        startTime: true,
+        status: true,
+      },
+    });
+
+    if (session === null || TERMINAL_SESSION_STATUSES.includes(session.status)) {
+      this.logger.warn(
+        `Tracked remote start for ${input.chargePointId} references session ${trackedRemoteStart.sessionId} ` +
+          `which is ${session === null ? 'missing' : session.status}; falling back to charger-local session handling`,
+      );
+
+      return null;
+    }
+
+    // The charger may beat the API's own AUTHORIZED -> ACTIVE transition, so the attach also
+    // activates the session; when the API already activated it, this is an idempotent update.
+    await this.prismaService.session.update({
+      where: { id: session.id },
+      data: {
+        meterStart: input.meterStartWh,
+        startTime: session.startTime ?? input.startedAt,
+        status: SessionStatus.ACTIVE,
+        transactionId: String(input.transactionId),
+      },
+      select: {
+        id: true,
+      },
+    });
+    this.logger.log(
+      `Attached inbound transaction ${input.transactionId} from ${input.chargePointId} to API session ${session.id}`,
+    );
+
+    return { id: session.id };
   }
 
   /** Resolves one connector id from charge point identity and OCPP connector number. */
@@ -384,37 +591,25 @@ export class OcppTransactionsService {
       return pricing.totalCost;
     } catch (error: unknown) {
       const message = resolveErrorMessage(error);
-      this.logger.warn(
-        `StopTransaction pricing fallback for connector ${input.connectorId}: ${message}`,
+      // Deliberately loud: the session still completes, but a 0 total on a session that may have
+      // delivered energy is a billing anomaly operators must be able to find and reconcile.
+      this.logger.error(
+        `PRICING FAILURE for session ${input.sessionId} (connector ${input.connectorId}): ${message}. ` +
+          `Completing the session with totalCost 0 (${input.energyDeliveredKwh} kWh delivered) — needs manual reconciliation.`,
       );
 
       return 0;
     }
   }
 
-  /** Allocates one positive integer transaction id for StartTransaction responses. */
-  private allocateTransactionId(): number {
-    const allocated = this.nextTransactionId;
-    this.nextTransactionId += 1;
-
-    return allocated;
-  }
-
-  /** Captures one completed-session payment and degrades gracefully on gateway failures. */
-  private async captureCompletedSessionPayment(
-    sessionId: string,
-    amount: number,
-    connectorId: string | null,
-  ): Promise<void> {
-    try {
-      await this.paymentsService.captureAuthorizedPaymentForSession({
-        amount,
-        sessionId,
-      });
-    } catch (error: unknown) {
-      const message = resolveErrorMessage(error);
-      this.logger.warn(`StopTransaction capture fallback for connector ${connectorId}: ${message}`);
-    }
+  /**
+   * Allocates one positive integer transaction id for StartTransaction responses.
+   *
+   * Allocation is a shared Redis INCR so concurrent API replicas never hand out the same id;
+   * without Redis it degrades to a per-process counter (see OcppIdAllocator for the limitation).
+   */
+  private async allocateTransactionId(): Promise<number> {
+    return this.transactionIdAllocator.next();
   }
 }
 
@@ -521,6 +716,14 @@ function resolveErrorMessage(error: unknown): string {
   }
 
   return 'Unknown transaction error';
+}
+
+/**
+ * Detects PostgreSQL serialization conflicts surfaced by Prisma for SERIALIZABLE transactions.
+ * P2034 is Prisma's "transaction failed due to a write conflict or a deadlock" error code.
+ */
+function isSerializationConflictError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
 }
 
 /** Checks whether one raw value is a canonical UUID string. */
