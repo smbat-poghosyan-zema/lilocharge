@@ -1,25 +1,34 @@
 import type { FavoriteStation } from '@lilocharge/shared-types';
 import { StationStatus } from '@lilocharge/shared-types';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useAppTranslation } from '../../i18n/use-app-translation';
 import { favoritesStorage, type FavoritesStorage } from './favorites-storage';
+import { createFavoritesSync, type FavoritesSync } from './favorites-sync';
 
 interface FavoritesScreenProps {
   readonly favoritesStorageClient?: FavoritesStorage;
+  readonly favoritesSyncClient?: FavoritesSync;
 }
 
 /**
- * Renders locally persisted favorite stations with quick remove controls.
+ * Renders locally persisted favorite stations with quick remove controls,
+ * synchronized with server favorites when a signed-in session exists.
  */
 export function FavoritesScreen({
   favoritesStorageClient = favoritesStorage,
+  favoritesSyncClient,
 }: FavoritesScreenProps = {}): JSX.Element {
   const { t } = useAppTranslation();
+  const favoritesSync = useMemo<FavoritesSync>(() => {
+    return favoritesSyncClient ?? createFavoritesSync({ favoritesStorageClient });
+  }, [favoritesStorageClient, favoritesSyncClient]);
   const [favorites, setFavorites] = useState<readonly FavoriteStation[]>(() => {
     return favoritesStorageClient.listFavoriteStations();
   });
+  const [hasSyncLoadError, setHasSyncLoadError] = useState(false);
+  const [hasSyncActionError, setHasSyncActionError] = useState(false);
 
   useEffect(() => {
     setFavorites(favoritesStorageClient.listFavoriteStations());
@@ -29,18 +38,55 @@ export function FavoritesScreen({
     });
   }, [favoritesStorageClient]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    void favoritesSync.refreshFromServer().then((result) => {
+      if (isMounted && result.status === 'ERROR') {
+        setHasSyncLoadError(true);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [favoritesSync]);
+
+  /**
+   * Removes one favorite optimistically and surfaces server sync failures.
+   */
+  const handleRemoveFavorite = async (stationId: string): Promise<void> => {
+    const result = await favoritesSync.removeFavorite(stationId);
+
+    if (result.status === 'ERROR') {
+      setHasSyncActionError(true);
+    }
+  };
+
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="favorites-screen">
       <View style={styles.headerContainer}>
         <Text accessibilityRole="header" style={styles.title}>
           {t('favorites.title')}
         </Text>
         <Text style={styles.subtitle}>{t('favorites.subtitle')}</Text>
+        {hasSyncLoadError ? (
+          <Text style={styles.syncErrorText} testID="favorites-sync-load-error">
+            {t('favorites.sync.loadError')}
+          </Text>
+        ) : null}
+        {hasSyncActionError ? (
+          <Text style={styles.syncErrorText} testID="favorites-sync-error">
+            {t('favorites.sync.error')}
+          </Text>
+        ) : null}
       </View>
 
       {favorites.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>{t('favorites.empty')}</Text>
+          <Text style={styles.emptyText} testID="favorites-empty-state">
+            {t('favorites.empty')}
+          </Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.listContainer} testID="favorites-list">
@@ -61,7 +107,7 @@ export function FavoritesScreen({
               <Pressable
                 accessibilityRole="button"
                 onPress={(): void => {
-                  favoritesStorageClient.removeFavoriteStation(favorite.stationId);
+                  void handleRemoveFavorite(favorite.stationId);
                 }}
                 style={({ pressed }) => {
                   return [styles.removeButton, pressed ? styles.removeButtonPressed : null];
@@ -172,6 +218,11 @@ const styles = StyleSheet.create({
     color: '#4B5563',
     fontSize: 14,
     marginTop: 6,
+  },
+  syncErrorText: {
+    color: '#B91C1C',
+    fontSize: 13,
+    marginTop: 8,
   },
   title: {
     color: '#111827',

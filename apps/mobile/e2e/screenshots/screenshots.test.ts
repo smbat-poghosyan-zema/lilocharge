@@ -1,166 +1,98 @@
 /**
- * Screenshot tests for App Store and Google Play submissions
- * Generates screenshots in all supported locales and device sizes
+ * Screenshot suite for App Store and Google Play submissions.
+ *
+ * Captures every screen defined in screenshot-config.ts in all supported
+ * locales. Only screens that are reachable without a backend are captured:
+ * the run bootstraps a signed-out session by skipping onboarding locally and
+ * switches languages through the real in-app language switcher.
  */
 
-import { device, element, by, waitFor } from 'detox';
+import { by, element } from 'detox';
+
 import {
-  SCREENS,
-  LOCALES,
-  getScreenshotOutputDir,
+  completeOnboardingViaSkip,
+  openProfileTab,
+  returnToProfileTab,
+  waitForVisibleById,
+} from '../flows/helpers';
+import {
   getScreenshotFilename,
+  LOCALES,
+  SCREENS,
   type Locale,
+  type ScreenDefinition,
 } from './screenshot-config';
-import {
-  takeScreenshot,
-  setAppLocale,
-  wait,
-  setupMockData,
-  hideSystemUI,
-} from './screenshot-utils';
+import { hideSystemUI, takeScreenshot, wait } from './screenshot-utils';
 
-describe('App Store Screenshots', () => {
+describe('App store screenshots', () => {
   beforeAll(async () => {
-    await setupMockData();
-  });
-
-  beforeEach(async () => {
-    await device.reloadReactNative();
-  });
-
-  /**
-   * Generate screenshots for a specific locale
-   */
-  async function captureScreenshotsForLocale(locale: Locale): Promise<void> {
-    const platform = device.getPlatform();
-    const outputDir = getScreenshotOutputDir(platform, locale);
-
-    // Set app language
-    await setAppLocale(locale);
+    await completeOnboardingViaSkip();
     await hideSystemUI();
+  });
 
-    let screenIndex = 1;
+  LOCALES.forEach((locale) => {
+    it(`captures screenshots in ${locale}`, async () => {
+      await setAppLocale(locale);
 
-    for (const screen of SCREENS) {
-      const filename = getScreenshotFilename(screen.id, screenIndex);
+      let screenIndex = 1;
 
-      try {
-        switch (screen.id) {
-          case 'map':
-            await captureMapScreen(filename, outputDir);
-            break;
+      for (const screen of SCREENS) {
+        await navigateToScreen(screen);
+        await waitForVisibleById(screen.readyTestId);
 
-          case 'station-details':
-            await captureStationDetailsScreen(filename, outputDir);
-            break;
-
-          case 'charging-active':
-            await captureChargingActiveScreen(filename, outputDir);
-            break;
-
-          case 'payment':
-            await capturePaymentScreen(filename, outputDir);
-            break;
-
-          case 'profile':
-            await captureProfileScreen(filename, outputDir);
-            break;
-
-          default:
-            console.warn(`Unknown screen: ${screen.id}`);
-        }
-
-        if (screen.delay) {
+        if (screen.delay !== undefined) {
           await wait(screen.delay);
         }
 
+        await takeScreenshot(`${locale}_${getScreenshotFilename(screen.id, screenIndex)}`);
+
+        if (screen.id === 'payment') {
+          // The payment methods screen is pushed over the tab navigator.
+          await returnToProfileTab();
+        }
+
         screenIndex++;
-      } catch (error) {
-        console.error(`Failed to capture ${screen.name} (${locale}):`, error);
       }
-    }
-  }
-
-  /**
-   * Capture map screen with charging stations
-   */
-  async function captureMapScreen(filename: string, outputDir: string): Promise<void> {
-    // Wait for map to load
-    await waitFor(element(by.id('charging-map')))
-      .toBeVisible()
-      .withTimeout(10000);
-
-    // Wait for markers to render
-    await wait(2000);
-
-    await takeScreenshot(filename, outputDir);
-  }
-
-  /**
-   * Capture station details screen
-   */
-  async function captureStationDetailsScreen(filename: string, outputDir: string): Promise<void> {
-    // Tap on a charging station marker
-    await element(by.id('station-marker-1')).tap();
-
-    // Wait for details to appear
-    await waitFor(element(by.id('station-details')))
-      .toBeVisible()
-      .withTimeout(5000);
-
-    await wait(1000);
-    await takeScreenshot(filename, outputDir);
-  }
-
-  /**
-   * Capture active charging session screen
-   */
-  async function captureChargingActiveScreen(filename: string, outputDir: string): Promise<void> {
-    // Navigate to active session (assuming we have mock data)
-    await element(by.id('start-charging-button')).tap();
-
-    await waitFor(element(by.id('charging-session-active')))
-      .toBeVisible()
-      .withTimeout(5000);
-
-    await wait(1500);
-    await takeScreenshot(filename, outputDir);
-  }
-
-  /**
-   * Capture payment screen
-   */
-  async function capturePaymentScreen(filename: string, outputDir: string): Promise<void> {
-    // Navigate to payment methods
-    await element(by.id('tab-profile')).tap();
-    await element(by.id('payment-methods-button')).tap();
-
-    await waitFor(element(by.id('payment-methods')))
-      .toBeVisible()
-      .withTimeout(5000);
-
-    await wait(1000);
-    await takeScreenshot(filename, outputDir);
-  }
-
-  /**
-   * Capture user profile screen
-   */
-  async function captureProfileScreen(filename: string, outputDir: string): Promise<void> {
-    await element(by.id('tab-profile')).tap();
-
-    await waitFor(element(by.id('profile-screen')))
-      .toBeVisible()
-      .withTimeout(5000);
-
-    await wait(1000);
-    await takeScreenshot(filename, outputDir);
-  }
-
-  // Generate test for each locale
-  LOCALES.forEach((locale) => {
-    it(`should capture screenshots in ${locale}`, async () => {
-      await captureScreenshotsForLocale(locale);
     });
   });
 });
+
+/**
+ * Switches the app UI language through the profile language switcher.
+ */
+async function setAppLocale(locale: Locale): Promise<void> {
+  await openProfileTab();
+  await element(by.id(`profile-language-${locale}`)).tap();
+}
+
+/**
+ * Navigates to the target screenshot screen using real tab bar buttons and
+ * profile navigation rows.
+ */
+async function navigateToScreen(screen: ScreenDefinition): Promise<void> {
+  switch (screen.id) {
+    case 'map':
+      await element(by.id('tab-stations')).tap();
+      break;
+
+    case 'charge':
+      await element(by.id('tab-charge')).tap();
+      break;
+
+    case 'favorites':
+      await element(by.id('tab-favorites')).tap();
+      break;
+
+    case 'profile':
+      await element(by.id('tab-profile')).tap();
+      break;
+
+    case 'payment':
+      await openProfileTab();
+      await element(by.id('profile-payment-methods')).tap();
+      break;
+
+    default:
+      throw new Error(`Unknown screenshot screen: ${screen.id}`);
+  }
+}

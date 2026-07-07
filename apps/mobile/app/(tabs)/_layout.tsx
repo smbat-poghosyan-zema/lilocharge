@@ -19,24 +19,28 @@ export default function TabsLayout(): JSX.Element {
       <Tabs.Screen
         name="stations"
         options={{
+          tabBarTestID: 'tab-stations',
           title: t('tabs.stations.title'),
         }}
       />
       <Tabs.Screen
         name="charge"
         options={{
+          tabBarTestID: 'tab-charge',
           title: t('tabs.charge.title'),
         }}
       />
       <Tabs.Screen
         name="favorites"
         options={{
+          tabBarTestID: 'tab-favorites',
           title: t('tabs.favorites.title'),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
+          tabBarTestID: 'tab-profile',
           title: t('tabs.profile.title'),
         }}
       />

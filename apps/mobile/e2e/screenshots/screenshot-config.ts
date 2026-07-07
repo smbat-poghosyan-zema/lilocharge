@@ -21,7 +21,12 @@ export interface ScreenshotConfig {
 export interface ScreenDefinition {
   id: string;
   name: string;
-  setup?: () => Promise<void>;
+  /**
+   * testID that must be visible before the screenshot is taken. Every id
+   * listed here must exist in the app source tree (guarded by
+   * src/testing/e2e-testid-guard.spec.ts).
+   */
+  readyTestId: string;
   delay?: number;
 }
 
@@ -84,32 +89,44 @@ export const LOCALES = ['hy', 'ru', 'en'] as const;
 export type Locale = (typeof LOCALES)[number];
 
 /**
- * Screen definitions for screenshot capture
+ * Screen definitions for screenshot capture.
+ *
+ * These map onto screens that are reachable without a backend: the tab
+ * screens plus the payment methods screen pushed from the profile tab.
+ * The `payment` entry must stay last — it leaves the tab navigator and the
+ * test suite navigates back after capturing it.
  */
 export const SCREENS: ScreenDefinition[] = [
   {
     id: 'map',
     name: 'Map with Charging Stations',
+    readyTestId: 'stations-screen',
     delay: 2000,
   },
   {
-    id: 'station-details',
-    name: 'Station Details',
+    id: 'charge',
+    name: 'Scan to Charge',
+    readyTestId: 'scan-screen',
     delay: 1000,
   },
   {
-    id: 'charging-active',
-    name: 'Active Charging Session',
-    delay: 1500,
-  },
-  {
-    id: 'payment',
-    name: 'Payment Screen',
+    id: 'favorites',
+    name: 'Favorite Stations',
+    readyTestId: 'favorites-screen',
     delay: 1000,
   },
   {
     id: 'profile',
     name: 'User Profile',
+    readyTestId: 'profile-screen',
+    delay: 1000,
+  },
+  {
+    id: 'payment',
+    name: 'Payment Methods',
+    // Screenshot runs bootstrap a signed-out session, so the signed-out
+    // state of the payment methods screen is the anchor element.
+    readyTestId: 'payment-methods-signed-out',
     delay: 1000,
   },
 ];

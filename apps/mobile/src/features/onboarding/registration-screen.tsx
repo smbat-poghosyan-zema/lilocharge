@@ -71,7 +71,7 @@ export function RegistrationScreen({ api }: RegistrationScreenProps): JSX.Elemen
   };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="registration-screen">
       <Text accessibilityRole="header" style={styles.title}>
         {t('onboarding.registration.title')}
       </Text>
@@ -83,6 +83,7 @@ export function RegistrationScreen({ api }: RegistrationScreenProps): JSX.Elemen
           autoCapitalize="words"
           placeholder={t('onboarding.registration.fields.displayName')}
           style={styles.input}
+          testID="registration-display-name-input"
           value={displayName}
           onChangeText={setDisplayName}
         />
@@ -92,6 +93,7 @@ export function RegistrationScreen({ api }: RegistrationScreenProps): JSX.Elemen
           keyboardType="email-address"
           placeholder={t('onboarding.registration.fields.email')}
           style={styles.input}
+          testID="registration-email-input"
           value={email}
           onChangeText={setEmail}
         />
@@ -101,6 +103,7 @@ export function RegistrationScreen({ api }: RegistrationScreenProps): JSX.Elemen
           keyboardType="phone-pad"
           placeholder={t('onboarding.registration.fields.phonePlaceholder')}
           style={styles.input}
+          testID="registration-phone-input"
           value={phone}
           onChangeText={setPhone}
         />
@@ -110,11 +113,16 @@ export function RegistrationScreen({ api }: RegistrationScreenProps): JSX.Elemen
           placeholder={t('onboarding.registration.fields.password')}
           secureTextEntry
           style={styles.input}
+          testID="registration-password-input"
           value={password}
           onChangeText={setPassword}
         />
 
-        {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+        {errorMessage ? (
+          <Text style={styles.errorText} testID="registration-error">
+            {errorMessage}
+          </Text>
+        ) : null}
 
         <Pressable
           accessibilityRole="button"
@@ -139,6 +147,7 @@ export function RegistrationScreen({ api }: RegistrationScreenProps): JSX.Elemen
         <Pressable
           accessibilityRole="link"
           style={styles.secondaryButton}
+          testID="registration-go-to-login"
           onPress={(): void => {
             router.push('/onboarding/login');
           }}

@@ -89,7 +89,7 @@ export function VerifyPhoneScreen({ api }: VerifyPhoneScreenProps): JSX.Element 
   };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="verify-phone-screen">
       <Text accessibilityRole="header" style={styles.title}>
         {t('onboarding.verifyPhone.title')}
       </Text>
@@ -103,11 +103,16 @@ export function VerifyPhoneScreen({ api }: VerifyPhoneScreenProps): JSX.Element 
         maxLength={6}
         placeholder={t('onboarding.verifyPhone.fields.codePlaceholder')}
         style={styles.input}
+        testID="verify-phone-code-input"
         value={code}
         onChangeText={setCode}
       />
 
-      {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+      {errorMessage ? (
+        <Text style={styles.errorText} testID="verify-phone-error">
+          {errorMessage}
+        </Text>
+      ) : null}
 
       <Pressable
         accessibilityRole="button"

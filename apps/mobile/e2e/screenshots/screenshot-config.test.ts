@@ -71,18 +71,24 @@ describe('Screenshot Configuration', () => {
     it('should have all required screens', () => {
       const screenIds = SCREENS.map((s) => s.id);
       expect(screenIds).toContain('map');
-      expect(screenIds).toContain('station-details');
-      expect(screenIds).toContain('charging-active');
+      expect(screenIds).toContain('charge');
+      expect(screenIds).toContain('favorites');
       expect(screenIds).toContain('payment');
       expect(screenIds).toContain('profile');
+    });
+
+    it('should keep the payment screen last (it leaves the tab navigator)', () => {
+      expect(SCREENS[SCREENS.length - 1]?.id).toBe('payment');
     });
 
     it('should have valid screen definitions', () => {
       SCREENS.forEach((screen) => {
         expect(screen.id).toBeTruthy();
         expect(screen.name).toBeTruthy();
+        expect(screen.readyTestId).toBeTruthy();
         expect(typeof screen.id).toBe('string');
         expect(typeof screen.name).toBe('string');
+        expect(typeof screen.readyTestId).toBe('string');
 
         if (screen.delay !== undefined) {
           expect(screen.delay).toBeGreaterThan(0);

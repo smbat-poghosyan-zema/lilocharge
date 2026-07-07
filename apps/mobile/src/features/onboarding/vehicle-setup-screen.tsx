@@ -105,7 +105,11 @@ export function VehicleSetupScreen({ api }: VehicleSetupScreenProps): JSX.Elemen
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+    <ScrollView
+      contentContainerStyle={styles.scrollContainer}
+      keyboardShouldPersistTaps="handled"
+      testID="vehicle-setup-screen"
+    >
       <View style={styles.header}>
         <Text accessibilityRole="header" style={styles.title}>
           {t('onboarding.vehicle.title')}
@@ -118,6 +122,7 @@ export function VehicleSetupScreen({ api }: VehicleSetupScreenProps): JSX.Elemen
           accessibilityLabel={t('onboarding.vehicle.fields.make')}
           placeholder={t('onboarding.vehicle.fields.make')}
           style={styles.input}
+          testID="vehicle-make-input"
           value={make}
           onChangeText={setMake}
         />
@@ -125,6 +130,7 @@ export function VehicleSetupScreen({ api }: VehicleSetupScreenProps): JSX.Elemen
           accessibilityLabel={t('onboarding.vehicle.fields.model')}
           placeholder={t('onboarding.vehicle.fields.model')}
           style={styles.input}
+          testID="vehicle-model-input"
           value={model}
           onChangeText={setModel}
         />
@@ -133,6 +139,7 @@ export function VehicleSetupScreen({ api }: VehicleSetupScreenProps): JSX.Elemen
           keyboardType="number-pad"
           placeholder={t('onboarding.vehicle.fields.year')}
           style={styles.input}
+          testID="vehicle-year-input"
           value={year}
           onChangeText={setYear}
         />
@@ -141,6 +148,7 @@ export function VehicleSetupScreen({ api }: VehicleSetupScreenProps): JSX.Elemen
           keyboardType="decimal-pad"
           placeholder={t('onboarding.vehicle.fields.batteryCapacity')}
           style={styles.input}
+          testID="vehicle-battery-capacity-input"
           value={batteryCapacity}
           onChangeText={setBatteryCapacity}
         />
@@ -149,6 +157,7 @@ export function VehicleSetupScreen({ api }: VehicleSetupScreenProps): JSX.Elemen
           keyboardType="decimal-pad"
           placeholder={t('onboarding.vehicle.fields.maxChargePower')}
           style={styles.input}
+          testID="vehicle-max-charge-power-input"
           value={maxChargePower}
           onChangeText={setMaxChargePower}
         />
@@ -167,6 +176,7 @@ export function VehicleSetupScreen({ api }: VehicleSetupScreenProps): JSX.Elemen
                   selected ? styles.connectorChipSelected : {},
                   pressed ? styles.buttonPressed : {},
                 ]}
+                testID={`vehicle-connector-${option}`}
                 onPress={(): void => {
                   setConnectorType(option);
                 }}
@@ -181,7 +191,11 @@ export function VehicleSetupScreen({ api }: VehicleSetupScreenProps): JSX.Elemen
           })}
         </View>
 
-        {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+        {errorMessage ? (
+          <Text style={styles.errorText} testID="vehicle-error">
+            {errorMessage}
+          </Text>
+        ) : null}
 
         <Pressable
           accessibilityRole="button"
@@ -208,6 +222,7 @@ export function VehicleSetupScreen({ api }: VehicleSetupScreenProps): JSX.Elemen
             styles.secondaryButton,
             pressed ? styles.buttonPressed : {},
           ]}
+          testID="vehicle-skip"
           onPress={(): void => {
             router.push('/onboarding/payment');
           }}

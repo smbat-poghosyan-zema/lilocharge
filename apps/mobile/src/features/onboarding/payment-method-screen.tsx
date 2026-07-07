@@ -161,7 +161,7 @@ export function PaymentMethodScreen({
   };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="onboarding-payment-screen">
       <Text accessibilityRole="header" style={styles.title}>
         {t('onboarding.payment.title')}
       </Text>
@@ -180,6 +180,7 @@ export function PaymentMethodScreen({
                 selected ? styles.optionButtonSelected : {},
                 pressed ? styles.buttonPressed : {},
               ]}
+              testID={`onboarding-payment-option-${gateway}`}
               onPress={(): void => {
                 onboardingSession.selectPaymentGateway(gateway);
               }}
@@ -192,7 +193,11 @@ export function PaymentMethodScreen({
         })}
       </View>
 
-      {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+      {errorMessage ? (
+        <Text style={styles.errorText} testID="onboarding-payment-error">
+          {errorMessage}
+        </Text>
+      ) : null}
 
       <Pressable
         accessibilityRole="button"
@@ -202,6 +207,7 @@ export function PaymentMethodScreen({
           isSubmitting ? styles.buttonDisabled : {},
           pressed ? styles.buttonPressed : {},
         ]}
+        testID="onboarding-payment-finish"
         onPress={(): void => {
           void handleFinishOnboarding();
         }}
@@ -219,6 +225,7 @@ export function PaymentMethodScreen({
           styles.secondaryButton,
           pressed ? styles.buttonPressed : {},
         ]}
+        testID="onboarding-payment-skip"
         onPress={(): void => {
           onboardingSession.completeOnboarding();
           router.replace('/(tabs)/stations');

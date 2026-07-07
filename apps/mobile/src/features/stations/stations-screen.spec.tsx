@@ -12,6 +12,7 @@ import * as Location from 'expo-location';
 
 import { StationsScreen } from './stations-screen';
 import type { FavoritesStorage } from '../favorites/favorites-storage';
+import type { FavoritesSync, FavoritesSyncResult } from '../favorites/favorites-sync';
 
 const mockPush = jest.fn<void, [string]>();
 const requestForegroundPermissionsAsyncMock = jest.mocked(
@@ -471,6 +472,56 @@ describe('StationsScreen', () => {
 
     expect(favoritesStorageMock.removeFavoriteStation).toHaveBeenCalledWith(STATIONS[0]?.id);
     expect(favoritesStorageMock.saveFavoriteStation).not.toHaveBeenCalled();
+  });
+
+  it('shows a localized favorites sync error when the server toggle fails', async () => {
+    const stationsApiClient = createStationsApiClientMock();
+    const favoritesSyncMock = {
+      refreshFromServer: jest.fn<Promise<FavoritesSyncResult>, []>(() => {
+        return Promise.resolve({ status: 'SYNCED' });
+      }),
+      removeFavorite: jest.fn<Promise<FavoritesSyncResult>, [string]>(() => {
+        return Promise.resolve({ status: 'SYNCED' });
+      }),
+      saveFavorite: jest.fn<Promise<FavoritesSyncResult>, [StationNearbyResponse]>(() => {
+        return Promise.resolve({ status: 'ERROR' });
+      }),
+      toggleFavorite: jest.fn<Promise<FavoritesSyncResult>, [StationNearbyResponse]>(() => {
+        return Promise.resolve({ status: 'ERROR' });
+      }),
+    };
+
+    render(
+      <StationsScreen
+        favoritesSyncClient={favoritesSyncMock as unknown as FavoritesSync}
+        mapboxToken="pk.test.token"
+        stationsApiClient={stationsApiClient}
+      />,
+    );
+
+    await screen.findByTestId('stations-map');
+
+    fireEvent(screen.getByTestId('station-shape-source'), 'press', {
+      features: [
+        {
+          properties: {
+            id: STATIONS[0]?.id,
+          },
+          type: 'Feature',
+        },
+      ],
+    });
+
+    fireEvent.press(await screen.findByTestId('station-bottom-sheet-favorite-button'));
+
+    expect(favoritesSyncMock.toggleFavorite).toHaveBeenCalledWith(STATIONS[0]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('favorites-sync-error')).toBeTruthy();
+    });
+    expect(
+      screen.getByText('Չհաջողվեց թարմացնել սիրված կայանները սերվերում. փոփոխությունը չեղարկվեց:'),
+    ).toBeTruthy();
   });
 
   it('shows loading indicator while stations are being refreshed', async () => {

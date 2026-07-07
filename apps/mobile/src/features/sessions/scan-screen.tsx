@@ -58,7 +58,7 @@ export function ScanScreen(): JSX.Element {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="scan-screen">
       <View style={styles.headerContainer}>
         <Text accessibilityRole="header" style={styles.title}>
           {t('sessions.scan.title')}

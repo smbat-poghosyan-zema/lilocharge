@@ -25,6 +25,10 @@
     "empty": "You have not saved any favorite stations yet.",
     "actions": {
       "remove": "Remove"
+    },
+    "sync": {
+      "error": "Could not update favorites on the server. Your change was undone.",
+      "loadError": "Could not load favorites from the server. Showing stations saved on this device."
     }
   },
   "stations": {

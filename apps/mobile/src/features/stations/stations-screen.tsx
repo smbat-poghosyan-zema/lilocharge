@@ -15,6 +15,7 @@ import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { resolveMapboxAccessToken } from '../../config/runtime';
 import { useAppTranslation } from '../../i18n/use-app-translation';
 import { favoritesStorage, type FavoritesStorage } from '../favorites/favorites-storage';
+import { createFavoritesSync, type FavoritesSync } from '../favorites/favorites-sync';
 import { configureMapboxSdk } from './map/mapbox-sdk';
 import {
   buildConnectorCountTextExpression,
@@ -89,6 +90,7 @@ interface StationQueryCoordinates {
 
 interface StationsScreenProps {
   readonly favoritesStorageClient?: FavoritesStorage;
+  readonly favoritesSyncClient?: FavoritesSync;
   readonly mapboxToken?: string;
   readonly stationsApiClient?: StationsApi;
 }
@@ -98,11 +100,16 @@ interface StationsScreenProps {
  */
 export function StationsScreen({
   favoritesStorageClient = favoritesStorage,
+  favoritesSyncClient,
   mapboxToken = resolveMapboxTokenFromGlobalEnv(),
   stationsApiClient = stationsApi,
 }: StationsScreenProps = {}): JSX.Element {
   const router = useRouter();
   const { t } = useAppTranslation();
+  const favoritesSync = useMemo<FavoritesSync>(() => {
+    return favoritesSyncClient ?? createFavoritesSync({ favoritesStorageClient });
+  }, [favoritesStorageClient, favoritesSyncClient]);
+  const [hasFavoriteSyncError, setHasFavoriteSyncError] = useState<boolean>(false);
   const resolvedMapboxToken = resolveMapboxAccessToken(mapboxToken);
   const [stations, setStations] = useState<readonly StationNearbyResponse[]>([]);
   const [isRefreshingStations, setIsRefreshingStations] = useState<boolean>(true);
@@ -365,15 +372,17 @@ export function StationsScreen({
   };
 
   /**
-   * Saves or removes one station from local favorite-station persistence.
+   * Saves or removes one station favorite optimistically (local MMKV first)
+   * and synchronizes the change with the server for signed-in users.
    */
   const handleToggleFavoriteStation = (station: StationNearbyResponse): void => {
-    if (favoritesStorageClient.isFavoriteStation(station.id)) {
-      favoritesStorageClient.removeFavoriteStation(station.id);
-      return;
-    }
+    setHasFavoriteSyncError(false);
 
-    favoritesStorageClient.saveFavoriteStation(station);
+    void favoritesSync.toggleFavorite(station).then((result) => {
+      if (result.status === 'ERROR') {
+        setHasFavoriteSyncError(true);
+      }
+    });
   };
 
   /**
@@ -414,7 +423,7 @@ export function StationsScreen({
   });
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="stations-screen">
       <View style={styles.headerContainer}>
         <Text accessibilityRole="header" style={styles.title}>
           {t('stations.title')}
@@ -583,6 +592,11 @@ export function StationsScreen({
             {!isRefreshingStations && !hasStationLoadError && stations.length === 0 ? (
               <Text style={styles.statusText} testID="stations-empty-state">
                 {t('stations.map.empty')}
+              </Text>
+            ) : null}
+            {hasFavoriteSyncError ? (
+              <Text style={styles.statusText} testID="favorites-sync-error">
+                {t('favorites.sync.error')}
               </Text>
             ) : null}
           </View>
