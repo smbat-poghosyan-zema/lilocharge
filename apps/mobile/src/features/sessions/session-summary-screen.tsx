@@ -1,7 +1,8 @@
 import type { SessionResponse } from '@lilocharge/shared-types';
+import { SessionStatus } from '@lilocharge/shared-types';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAppTranslation } from '../../i18n/use-app-translation';
 import { useOnboardingSession } from '../onboarding/onboarding-session';
@@ -11,10 +12,13 @@ import {
   formatDurationSeconds,
   formatEnergyKwh,
 } from './session-format';
-import { buildReceiptUrl, sessionsApi, type SessionsApi } from './sessions-api';
+import { shareSessionReceipt, sessionsApi, type SessionsApi } from './sessions-api';
+
+type ReceiptState = 'downloading' | 'error' | 'idle';
 
 interface SessionSummaryScreenProps {
   readonly sessionsApiClient?: Pick<SessionsApi, 'getSession'>;
+  readonly shareReceipt?: (userId: string, sessionId: string) => Promise<void>;
 }
 
 /**
@@ -23,6 +27,7 @@ interface SessionSummaryScreenProps {
  */
 export function SessionSummaryScreen({
   sessionsApiClient = sessionsApi,
+  shareReceipt = shareSessionReceipt,
 }: SessionSummaryScreenProps = {}): JSX.Element {
   const { t } = useAppTranslation();
   const router = useRouter();
@@ -32,6 +37,22 @@ export function SessionSummaryScreen({
   const userId = state.userId;
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [hasLoadError, setHasLoadError] = useState(false);
+  const [receiptState, setReceiptState] = useState<ReceiptState>('idle');
+
+  const handleReceiptPress = useCallback(async (): Promise<void> => {
+    if (userId === null || session === null) {
+      return;
+    }
+
+    setReceiptState('downloading');
+
+    try {
+      await shareReceipt(userId, session.id);
+      setReceiptState('idle');
+    } catch {
+      setReceiptState('error');
+    }
+  }, [session, shareReceipt, userId]);
 
   const loadSession = useCallback(async (): Promise<void> => {
     if (sessionId === null || userId === null) {
@@ -90,6 +111,8 @@ export function SessionSummaryScreen({
     session.endTime === null
       ? computeDurationSeconds(session.startTime, Date.now())
       : computeDurationSeconds(session.startTime, Date.parse(session.endTime));
+  const statusBadgeStyles = resolveStatusBadgeStyles(session.status);
+  const isCompleted = session.status === SessionStatus.COMPLETED;
 
   return (
     <View style={styles.container}>
@@ -97,7 +120,7 @@ export function SessionSummaryScreen({
         <Text accessibilityRole="header" style={styles.title}>
           {t('sessions.summary.title')}
         </Text>
-        <Text style={styles.statusBadge} testID="summary-status">
+        <Text style={[styles.statusBadge, statusBadgeStyles.badge]} testID="summary-status">
           {t(`sessions.status.${session.status}`)}
         </Text>
       </View>
@@ -124,18 +147,34 @@ export function SessionSummaryScreen({
       </View>
 
       <View style={styles.footerContainer}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={(): void => {
-            void Linking.openURL(buildReceiptUrl(userId, session.id));
-          }}
-          style={({ pressed }) => {
-            return [styles.secondaryButton, pressed ? styles.buttonPressed : null];
-          }}
-          testID="summary-receipt"
-        >
-          <Text style={styles.secondaryButtonText}>{t('sessions.summary.receipt')}</Text>
-        </Pressable>
+        {isCompleted ? (
+          <Pressable
+            accessibilityRole="button"
+            disabled={receiptState === 'downloading'}
+            onPress={(): void => {
+              void handleReceiptPress();
+            }}
+            style={({ pressed }) => {
+              return [
+                styles.secondaryButton,
+                pressed ? styles.buttonPressed : null,
+                receiptState === 'downloading' ? styles.buttonPressed : null,
+              ];
+            }}
+            testID="summary-receipt"
+          >
+            <Text style={styles.secondaryButtonText}>
+              {receiptState === 'downloading'
+                ? t('sessions.summary.receiptDownloading')
+                : t('sessions.summary.receipt')}
+            </Text>
+          </Pressable>
+        ) : null}
+        {receiptState === 'error' ? (
+          <Text style={styles.errorText} testID="summary-receipt-error">
+            {t('sessions.summary.receiptError')}
+          </Text>
+        ) : null}
         <Pressable
           accessibilityRole="button"
           onPress={(): void => {
@@ -151,6 +190,22 @@ export function SessionSummaryScreen({
       </View>
     </View>
   );
+}
+
+/**
+ * Resolves the status-badge style for one session status so a FAILED/CANCELLED
+ * charge never reads visually as a successful one.
+ */
+function resolveStatusBadgeStyles(status: SessionStatus): { readonly badge: object } {
+  if (status === SessionStatus.FAILED || status === SessionStatus.CANCELLED) {
+    return { badge: styles.statusBadgeFailure };
+  }
+
+  if (status === SessionStatus.COMPLETED) {
+    return { badge: styles.statusBadgeSuccess };
+  }
+
+  return { badge: styles.statusBadgeNeutral };
 }
 
 /**
@@ -251,15 +306,25 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   statusBadge: {
-    backgroundColor: '#CCFBF1',
     borderRadius: 999,
-    color: '#0F766E',
     fontSize: 13,
     fontWeight: '700',
     marginTop: 8,
     overflow: 'hidden',
     paddingHorizontal: 12,
     paddingVertical: 5,
+  },
+  statusBadgeFailure: {
+    backgroundColor: '#FEE2E2',
+    color: '#991B1B',
+  },
+  statusBadgeNeutral: {
+    backgroundColor: '#E5E7EB',
+    color: '#374151',
+  },
+  statusBadgeSuccess: {
+    backgroundColor: '#CCFBF1',
+    color: '#0F766E',
   },
   title: {
     color: '#111827',

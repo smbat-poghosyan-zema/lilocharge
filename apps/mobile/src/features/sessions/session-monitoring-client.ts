@@ -8,7 +8,8 @@ import {
 } from '@lilocharge/shared-types';
 import { io, type ManagerOptions, type SocketOptions } from 'socket.io-client';
 
-import { resolveApiBaseUrl } from '../../config/runtime';
+import { getApiBaseUrl, resolveApiBaseUrl } from '../../config/runtime';
+import { getPersistedAccessToken } from '../onboarding/session-storage';
 
 /** WebSocket client contract used by mobile session-monitoring features. */
 export interface SessionMonitoringClient {
@@ -49,6 +50,7 @@ export type SessionMonitoringSocketFactory = (
 /** Input used to create one session-monitoring client instance. */
 export interface CreateSessionMonitoringClientInput {
   readonly apiBaseUrl?: string;
+  readonly getAccessToken?: () => string | null;
   readonly socketFactory?: SessionMonitoringSocketFactory;
 }
 
@@ -56,9 +58,17 @@ export interface CreateSessionMonitoringClientInput {
 export function createSessionMonitoringClient(
   input: CreateSessionMonitoringClientInput = {},
 ): SessionMonitoringClient {
-  const apiBaseUrl = resolveApiBaseUrl(input.apiBaseUrl);
+  // Default to the configured API base URL (matching the REST clients) so real
+  // devices reach the deployed gateway instead of localhost.
+  const apiBaseUrl = resolveApiBaseUrl(input.apiBaseUrl ?? getApiBaseUrl());
+  const getAccessToken = input.getAccessToken ?? getPersistedAccessToken;
   const socketFactory = input.socketFactory ?? createDefaultSessionMonitoringSocket;
   const socket = socketFactory(apiBaseUrl, {
+    // Resolved lazily on every (re)connect so a refreshed token is picked up;
+    // the monitoring gateway authenticates via handshake.auth.token.
+    auth: (callback: (data: Record<string, unknown>) => void): void => {
+      callback({ token: getAccessToken() ?? '' });
+    },
     autoConnect: false,
     reconnection: true,
     reconnectionDelay: 1000,

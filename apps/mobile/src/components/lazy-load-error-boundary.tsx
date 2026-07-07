@@ -1,6 +1,8 @@
 import { Component, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import i18n from '../i18n/i18n';
+
 interface ErrorBoundaryProps {
   readonly children: ReactNode;
   readonly fallback?: ReactNode;
@@ -35,7 +37,7 @@ export class LazyLoadErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
 
       return (
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Failed to load screen</Text>
+          <Text style={styles.errorText}>{i18n.t('errors.screenLoadFailed')}</Text>
         </View>
       );
     }

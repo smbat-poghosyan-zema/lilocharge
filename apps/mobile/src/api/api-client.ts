@@ -69,6 +69,13 @@ export interface ApiClientConfig {
   /** Delay before the single automatic retry of a GET that failed with a network error. */
   networkRetryDelayMs?: number;
   onUnauthorized?: (error: ApiClientError) => void;
+  /**
+   * Attempts to recover from an HTTP 401 by refreshing authentication. When it
+   * resolves `true` the original request is retried exactly once (re-running
+   * request interceptors so the refreshed bearer token is picked up); when it
+   * resolves `false` the 401 is surfaced to {@link onUnauthorized} and callers.
+   */
+  refreshAuth?: () => Promise<boolean>;
   requestInterceptors?: readonly ApiRequestInterceptor[];
   responseInterceptors?: readonly ApiResponseInterceptor[];
 }
@@ -212,6 +219,7 @@ class FetchApiClient implements ApiClient {
   private readonly errorInterceptors: readonly ApiErrorInterceptor[];
   private readonly fetchFn: FetchFunction;
   private readonly networkRetryDelayMs: number;
+  private readonly refreshAuth: (() => Promise<boolean>) | undefined;
   private readonly requestInterceptors: readonly ApiRequestInterceptor[];
   private readonly responseInterceptors: readonly ApiResponseInterceptor[];
 
@@ -223,6 +231,7 @@ class FetchApiClient implements ApiClient {
     this.defaultHeaders = config.defaultHeaders ?? {};
     this.fetchFn = config.fetchFn ?? fetch.bind(globalThis);
     this.networkRetryDelayMs = config.networkRetryDelayMs ?? DEFAULT_NETWORK_RETRY_DELAY_MS;
+    this.refreshAuth = config.refreshAuth;
     this.requestInterceptors = [
       ...(config.getAccessToken ? [createAuthInterceptor(config.getAccessToken)] : []),
       ...(config.requestInterceptors ?? []),
@@ -246,18 +255,37 @@ class FetchApiClient implements ApiClient {
     options?: ApiRequestOptions<TBody, TResponse>,
   ): Promise<TResponse> {
     try {
-      const baseContext: ApiRequestContext<unknown> = {
-        body: options?.body,
-        headers: {
-          ...this.defaultHeaders,
-          ...(options?.headers ?? {}),
-        },
-        method,
-        path,
-        signal: options?.signal,
-        url: buildRequestUrl(this.baseUrl, path, options?.query),
-      };
-      const requestContext = await runRequestInterceptors(this.requestInterceptors, baseContext);
+      return await this.performRequest<TResponse, TBody>(method, path, options, false);
+    } catch (error: unknown) {
+      throw await runErrorInterceptors(this.errorInterceptors, mapToApiClientError(error, path));
+    }
+  }
+
+  /**
+   * Runs one full request attempt (interceptors + dispatch). On an HTTP 401 the
+   * configured {@link refreshAuth} hook is consulted once; if it recovers, the
+   * request is retried a single time with freshly resolved credentials.
+   */
+  private async performRequest<TResponse, TBody = undefined>(
+    method: ApiRequestMethod,
+    path: string,
+    options: ApiRequestOptions<TBody, TResponse> | undefined,
+    isRetryAfterRefresh: boolean,
+  ): Promise<TResponse> {
+    const baseContext: ApiRequestContext<unknown> = {
+      body: options?.body,
+      headers: {
+        ...this.defaultHeaders,
+        ...(options?.headers ?? {}),
+      },
+      method,
+      path,
+      signal: options?.signal,
+      url: buildRequestUrl(this.baseUrl, path, options?.query),
+    };
+    const requestContext = await runRequestInterceptors(this.requestInterceptors, baseContext);
+
+    try {
       const responseData = await this.dispatchWithRetryAndCacheFallback(requestContext);
 
       if (options?.responseTransformer) {
@@ -266,7 +294,16 @@ class FetchApiClient implements ApiClient {
 
       return responseData as TResponse;
     } catch (error: unknown) {
-      throw await runErrorInterceptors(this.errorInterceptors, mapToApiClientError(error, path));
+      if (
+        !isRetryAfterRefresh &&
+        this.refreshAuth !== undefined &&
+        isUnauthorizedError(error) &&
+        (await this.refreshAuth())
+      ) {
+        return this.performRequest<TResponse, TBody>(method, path, options, true);
+      }
+
+      throw error;
     }
   }
 
@@ -450,6 +487,13 @@ function isRetriableNetworkFailure(
 
   // Raw fetch rejections (DNS failures, refused connections, offline) are network errors.
   return true;
+}
+
+/**
+ * Resolves whether a caught error represents an HTTP 401 Unauthorized response.
+ */
+function isUnauthorizedError(error: unknown): boolean {
+  return error instanceof ApiClientError && error.statusCode === 401;
 }
 
 /**

@@ -5,9 +5,8 @@ import type {
   VehicleResponse,
 } from '@lilocharge/shared-types';
 
-import { createApiClient, type ApiClient } from '../../api';
-import { getApiBaseUrl } from '../../config/runtime';
-import { clearPersistedSession, getPersistedAccessToken } from '../onboarding/session-storage';
+import type { ApiClient } from '../../api';
+import { createAuthenticatedApiClient } from '../onboarding/authenticated-api-client';
 
 /**
  * Typed API contract for mobile profile management operations.
@@ -48,16 +47,7 @@ export function createProfileApi(apiClient: ApiClient): ProfileApi {
   };
 }
 
-const defaultProfileApiClient = createApiClient({
-  baseUrl: getApiBaseUrl(),
-  defaultHeaders: {
-    Accept: 'application/json',
-  },
-  getAccessToken: (): string | null => getPersistedAccessToken(),
-  onUnauthorized: (): void => {
-    clearPersistedSession();
-  },
-});
+const defaultProfileApiClient = createAuthenticatedApiClient();
 
 /**
  * Default profile API instance for the mobile profile screen.

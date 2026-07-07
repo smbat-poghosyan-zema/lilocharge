@@ -11,6 +11,7 @@ const USER_ID = '11111111-1111-1111-1111-111111111111';
 const mockPush = jest.fn<void, [string]>();
 const mockReplace = jest.fn<void, [string]>();
 const mockResetOnboarding = jest.fn<void, []>();
+const mockLogout = jest.fn<void, []>();
 
 let mockedSessionState: { userId: string | null };
 
@@ -23,6 +24,7 @@ jest.mock('expo-router', () => ({
 
 jest.mock('../onboarding/onboarding-session', () => ({
   useOnboardingSession: () => ({
+    logout: mockLogout,
     resetOnboarding: mockResetOnboarding,
     state: mockedSessionState,
   }),
@@ -83,6 +85,8 @@ function createProfileApiClientMock(): ProfileApiClientMock {
 describe('ProfileScreen', () => {
   beforeEach(() => {
     mockedSessionState = { userId: USER_ID };
+    mockLogout.mockReset();
+    mockResetOnboarding.mockReset();
   });
 
   afterEach(async () => {
@@ -94,12 +98,6 @@ describe('ProfileScreen', () => {
 
     expect(screen.getByRole('header', { name: 'Անձնական հաշիվ' })).toBeTruthy();
     expect(screen.getByText('Կառավարեք նախընտրությունները և ծանուցումները:')).toBeTruthy();
-  });
-
-  it('shows API base URL label', () => {
-    render(<ProfileScreen profileApiClient={createProfileApiClientMock()} />);
-
-    expect(screen.getByTestId('api-base-url')).toHaveTextContent('API: http://localhost:3000');
   });
 
   it('shows a loading state while the account request is pending', () => {
@@ -214,7 +212,7 @@ describe('ProfileScreen', () => {
 
     fireEvent.press(screen.getByTestId('profile-logout'));
 
-    expect(mockResetOnboarding).toHaveBeenCalledTimes(1);
+    expect(mockLogout).toHaveBeenCalledTimes(1);
     expect(mockReplace).toHaveBeenCalledWith('/onboarding/register');
   });
 

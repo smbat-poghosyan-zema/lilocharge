@@ -3,10 +3,22 @@ import type {
   SupportedLanguageCode,
   VehicleResponse,
 } from '@lilocharge/shared-types';
-import { createContext, useContext, useMemo, useState, type PropsWithChildren } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type PropsWithChildren,
+} from 'react';
 
 import { extractUserIdFromAccessToken } from './auth-token';
-import { onboardingSessionStorage, type SessionStorage } from './session-storage';
+import { logoutSweep } from './logout';
+import {
+  onboardingSessionStorage,
+  type PersistedOnboardingSession,
+  type SessionStorage,
+} from './session-storage';
 
 /**
  * Supported payment methods shown in onboarding payment setup.
@@ -41,6 +53,7 @@ export interface OnboardingSessionState {
  */
 export interface OnboardingSessionActions {
   readonly completeOnboarding: () => void;
+  readonly logout: () => void;
   readonly resetOnboarding: () => void;
   readonly selectPaymentGateway: (gateway: PaymentGatewayOption) => void;
   readonly setAuthTokenPair: (tokenPair: AuthTokenPairResponse) => void;
@@ -70,16 +83,19 @@ interface OnboardingSessionProviderProps {
   readonly sessionStorage?: SessionStorage;
 }
 
+/** Fields of onboarding state that are derived from persisted session storage. */
+type PersistedDerivedState = Pick<OnboardingSessionState, 'isComplete' | 'tokenPair' | 'userId'>;
+
 /**
- * Builds the initial onboarding state by hydrating persisted auth/session fields.
+ * Derives the persisted-session-backed slice of onboarding state.
  */
-function buildInitialOnboardingState(sessionStorage: SessionStorage): OnboardingSessionState {
-  const persistedSession = sessionStorage.readSession();
+function derivePersistedSessionState(
+  persistedSession: PersistedOnboardingSession,
+): PersistedDerivedState {
   const hasTokenPair =
     persistedSession.accessToken !== null && persistedSession.refreshToken !== null;
 
   return {
-    ...INITIAL_ONBOARDING_STATE,
     isComplete: persistedSession.onboardingComplete,
     tokenPair: hasTokenPair
       ? {
@@ -89,6 +105,16 @@ function buildInitialOnboardingState(sessionStorage: SessionStorage): Onboarding
         }
       : null,
     userId: persistedSession.userId,
+  };
+}
+
+/**
+ * Builds the initial onboarding state by hydrating persisted auth/session fields.
+ */
+function buildInitialOnboardingState(sessionStorage: SessionStorage): OnboardingSessionState {
+  return {
+    ...INITIAL_ONBOARDING_STATE,
+    ...derivePersistedSessionState(sessionStorage.readSession()),
   };
 }
 
@@ -104,6 +130,18 @@ export function OnboardingSessionProvider({
     return buildInitialOnboardingState(sessionStorage);
   });
 
+  // Re-read persisted session fields whenever storage changes (e.g. a token
+  // refresh or a 401-triggered clear from any API client) so a dead session
+  // propagates to context — and routes to onboarding — without a cold restart.
+  useEffect(() => {
+    return sessionStorage.subscribe((): void => {
+      setState((previousState) => ({
+        ...previousState,
+        ...derivePersistedSessionState(sessionStorage.readSession()),
+      }));
+    });
+  }, [sessionStorage]);
+
   const value = useMemo<OnboardingSessionContextValue>(() => {
     return {
       completeOnboarding: (): void => {
@@ -112,6 +150,11 @@ export function OnboardingSessionProvider({
           ...previousState,
           isComplete: true,
         }));
+      },
+
+      logout: (): void => {
+        logoutSweep();
+        setState(INITIAL_ONBOARDING_STATE);
       },
 
       resetOnboarding: (): void => {

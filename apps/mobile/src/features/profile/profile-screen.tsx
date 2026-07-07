@@ -7,13 +7,10 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { getApiBaseUrl } from '../../config/runtime';
 import { persistLanguage } from '../../i18n/language-preference';
 import { useAppTranslation } from '../../i18n/use-app-translation';
 import { useOnboardingSession } from '../onboarding/onboarding-session';
 import { profileApi, type ProfileApi } from './profile-api';
-
-const API_BASE_URL = getApiBaseUrl();
 
 interface LanguageOption {
   readonly code: SupportedLanguageCode;
@@ -49,7 +46,7 @@ interface ProfileScreenProps {
 export function ProfileScreen({ profileApiClient = profileApi }: ProfileScreenProps = {}): JSX.Element {
   const { t, i18n } = useAppTranslation();
   const router = useRouter();
-  const { resetOnboarding, state } = useOnboardingSession();
+  const { logout, state } = useOnboardingSession();
   const userId = state.userId;
   const [accountState, setAccountState] = useState<AccountState>({ status: 'loading' });
   const [reloadToken, setReloadToken] = useState(0);
@@ -95,10 +92,11 @@ export function ProfileScreen({ profileApiClient = profileApi }: ProfileScreenPr
   };
 
   /**
-   * Clears the persisted session and returns to the onboarding entry route.
+   * Runs the full logout sweep (push token, favorites, cache, session) and
+   * returns to the onboarding entry route.
    */
   const handleLogout = (): void => {
-    resetOnboarding();
+    logout();
     router.replace('/onboarding/register');
   };
 
@@ -217,10 +215,6 @@ export function ProfileScreen({ profileApiClient = profileApi }: ProfileScreenPr
           <Text style={styles.logoutButtonText}>{t('profile.logout')}</Text>
         </Pressable>
       ) : null}
-
-      <Text style={styles.apiUrlLabel} testID="api-base-url">
-        {t('profile.apiBaseUrl', { url: API_BASE_URL })}
-      </Text>
     </ScrollView>
   );
 }
@@ -310,12 +304,6 @@ function AccountSections({ accountState, onRetry }: AccountSectionsProps): JSX.E
 }
 
 const styles = StyleSheet.create({
-  apiUrlLabel: {
-    color: '#6B7280',
-    fontSize: 12,
-    marginTop: 20,
-    textAlign: 'center',
-  },
   buttonPressed: {
     opacity: 0.75,
   },

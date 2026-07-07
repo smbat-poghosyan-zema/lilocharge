@@ -9,9 +9,8 @@ import type {
   VehicleResponse,
 } from '@lilocharge/shared-types';
 
-import { createApiClient, type ApiClient } from '../../api';
-import { getApiBaseUrl } from '../../config/runtime';
-import { clearPersistedSession, getPersistedAccessToken } from './session-storage';
+import type { ApiClient } from '../../api';
+import { createAuthenticatedApiClient } from './authenticated-api-client';
 
 /**
  * Request body used when completing OTP verification and account registration.
@@ -116,16 +115,7 @@ export function createOnboardingApi(apiClient: ApiClient): OnboardingApi {
   };
 }
 
-const defaultOnboardingApiClient = createApiClient({
-  baseUrl: getApiBaseUrl(),
-  defaultHeaders: {
-    Accept: 'application/json',
-  },
-  getAccessToken: (): string | null => getPersistedAccessToken(),
-  onUnauthorized: (): void => {
-    clearPersistedSession();
-  },
-});
+const defaultOnboardingApiClient = createAuthenticatedApiClient();
 
 /**
  * Default onboarding API instance for mobile onboarding screens.

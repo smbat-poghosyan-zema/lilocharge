@@ -2,6 +2,9 @@
   "offline": {
     "banner": "No internet connection"
   },
+  "errors": {
+    "screenLoadFailed": "Failed to load screen"
+  },
   "notifications": {
     "androidChannelName": "General notifications"
   },
@@ -126,7 +129,6 @@
       "communityReport": {
         "action": "Report status",
         "prompt": "What is the current status of this connector?",
-        "cancel": "Cancel",
         "success": "Thanks! Your status report was submitted.",
         "error": "Failed to submit the status report.",
         "signInRequired": "Sign in to report connector status."
@@ -141,7 +143,6 @@
   "profile": {
     "title": "Profile",
     "subtitle": "Manage your preferences and notifications.",
-    "apiBaseUrl": "API: {{url}}",
     "loading": "Loading profile...",
     "loadError": "Failed to load profile.",
     "retry": "Try again",
@@ -403,6 +404,8 @@
       "durationLabel": "Duration",
       "totalLabel": "Total cost",
       "receipt": "View receipt (PDF)",
+      "receiptDownloading": "Preparing receipt...",
+      "receiptError": "Failed to open the receipt. Please try again.",
       "done": "Done"
     }
   },
@@ -504,6 +507,8 @@
     "payment": {
       "title": "Payment method",
       "subtitle": "Choose a payment method now or skip and add it later.",
+      "tokenizedHint": "You'll enter your card or wallet details on the next screen.",
+      "deviceWalletUnavailable": "Available only on supported devices.",
       "methods": {
         "ARCA": "ArCa cards",
         "IDRAM": "Idram wallet",
@@ -512,6 +517,7 @@
       },
       "actions": {
         "finish": "Finish onboarding",
+        "register": "Add payment method",
         "submitting": "Processing...",
         "skip": "Skip payment setup"
       },

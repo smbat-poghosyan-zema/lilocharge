@@ -6,9 +6,8 @@ import type {
   WalletTransactionsResponse,
 } from '@lilocharge/shared-types';
 
-import { createApiClient, type ApiClient } from '../../api';
-import { getApiBaseUrl } from '../../config/runtime';
-import { clearPersistedSession, getPersistedAccessToken } from '../onboarding/session-storage';
+import type { ApiClient } from '../../api';
+import { createAuthenticatedApiClient } from '../onboarding/authenticated-api-client';
 
 /** Query options accepted by the paginated wallet transactions endpoint. */
 export interface WalletTransactionsQuery {
@@ -56,16 +55,7 @@ export function createWalletApi(apiClient: ApiClient): WalletApi {
   };
 }
 
-const defaultWalletApiClient = createApiClient({
-  baseUrl: getApiBaseUrl(),
-  defaultHeaders: {
-    Accept: 'application/json',
-  },
-  getAccessToken: (): string | null => getPersistedAccessToken(),
-  onUnauthorized: (): void => {
-    clearPersistedSession();
-  },
-});
+const defaultWalletApiClient = createAuthenticatedApiClient();
 
 /** Default wallet API instance for balance and top-up operations. */
 export const walletApi = createWalletApi(defaultWalletApiClient);

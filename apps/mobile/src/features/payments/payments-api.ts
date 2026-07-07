@@ -3,9 +3,8 @@ import type {
   RegisterPaymentMethodRequest,
 } from '@lilocharge/shared-types';
 
-import { createApiClient, type ApiClient } from '../../api';
-import { getApiBaseUrl } from '../../config/runtime';
-import { clearPersistedSession, getPersistedAccessToken } from '../onboarding/session-storage';
+import type { ApiClient } from '../../api';
+import { createAuthenticatedApiClient } from '../onboarding/authenticated-api-client';
 
 /** Typed API contract for stored payment-method management operations. */
 export interface PaymentsApi {
@@ -52,16 +51,7 @@ export function createPaymentsApi(apiClient: ApiClient): PaymentsApi {
   };
 }
 
-const defaultPaymentsApiClient = createApiClient({
-  baseUrl: getApiBaseUrl(),
-  defaultHeaders: {
-    Accept: 'application/json',
-  },
-  getAccessToken: (): string | null => getPersistedAccessToken(),
-  onUnauthorized: (): void => {
-    clearPersistedSession();
-  },
-});
+const defaultPaymentsApiClient = createAuthenticatedApiClient();
 
 /** Default payments API instance for stored payment-method management. */
 export const paymentsApi = createPaymentsApi(defaultPaymentsApiClient);

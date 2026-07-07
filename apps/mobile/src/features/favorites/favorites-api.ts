@@ -1,8 +1,7 @@
 import type { UserFavoriteStationResponse } from '@lilocharge/shared-types';
 
-import { createApiClient, type ApiClient } from '../../api';
-import { getApiBaseUrl } from '../../config/runtime';
-import { clearPersistedSession, getPersistedAccessToken } from '../onboarding/session-storage';
+import type { ApiClient } from '../../api';
+import { createAuthenticatedApiClient } from '../onboarding/authenticated-api-client';
 
 /** Typed API contract for user favorite-station operations. */
 export interface FavoritesApi {
@@ -29,16 +28,7 @@ export function createFavoritesApi(apiClient: ApiClient): FavoritesApi {
   };
 }
 
-const defaultFavoritesApiClient = createApiClient({
-  baseUrl: getApiBaseUrl(),
-  defaultHeaders: {
-    Accept: 'application/json',
-  },
-  getAccessToken: (): string | null => getPersistedAccessToken(),
-  onUnauthorized: (): void => {
-    clearPersistedSession();
-  },
-});
+const defaultFavoritesApiClient = createAuthenticatedApiClient();
 
 /** Default favorites API instance for user favorite-station operations. */
 export const favoritesApi = createFavoritesApi(defaultFavoritesApiClient);

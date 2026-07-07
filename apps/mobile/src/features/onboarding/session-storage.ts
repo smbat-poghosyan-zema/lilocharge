@@ -1,7 +1,11 @@
 import type { AuthTokenPairResponse } from '@lilocharge/shared-types';
+import * as SecureStore from 'expo-secure-store';
 import { MMKV } from 'react-native-mmkv';
 
 const ONBOARDING_SESSION_STORAGE_KEY = 'onboarding.session.v1';
+const SESSION_ENCRYPTION_KEY_SECURE_STORE_KEY = 'lilocharge.session.encryption-key.v1';
+const LEGACY_SESSION_MMKV_ID = 'lilocharge-onboarding-session';
+const ENCRYPTED_SESSION_MMKV_ID = 'lilocharge-onboarding-session-encrypted';
 
 interface MmkvStorageDriver {
   delete(key: string): void;
@@ -114,12 +118,93 @@ export function createSessionStorage(driver: MmkvStorageDriver): SessionStorage 
   };
 }
 
-const defaultSessionMmkvStorage = new MMKV({
-  id: 'lilocharge-onboarding-session',
-});
+/**
+ * Resolves (or lazily provisions) the MMKV encryption key from the device
+ * secure enclave/keystore via expo-secure-store's synchronous accessors.
+ */
+function resolveSessionEncryptionKey(): string {
+  const existingKey = SecureStore.getItem(SESSION_ENCRYPTION_KEY_SECURE_STORE_KEY);
+
+  if (typeof existingKey === 'string' && existingKey.length > 0) {
+    return existingKey;
+  }
+
+  const generatedKey = generateEncryptionKey();
+
+  SecureStore.setItem(SESSION_ENCRYPTION_KEY_SECURE_STORE_KEY, generatedKey);
+
+  return generatedKey;
+}
+
+/**
+ * Generates a 64-character hex secret used as the MMKV encryption key.
+ */
+function generateEncryptionKey(): string {
+  const globalCrypto = (globalThis as { readonly crypto?: Crypto }).crypto;
+
+  if (globalCrypto?.getRandomValues) {
+    const bytes = new Uint8Array(32);
+
+    globalCrypto.getRandomValues(bytes);
+
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  }
+
+  let key = '';
+
+  while (key.length < 64) {
+    key += Math.floor(Math.random() * 0x10000)
+      .toString(16)
+      .padStart(4, '0');
+  }
+
+  return key.slice(0, 64);
+}
+
+/**
+ * Best-effort migration of a plaintext session record into the encrypted store.
+ *
+ * Older builds persisted tokens to an unencrypted MMKV instance; on first run
+ * of the encrypted store we copy any existing record over and wipe the
+ * plaintext copy so tokens are no longer readable at rest.
+ */
+function migratePlaintextSession(encryptedDriver: MmkvStorageDriver): void {
+  try {
+    if (encryptedDriver.getString(ONBOARDING_SESSION_STORAGE_KEY) !== undefined) {
+      return;
+    }
+
+    const legacyDriver = new MMKV({ id: LEGACY_SESSION_MMKV_ID });
+    const legacyValue = legacyDriver.getString(ONBOARDING_SESSION_STORAGE_KEY);
+
+    if (legacyValue !== undefined) {
+      encryptedDriver.set(ONBOARDING_SESSION_STORAGE_KEY, legacyValue);
+      legacyDriver.delete(ONBOARDING_SESSION_STORAGE_KEY);
+    }
+  } catch {
+    // Migration is best-effort; a failure must never block session storage.
+  }
+}
+
+/**
+ * Builds the default encrypted session storage driver, falling back to an
+ * unencrypted instance if secure-store or encrypted MMKV is unavailable.
+ */
+function createDefaultSessionDriver(): MmkvStorageDriver {
+  try {
+    const encryptionKey = resolveSessionEncryptionKey();
+    const encryptedDriver = new MMKV({ encryptionKey, id: ENCRYPTED_SESSION_MMKV_ID });
+
+    migratePlaintextSession(encryptedDriver);
+
+    return encryptedDriver;
+  } catch {
+    return new MMKV({ id: LEGACY_SESSION_MMKV_ID });
+  }
+}
 
 /** Shared app-wide onboarding session storage singleton. */
-export const onboardingSessionStorage = createSessionStorage(defaultSessionMmkvStorage);
+export const onboardingSessionStorage = createSessionStorage(createDefaultSessionDriver());
 
 /**
  * Reads the persisted access token for API client bearer authentication.

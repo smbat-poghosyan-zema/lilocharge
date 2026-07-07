@@ -88,13 +88,14 @@ describe('session-monitoring-client', () => {
       .mockReturnValue(socketMock);
   });
 
-  it('creates one socket connection with websocket transport and reconnection enabled', () => {
+  it('creates one socket connection with websocket transport, reconnection, and auth', () => {
     createSessionMonitoringClient({
       apiBaseUrl: 'https://api.lilocharge.am',
       socketFactory: socketFactoryMock,
     });
 
     expect(socketFactoryMock).toHaveBeenCalledWith('https://api.lilocharge.am', {
+      auth: expect.any(Function) as unknown as (cb: (data: Record<string, unknown>) => void) => void,
       autoConnect: false,
       reconnection: true,
       reconnectionDelay: 1000,

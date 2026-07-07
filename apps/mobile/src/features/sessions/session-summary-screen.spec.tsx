@@ -1,7 +1,6 @@
 import type { SessionResponse } from '@lilocharge/shared-types';
 import { SessionStatus } from '@lilocharge/shared-types';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { Linking } from 'react-native';
 
 import { SessionSummaryScreen } from './session-summary-screen';
 
@@ -66,13 +65,11 @@ describe('SessionSummaryScreen', () => {
     expect(screen.getByTestId('summary-total')).toHaveTextContent('5350 ֏');
   });
 
-  it('opens the receipt URL through the system linking API', async () => {
-    const openUrlSpy = jest
-      .spyOn(Linking, 'openURL')
-      .mockImplementation(() => Promise.resolve(true));
+  it('downloads and shares the receipt with authentication for completed sessions', async () => {
+    const shareReceipt = jest.fn(() => Promise.resolve());
     const getSession = jest.fn(() => Promise.resolve(buildCompletedSession()));
 
-    render(<SessionSummaryScreen sessionsApiClient={{ getSession }} />);
+    render(<SessionSummaryScreen sessionsApiClient={{ getSession }} shareReceipt={shareReceipt} />);
 
     await waitFor(() => {
       expect(screen.getByTestId('summary-receipt')).toBeTruthy();
@@ -80,9 +77,23 @@ describe('SessionSummaryScreen', () => {
 
     fireEvent.press(screen.getByTestId('summary-receipt'));
 
-    expect(openUrlSpy).toHaveBeenCalledWith(
-      `http://localhost:3000/users/${USER_ID}/sessions/${SESSION_ID}/receipt`,
+    await waitFor(() => {
+      expect(shareReceipt).toHaveBeenCalledWith(USER_ID, SESSION_ID);
+    });
+  });
+
+  it('hides the receipt action for non-completed sessions', async () => {
+    const getSession = jest.fn(() =>
+      Promise.resolve(buildCompletedSession({ status: SessionStatus.FAILED })),
     );
+
+    render(<SessionSummaryScreen sessionsApiClient={{ getSession }} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('summary-status')).toBeTruthy();
+    });
+
+    expect(screen.queryByTestId('summary-receipt')).toBeNull();
   });
 
   it('navigates back to the stations tab from the done action', async () => {

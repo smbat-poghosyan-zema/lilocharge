@@ -8,9 +8,8 @@ import type {
   UserReviewResponse,
 } from '@lilocharge/shared-types';
 
-import { createApiClient, type ApiClient, type FetchFunction } from '../../api';
-import { getApiBaseUrl } from '../../config/runtime';
-import { clearPersistedSession, getPersistedAccessToken } from '../onboarding/session-storage';
+import type { ApiClient, FetchFunction } from '../../api';
+import { createAuthenticatedApiClient } from '../onboarding/authenticated-api-client';
 
 /** Typed API contract for station reviews and review-photo uploads. */
 export interface ReviewsApi {
@@ -123,16 +122,7 @@ export function resolveReviewPhotoContentType(
   }
 }
 
-const defaultReviewsApiClient = createApiClient({
-  baseUrl: getApiBaseUrl(),
-  defaultHeaders: {
-    Accept: 'application/json',
-  },
-  getAccessToken: (): string | null => getPersistedAccessToken(),
-  onUnauthorized: (): void => {
-    clearPersistedSession();
-  },
-});
+const defaultReviewsApiClient = createAuthenticatedApiClient();
 
 /** Default reviews API instance for station review operations. */
 export const reviewsApi = createReviewsApi(defaultReviewsApiClient);

@@ -35,7 +35,8 @@ describe('LazyLoadErrorBoundary', () => {
       </LazyLoadErrorBoundary>,
     );
 
-    expect(getByText('Failed to load screen')).toBeTruthy();
+    // Default fallback is now localized (hy is the default/fallback locale).
+    expect(getByText('Չհաջողվեց բեռնել էկրանը')).toBeTruthy();
   });
 
   it('renders custom fallback when provided', () => {

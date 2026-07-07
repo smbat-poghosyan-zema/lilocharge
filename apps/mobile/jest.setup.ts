@@ -141,6 +141,42 @@ jest.mock('@react-native-community/netinfo', () => {
   };
 });
 
+jest.mock('expo-secure-store', () => {
+  const store = new Map<string, string>();
+
+  return {
+    deleteItemAsync: jest.fn((key: string) => {
+      store.delete(key);
+      return Promise.resolve();
+    }),
+    getItem: jest.fn((key: string): string | null => {
+      return store.has(key) ? (store.get(key) as string) : null;
+    }),
+    getItemAsync: jest.fn((key: string): Promise<string | null> => {
+      return Promise.resolve(store.has(key) ? (store.get(key) as string) : null);
+    }),
+    setItem: jest.fn((key: string, value: string): void => {
+      store.set(key, value);
+    }),
+    setItemAsync: jest.fn((key: string, value: string): Promise<void> => {
+      store.set(key, value);
+      return Promise.resolve();
+    }),
+  };
+});
+
+jest.mock('expo-file-system', () => ({
+  cacheDirectory: 'file:///cache/',
+  downloadAsync: jest.fn(() => {
+    return Promise.resolve({ status: 200, uri: 'file:///cache/receipt.pdf' });
+  }),
+}));
+
+jest.mock('expo-sharing', () => ({
+  isAvailableAsync: jest.fn(() => Promise.resolve(true)),
+  shareAsync: jest.fn(() => Promise.resolve()),
+}));
+
 jest.mock('react-native-mmkv', () => {
   class MMKV {
     private readonly valueByKey: Map<string, string> = new Map<string, string>();

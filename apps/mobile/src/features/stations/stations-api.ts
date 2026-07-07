@@ -9,9 +9,8 @@ import type {
   StationSearchQueryRequest,
 } from '@lilocharge/shared-types';
 
-import { createApiClient, type ApiClient } from '../../api';
-import { getApiBaseUrl } from '../../config/runtime';
-import { clearPersistedSession, getPersistedAccessToken } from '../onboarding/session-storage';
+import type { ApiClient } from '../../api';
+import { createAuthenticatedApiClient } from '../onboarding/authenticated-api-client';
 
 /**
  * Typed API contract for mobile station discovery operations.
@@ -92,16 +91,7 @@ export function createStationsApi(apiClient: ApiClient): CommunityStationsApi {
   };
 }
 
-const defaultStationsApiClient = createApiClient({
-  baseUrl: getApiBaseUrl(),
-  defaultHeaders: {
-    Accept: 'application/json',
-  },
-  getAccessToken: (): string | null => getPersistedAccessToken(),
-  onUnauthorized: (): void => {
-    clearPersistedSession();
-  },
-});
+const defaultStationsApiClient = createAuthenticatedApiClient();
 
 /**
  * Default station API instance for map-based station discovery.

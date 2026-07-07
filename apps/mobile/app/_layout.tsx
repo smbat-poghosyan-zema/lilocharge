@@ -4,19 +4,28 @@ import { I18nextProvider } from 'react-i18next';
 
 import { OfflineBanner } from '../src/components/offline-banner';
 import { bootstrapPushNotifications } from '../src/features/notifications/push-bootstrap';
-import { OnboardingSessionProvider } from '../src/features/onboarding/onboarding-session';
+import {
+  OnboardingSessionProvider,
+  useOnboardingSession,
+} from '../src/features/onboarding/onboarding-session';
 import i18n from '../src/i18n/i18n';
 
 /**
- * Configures the root app stack for file-based Expo Router navigation.
+ * Runs (and re-runs) the push-notification bootstrap in step with the session.
+ *
+ * Keyed on the authenticated user id so a fresh-install user who signs in
+ * registers their push token immediately, rather than only after the next cold
+ * start. Push bootstrap remains guarded by EXPO_PUBLIC_PUSH_ENABLED and no-ops
+ * when no user id is persisted.
  */
-export default function RootLayout(): JSX.Element {
+function PushNotificationsLifecycle(): null {
+  const { state } = useOnboardingSession();
+  const userId = state.userId;
+
   useEffect(() => {
     let isUnmounted = false;
     let cleanupPushRuntime: (() => void) | null = null;
 
-    // Fire-and-forget: push bootstrap is guarded by EXPO_PUBLIC_PUSH_ENABLED and a
-    // persisted user id, and must never block or crash app start.
     bootstrapPushNotifications()
       .then((cleanup: () => void): void => {
         if (isUnmounted) {
@@ -34,11 +43,19 @@ export default function RootLayout(): JSX.Element {
       isUnmounted = true;
       cleanupPushRuntime?.();
     };
-  }, []);
+  }, [userId]);
 
+  return null;
+}
+
+/**
+ * Configures the root app stack for file-based Expo Router navigation.
+ */
+export default function RootLayout(): JSX.Element {
   return (
     <I18nextProvider i18n={i18n}>
       <OnboardingSessionProvider>
+        <PushNotificationsLifecycle />
         <OfflineBanner />
         <Stack screenOptions={{ headerShown: false }} />
       </OnboardingSessionProvider>
