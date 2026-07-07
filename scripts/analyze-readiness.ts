@@ -169,7 +169,7 @@ function generateReport(): ProductionReadinessReport {
     'Set up automated backups for PostgreSQL',
     'Configure auto-scaling for Kubernetes deployment',
     'Enable HTTPS/TLS in production',
-    'Review and sign production-readiness-checklist.md',
+    'Review and sign off docs/production-readiness-report.md',
   );
 
   // Determine final status

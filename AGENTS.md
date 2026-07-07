@@ -18,8 +18,10 @@ Every line of code must be:
 - **Cache**: Redis 7+
 - **ORM**: Prisma 5+ (declarative schema, type-safe queries)
 - **Maps**: Mapbox GL Native (NOT Google Maps)
-- **OCPP**: ocpp-rpc library for central system implementation
-- **Payments**: ArCa (Armenian), Idram (Armenian), Apple Pay, Google Pay
+- **OCPP**: ocpp-rpc library for central system implementation (1.6-J full core + 2.0.1 core charging profile)
+- **Payments**: ArCa (Armenian), Idram (Armenian), wallet. Apple Pay / Google Pay need a
+  configured token-exchange service; native Pay modules are out of scope — fail loudly, never
+  fake tokenization
 - **Push**: Firebase Cloud Messaging (FCM)
 - **i18n**: react-i18next with Armenian, Russian, English
 
@@ -31,12 +33,11 @@ Every line of code must be:
   /mobile      - React Native Expo app
 /packages
   /shared-types    - TypeScript interfaces shared by api and mobile
-  /shared-utils    - Common utilities (validation, formatting, etc.)
 /infrastructure
-  /docker          - docker-compose.yml for local dev
+  /docker          - docker-compose.yml (dev) + docker-compose.test.yml (e2e stack)
   /k8s             - Kubernetes manifests for production
-/scripts           - Shell scripts for running PromptBook, deployment
-/docs              - PRD, API specs, ADRs
+/scripts           - Security scan / production validation scripts
+/docs              - PRD (prd.md), deployment guide, reports, privacy policy
 ```
 
 ## Coding Standards
@@ -78,16 +79,26 @@ Every line of code must be:
 ### Testing
 
 - Unit tests: Jest with `describe` / `it` / `expect`
-- Integration tests: Supertest for API, React Native Testing Library for mobile
-- E2E tests: Given/When/Then format
-- Mock external services (payment gateways, OCPP charge points)
-- Test file naming: `*.test.ts` or `*.spec.ts`
+- Integration tests: React Native Testing Library for mobile
+- API jest is split into two projects: `pnpm --filter @lilocharge/api test` runs the hermetic
+  `unit` project only; `pnpm --filter @lilocharge/api test:e2e` runs `*.e2e.spec.ts` serially
+  and requires the test stack from `infrastructure/docker/docker-compose.test.yml` plus
+  `prisma migrate deploy` (endpoints hardcoded to :5437/:6382 — recipe in that file's header)
+- Mobile jest needs `@lilocharge/shared-types` built first on a fresh checkout
+- Coverage floors are enforced in CI via `coverageThreshold` in each app's jest config —
+  keep new code tested so the floors hold (current suites measure ~90% statements)
+- Mock external services (payment gateways, OCPP charge points) in unit tests
+- Test file naming: `*.test.ts` or `*.spec.ts` (`*.e2e.spec.ts` for API e2e)
 
 ### Localization
 
 - Default language: Armenian (hy)
 - All user-facing strings in i18n files
-- JSON structure: `{ "key": { "hy": "...", "ru": "...", "en": "..." } }`
+- Layout: one file per locale — `apps/mobile/src/i18n/locales/{hy,ru,en}/common.json`, each
+  containing nested keys for that language only (e.g. `{ "tabs": { "stations": { "title": ... } } }`);
+  add every new key to all three locales
+- (Store metadata under `apps/mobile/store-assets/metadata` uses the per-key
+  `{ "key": { "hy": ..., "ru": ..., "en": ... } }` shape instead — don't mix the two)
 - Use Armenian-first design (all screenshots, examples in Armenian)
 
 ## Import Conventions

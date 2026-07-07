@@ -6,6 +6,30 @@ Derived from [AUDIT-REPORT.md](AUDIT-REPORT.md) (2026-07-02). Every NOT DONE and
 **Effort:** S ≤ 1 day · M = 1–5 days · L > 1 week.
 **Category:** fix (defect in existing code) / refactor / implement (missing feature) / test.
 
+> **Status update (2026-07-07):** All P2 tasks (#29-#37) are now implemented too — the backlog is
+> closed. Highlights: Prometheus/OTel MeterProvider actually registered (#29); **OCPP 2.0.1 core
+> charging profile implemented** — subprotocol negotiation, BootNotification/Heartbeat/
+> StatusNotification/Authorize/TransactionEvent lifecycle, RequestStart/StopTransaction; no
+> reservations, smart charging, firmware/display management, device model, or security events
+> (#30); real Detox functional flows + a testID guard suite (#31, emulator hardware still needed
+> to execute them); CI gates on typecheck + non-mutating lint + coverage floors (API 85%/mobile
+> 86% statements, measured with headroom), shared-types built before mobile jest, an e2e job with
+> Postgres/Redis service containers mirroring docker-compose.test.yml, and both orphaned test
+> files adopted into runnable suites — which surfaced real defects: iOS store keywords exceeded
+> Apple's 100-char limit and a jest dot-path misuse masked a release-notes assertion (#32); load
+> tests executed with results in docs/load-test-results.md — ~2,000 rps/process, p95 target met
+> up to ~100 connections, 1,500 WS connections held (#33); foreign `run-promptbook-tenant-admin.sh`
+> and the empty `@lilocharge/shared-utils` package deleted, nothing imported it (#34); docs
+> reconciled — docs/prd.md created, README links/features fixed, the contradictory readiness
+> reports replaced by a single current-state docs/production-readiness-report.md, AGENTS.md
+> corrected (i18n layout, testing split, shared-utils) (#35); server-side favorites sync (#36);
+> wallet-path sessions e2e (#37). Verified 2026-07-07: API 84 unit suites / 678 tests + 7 e2e
+> suites / 63 tests green, mobile 68 suites / 529 tests green, tsc + eslint clean everywhere.
+> **Still open (environment-dependent, tracked in docs/production-readiness-report.md):** native
+> Apple/Google Pay modules, real gateway sandbox validation, FCM credentials, OCPP hardware
+> validation, mobile refresh-token rotation, offline-session watchdog, distributed load test at
+> 1,000 VU / 10,000 WS, real K8s cluster rollout.
+
 > **Status update (2026-07-06):** All eight P0 tasks AND all P1 tasks (#9-#28) are implemented on
 > `claude/lilocharge-audit-58jj4m` (P0: `ff08519`…`ffe8587`; P1: `7200fd2`…`576f4fd`).
 > Verified: API 80 suites / 608 unit tests green, **all 5 e2e suites 47/47 green in a single run**
@@ -58,7 +82,7 @@ Derived from [AUDIT-REPORT.md](AUDIT-REPORT.md) (2026-07-02). Every NOT DONE and
 | 27 | **Session concurrency guard + test**: reject a second start on an occupied connector (PromptBook step 62 — no guard or test found); add zero-energy auto-refund e2e (step 61) and charger-offline-mid-session fault test (step 59). | implement + test | `apps/api/src/sessions/sessions.service.ts`, new specs | M |
 | 28 | **Fix `'WALLET' as never` enum drift** between shared-types and Prisma enums. | refactor | `apps/api/src/sessions/sessions.service.ts:322,363,380-381`, `packages/shared-types/src/payment.ts`, `apps/api/prisma/schema.prisma` | S |
 
-## P2 — debt, tooling, docs
+## P2 — debt, tooling, docs — ✅ done
 
 | # | Task | Category | Affected files | Effort |
 |---|---|---|---|---|

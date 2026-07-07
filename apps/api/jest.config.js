@@ -13,6 +13,21 @@ const sharedConfig = {
 
 /** @type {import('jest').Config} */
 module.exports = {
+  // Enforced floor for CI (backend.yml runs the unit project with --coverage;
+  // coverageThreshold is a root-level jest option, so it applies to whichever
+  // project runs with coverage — in practice the unit project only). Measured
+  // on 2026-07-07 with `npx jest --selectProjects unit --coverage --ci`:
+  // statements 89.89%, branches 76.30%, functions 91.21%, lines 89.56%
+  // (83 suites / 656 tests). Floors sit ~5 points below the measured values so
+  // the gate catches real coverage regressions without flaking on refactors.
+  coverageThreshold: {
+    global: {
+      statements: 85,
+      branches: 71,
+      functions: 86,
+      lines: 85,
+    },
+  },
   projects: [
     {
       ...sharedConfig,

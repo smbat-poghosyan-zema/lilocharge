@@ -23,6 +23,11 @@ on:
       - '.github/workflows/mobile.yml'
   workflow_dispatch:
 
+# Detox e2e flows (apps/mobile/e2e/flows) are intentionally NOT run here:
+# they need an Android emulator / iOS simulator plus `expo prebuild`-generated
+# native projects — see apps/mobile/e2e/README.md for the runbook. The
+# `e2e-testid-guard.spec.ts` suite below keeps the flows from rotting against
+# the app in the meantime.
 jobs:
   test:
     name: Lint, Typecheck, Test
@@ -45,6 +50,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Must run before typecheck/jest: mobile imports @lilocharge/shared-types
+      # from its dist output, so a fresh checkout without this build breaks
+      # both (historical failure mode — 18 suites red on fresh checkouts).
       - name: Build shared types
         run: pnpm --filter @lilocharge/shared-types build
 
@@ -54,8 +62,10 @@ jobs:
       - name: Typecheck mobile
         run: pnpm --filter @lilocharge/mobile typecheck
 
-      - name: Test mobile
-        run: pnpm --filter @lilocharge/mobile test
+      # Coverage floor is enforced by `coverageThreshold` in
+      # apps/mobile/jest.config.js.
+      - name: Test mobile (with coverage floor)
+        run: pnpm --filter @lilocharge/mobile test -- --ci --coverage
 
   eas_preview:
     name: EAS Preview Build

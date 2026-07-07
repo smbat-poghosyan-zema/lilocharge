@@ -177,9 +177,9 @@ DOC_ISSUES=0
 REQUIRED_DOCS=(
   "README.md"
   "AGENTS.md"
-  "apps/api/README.md"
-  "apps/mobile/README.md"
-  "scripts/production-readiness-checklist.md"
+  "docs/prd.md"
+  "docs/DEPLOYMENT.md"
+  "docs/production-readiness-report.md"
 )
 
 for doc in "${REQUIRED_DOCS[@]}"; do
@@ -229,7 +229,7 @@ if [ $FAILURES -eq 0 ]; then
   echo "System is ready for production deployment."
   echo ""
   echo "Next steps:"
-  echo "1. Review scripts/production-readiness-checklist.md"
+  echo "1. Review docs/production-readiness-report.md"
   echo "2. Run load tests: cd apps/api/load-tests && ./run-load-tests.sh all http://localhost:3000"
   echo "3. Obtain stakeholder sign-offs"
   echo "4. Deploy to production"

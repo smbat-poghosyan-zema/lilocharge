@@ -48,18 +48,93 @@ jobs:
       - name: Build shared types
         run: pnpm --filter @lilocharge/shared-types build
 
+      # The `lint` script is intentionally non-mutating (no --fix): a mutating
+      # lint in CI silently repairs violations instead of failing the build.
+      # Use `pnpm --filter @lilocharge/api lint:fix` locally to auto-fix.
       - name: Lint backend
         run: pnpm --filter @lilocharge/api lint
 
       - name: Typecheck backend
         run: pnpm --filter @lilocharge/api typecheck
 
-      - name: Test backend
-        run: pnpm --filter @lilocharge/api test
+      # Runs the jest `unit` project with coverage; the coverage floor is
+      # enforced by `coverageThreshold` in apps/api/jest.config.js.
+      - name: Test backend (unit, with coverage floor)
+        run: pnpm --filter @lilocharge/api test:cov -- --ci
+
+  e2e:
+    # Mirrors infrastructure/docker/docker-compose.test.yml: the e2e suites
+    # hardcode Postgres on localhost:5437 and Redis on localhost:6382, and the
+    # compose stack's init scripts are unnecessary here because the Prisma
+    # migrations themselves create the postgis/timescaledb/pgcrypto/pg_trgm
+    # extensions (the timescale/timescaledb-ha:pg16 image ships them all).
+    # Locally, run the compose stack instead — see the header of
+    # infrastructure/docker/docker-compose.test.yml.
+    name: E2E (Postgres + Redis service containers)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: timescale/timescaledb-ha:pg16
+        env:
+          POSTGRES_DB: lilocharge_test
+          POSTGRES_USER: lilocharge
+          POSTGRES_PASSWORD: lilocharge_dev_password
+        ports:
+          - 5437:5432
+        options: >-
+          --health-cmd "pg_isready -U lilocharge -d lilocharge_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6382:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared types
+        run: pnpm --filter @lilocharge/shared-types build
+
+      - name: Generate Prisma client
+        run: pnpm --filter @lilocharge/api exec prisma generate
+
+      # Applies every committed migration (baseline schema, the geospatial
+      # entities migration, TimescaleDB hypertables, trigram search) — the
+      # same recipe documented in docker-compose.test.yml.
+      - name: Apply database migrations
+        env:
+          DATABASE_URL: postgresql://lilocharge:lilocharge_dev_password@localhost:5437/lilocharge_test
+        run: pnpm --filter @lilocharge/api exec prisma migrate deploy
+
+      # Serial by design (--runInBand in the script): suites share one
+      # database and fixed OCPP ports.
+      - name: Run e2e suites
+        run: pnpm --filter @lilocharge/api test:e2e
 
   deploy:
     name: Trigger Backend Deployment
-    needs: test
+    needs: [test, e2e]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.BACKEND_DEPLOY_WEBHOOK_URL != ''
     runs-on: ubuntu-latest
     env:

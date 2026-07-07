@@ -62,44 +62,13 @@ Complete production validation suite.
 
 ### Documentation
 
-#### `production-readiness-checklist.md`
-
-Comprehensive checklist for production deployment covering:
-
-- Security audit requirements
-- Performance benchmarks
-- Monitoring setup
-- Testing coverage
-- Deployment automation
-- Compliance requirements
-- Final QA sign-off
-
----
-
-#### `PRODUCTION_READINESS_REPORT.md`
-
-Executive summary and detailed production readiness assessment:
-
-- Security vulnerability analysis
-- Code quality metrics
-- Performance targets
-- Infrastructure readiness
-- Monitoring configuration
-- Launch checklist
-- Known issues and risks
-- Sign-off requirements
-
----
-
-#### `STEP_70_SUMMARY.md`
-
-Summary of Step 70 implementation (Production Readiness):
-
-- Deliverables overview
-- Security scan results
-- Code changes made
-- Validation results
-- Next steps for production deployment
+The production-readiness reports that used to live in this directory
+(`PRODUCTION_READINESS_REPORT.md`, `STEP_70_SUMMARY.md`,
+`production-readiness-checklist.md`) were stale snapshots from 2026-02-18 that
+contradicted the later audit. The single current-state report is
+[docs/production-readiness-report.md](../docs/production-readiness-report.md);
+the audit itself is [AUDIT-REPORT.md](../AUDIT-REPORT.md) with its
+[BACKLOG.md](../BACKLOG.md).
 
 ---
 
@@ -142,7 +111,7 @@ cd apps/api/load-tests
 ./run-load-tests.sh all http://localhost:3000
 
 # 4. Review reports
-cat scripts/PRODUCTION_READINESS_REPORT.md
+cat docs/production-readiness-report.md
 cat logs/security-scans/latest/npm-audit.txt
 ```
 
@@ -178,7 +147,7 @@ pnpm test
 pnpm build
 
 # Review production readiness report
-cat scripts/PRODUCTION_READINESS_REPORT.md
+cat docs/production-readiness-report.md
 ```
 
 ### Launch Day: Go-Live
@@ -274,10 +243,10 @@ cd apps/api/load-tests
 
 ## Related Documentation
 
-- [Production Readiness Checklist](./production-readiness-checklist.md)
-- [Production Readiness Report](./PRODUCTION_READINESS_REPORT.md)
-- [Step 70 Summary](./STEP_70_SUMMARY.md)
+- [Production Readiness Report](../docs/production-readiness-report.md)
+- [Audit Report](../AUDIT-REPORT.md) and [Backlog](../BACKLOG.md)
 - [Load Testing Guide](../apps/api/load-tests/README.md)
+- [Load Test Results](../docs/load-test-results.md)
 - [Observability Guide](../apps/api/OBSERVABILITY.md)
 - [Main README](../README.md)
 - [AGENTS.md](../AGENTS.md)
@@ -295,5 +264,5 @@ For issues or questions:
 
 ---
 
-**Last Updated**: 2026-02-18  
+**Last Updated**: 2026-07-07  
 **Maintained By**: LiloCharge Development Team

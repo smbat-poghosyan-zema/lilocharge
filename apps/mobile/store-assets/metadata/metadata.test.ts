@@ -168,7 +168,9 @@ describe('Store Metadata', () => {
 
     it('should have version 1.0.0 release notes', () => {
       const releases = whatsNew.releases as Record<string, Record<string, string>>;
-      expect(releases).toHaveProperty('1.0.0');
+      // Array form: a bare '1.0.0' would be interpreted as the path
+      // releases[1][0][0] by jest's dot-path semantics.
+      expect(releases).toHaveProperty(['1.0.0']);
 
       const release = releases['1.0.0'];
       expect(release).toHaveProperty('hy');

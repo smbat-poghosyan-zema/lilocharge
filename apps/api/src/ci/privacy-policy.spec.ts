@@ -1,11 +1,16 @@
 /**
- * Tests for privacy policy documents
+ * Tests for the privacy policy documents in docs/privacy-policy.
+ *
+ * Moved here from docs/privacy-policy/privacy-policy.test.ts: docs/ is not a
+ * workspace, so the file was never picked up by any jest project. Like
+ * workflows.spec.ts next door, this suite validates repository-level artifacts
+ * from within the API unit test project.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 
-const PRIVACY_POLICY_DIR = path.join(__dirname, '../../../docs/privacy-policy');
+const PRIVACY_POLICY_DIR = path.resolve(__dirname, '../../../../docs/privacy-policy');
 
 describe('Privacy Policy', () => {
   describe('File Existence', () => {
@@ -35,7 +40,7 @@ describe('Privacy Policy', () => {
 
     beforeAll(() => {
       const filePath = path.join(PRIVACY_POLICY_DIR, 'privacy-policy.json');
-      metadata = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      metadata = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<string, unknown>;
     });
 
     it('should have version', () => {
@@ -151,19 +156,6 @@ describe('Privacy Policy', () => {
   });
 
   describe('Content Validation', () => {
-    const requiredSections = [
-      'Introduction',
-      'Data Collection',
-      'Data Usage',
-      'Third-Party Services',
-      'Data Retention',
-      'Your Rights',
-      'Children',
-      'Location',
-      'Security',
-      'Contact',
-    ];
-
     it('should have required sections in Armenian policy', () => {
       const filePath = path.join(PRIVACY_POLICY_DIR, 'privacy-policy-hy.md');
       const content = fs.readFileSync(filePath, 'utf-8');
