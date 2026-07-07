@@ -38,7 +38,7 @@ function buildCommand(overrides?: Partial<OcppRemoteStartCommand>): OcppRemoteSt
 }
 
 /** Builds one OCPP server client fixture with typed call and handler mocks. */
-function buildClient(identity: string): OcppClientFixture {
+function buildClient(identity: string, protocol: string = 'ocpp1.6'): OcppClientFixture {
   const callMock = jest.fn<Promise<unknown>, [string, unknown, OcppRpcCallOptions?]>();
   const call = <TResponse>(
     method: string,
@@ -56,7 +56,7 @@ function buildClient(identity: string): OcppClientFixture {
       handshake: { endpoint: '/ocpp' },
       identity,
       on: jest.fn<void, [string, (...args: unknown[]) => void]>(),
-      protocol: 'ocpp1.6',
+      protocol,
       session: {},
     },
   };
@@ -177,6 +177,60 @@ describe('OcppRemoteStartService', () => {
         transactionId: null,
       }),
     );
+  });
+
+  it('sends RequestStartTransaction with an idToken wrapper to ocpp2.0.1 clients', async () => {
+    const fixture = buildClient('CP-201', 'ocpp2.0.1');
+    registryService.registerChargePoint(fixture.client);
+    fixture.callMock.mockResolvedValue({
+      status: 'Accepted',
+    } satisfies OcppRemoteStartTransactionResponse);
+
+    const command = buildCommand({ chargePointId: 'CP-201', retryDelayMs: 0, timeoutMs: 1500 });
+    const result = await service.remoteStartTransaction(command);
+
+    expect(fixture.callMock).toHaveBeenCalledTimes(1);
+    expect(fixture.callMock).toHaveBeenCalledWith(
+      'RequestStartTransaction',
+      {
+        evseId: 1,
+        idToken: {
+          idToken: 'user-123',
+          type: 'Central',
+        },
+        remoteStartId: expect.any(Number) as unknown as number,
+      },
+      { callTimeoutMs: 1500 },
+    );
+    expect(result.status).toBe('Accepted');
+
+    // Tracking still records the protocol-neutral command so correlation lookups stay uniform.
+    const tracked = await service.getTrackedRemoteStartTransaction(result.trackingId as string);
+    expect(tracked).toEqual(
+      expect.objectContaining({
+        chargePointId: 'CP-201',
+        connectorId: 1,
+        idTag: 'user-123',
+      }),
+    );
+  });
+
+  it('allocates distinct remoteStartIds for consecutive ocpp2.0.1 commands', async () => {
+    const fixture = buildClient('CP-201', 'ocpp2.0.1');
+    registryService.registerChargePoint(fixture.client);
+    fixture.callMock.mockResolvedValue({
+      status: 'Accepted',
+    } satisfies OcppRemoteStartTransactionResponse);
+
+    await service.remoteStartTransaction(buildCommand({ chargePointId: 'CP-201', retryDelayMs: 0 }));
+    await service.remoteStartTransaction(buildCommand({ chargePointId: 'CP-201', retryDelayMs: 0 }));
+
+    const [, firstPayload] = fixture.callMock.mock.calls[0] ?? [];
+    const [, secondPayload] = fixture.callMock.mock.calls[1] ?? [];
+    const firstRemoteStartId = (firstPayload as { remoteStartId: number }).remoteStartId;
+    const secondRemoteStartId = (secondPayload as { remoteStartId: number }).remoteStartId;
+
+    expect(secondRemoteStartId).toBeGreaterThan(firstRemoteStartId);
   });
 
   it('persists tracking records in Redis with charge-point-scoped keys and a TTL', async () => {

@@ -36,9 +36,19 @@ const SESSION_STOP_LOOKUP_SELECT = {
 const WATT_HOURS_PER_KILOWATT_HOUR = 1000;
 const WATTS_PER_KILOWATT = 1000;
 
-type SessionStopLookupRecord = Prisma.SessionGetPayload<{
+/** Session lookup record shared by OCPP finalization flows (1.6 StopTransaction, 2.0.1 Ended). */
+export type OcppSessionLookupRecord = Prisma.SessionGetPayload<{
   select: typeof SESSION_STOP_LOOKUP_SELECT;
 }>;
+
+/** Input used to create one ACTIVE session from a charge-point-initiated OCPP transaction start. */
+export interface OcppActiveSessionCreateInput {
+  readonly connectorId: string;
+  readonly meterStartWh: number | null;
+  readonly startedAt: Date;
+  readonly transactionId: string;
+  readonly userId: string;
+}
 
 /** OCPP 1.6-J Authorize request payload (not yet present in shared types). */
 export interface OcppAuthorizeRequest {
@@ -109,21 +119,11 @@ export class OcppTransactionsService {
     }
 
     const transactionId = this.allocateTransactionId();
-    const createdSession = await this.prismaService.session.create({
-      data: {
-        connectorId,
-        meterStart: payload.meterStart,
-        startTime: startedAt,
-        status: SessionStatus.ACTIVE,
-        transactionId: String(transactionId),
-        userId,
-      },
-      select: {
-        id: true,
-      },
-    });
-    await this.notificationsService.sendSessionStartedNotification({
-      sessionId: createdSession.id,
+    await this.createActiveOcppSession({
+      connectorId,
+      meterStartWh: payload.meterStart,
+      startedAt,
+      transactionId: String(transactionId),
       userId,
     });
 
@@ -184,7 +184,10 @@ export class OcppTransactionsService {
   ): Promise<OcppStopTransactionResponse> {
     assertStopTransactionPayload(payload);
     const stoppedAt = parseIsoTimestamp(payload.timestamp, 'StopTransaction timestamp');
-    const session = await this.findSessionForStop(chargePointId, payload.transactionId);
+    const session = await this.findSessionByTransactionId(
+      chargePointId,
+      String(payload.transactionId),
+    );
 
     if (session === null) {
       this.logger.warn(
@@ -198,6 +201,23 @@ export class OcppTransactionsService {
       return {};
     }
 
+    await this.finalizeStoppedSession(session, stoppedAt, payload.meterStop);
+
+    return {};
+  }
+
+  /**
+   * Finalizes one ACTIVE session stopped by a charge point and returns the final cost in AMD.
+   *
+   * Shared by 1.6 StopTransaction and 2.0.1 TransactionEvent(Ended): computes energy/peak
+   * metrics, calculates tariff cost, persists completed session totals, sends the completion
+   * notification, and captures the pre-authorized payment.
+   */
+  public async finalizeStoppedSession(
+    session: OcppSessionLookupRecord,
+    stoppedAt: Date,
+    meterStopWh: number | null,
+  ): Promise<number> {
     const meterStats = await this.prismaService.meterValue.aggregate({
       where: {
         sessionId: session.id,
@@ -211,12 +231,12 @@ export class OcppTransactionsService {
       },
     });
     // The charger's meterStop - meterStart register delta is the authoritative energy figure
-    // (OCPP 1.6 5.12/5.13); sampled meter values are only a fallback because sparse sampling
-    // (or a single sample) under-counts the delta and under-bills the session.
-    const energyDeliveredKwh = calculateEnergyDeliveredFromRegisters(
-      session.meterStart,
-      payload.meterStop,
-    ) ?? calculateEnergyDeliveredKwh(meterStats);
+    // (OCPP 1.6 5.12/5.13; OCPP 2.0.1 Transaction.Begin/Transaction.End register samples);
+    // sampled meter values are only a fallback because sparse sampling (or a single sample)
+    // under-counts the delta and under-bills the session.
+    const energyDeliveredKwh =
+      calculateEnergyDeliveredFromRegisters(session.meterStart, meterStopWh) ??
+      calculateEnergyDeliveredKwh(meterStats);
     const peakPowerKw = calculatePeakPowerKw(meterStats);
     const totalCost = await this.calculateFinalCost({
       connectorId: session.connectorId,
@@ -243,11 +263,39 @@ export class OcppTransactionsService {
     });
     await this.captureCompletedSessionPayment(session.id, totalCost, session.connectorId);
 
-    return {};
+    return totalCost;
+  }
+
+  /**
+   * Creates one ACTIVE session for a charge-point-initiated transaction start and sends the
+   * session-started notification. Shared by 1.6 StartTransaction and 2.0.1 TransactionEvent(Started).
+   */
+  public async createActiveOcppSession(
+    input: OcppActiveSessionCreateInput,
+  ): Promise<{ readonly id: string }> {
+    const createdSession = await this.prismaService.session.create({
+      data: {
+        connectorId: input.connectorId,
+        meterStart: input.meterStartWh,
+        startTime: input.startedAt,
+        status: SessionStatus.ACTIVE,
+        transactionId: input.transactionId,
+        userId: input.userId,
+      },
+      select: {
+        id: true,
+      },
+    });
+    await this.notificationsService.sendSessionStartedNotification({
+      sessionId: createdSession.id,
+      userId: input.userId,
+    });
+
+    return createdSession;
   }
 
   /** Resolves one connector id from charge point identity and OCPP connector number. */
-  private async resolveConnectorId(
+  public async resolveConnectorId(
     chargePointId: string,
     ocppConnectorId: number,
   ): Promise<string | null> {
@@ -273,10 +321,11 @@ export class OcppTransactionsService {
    * Resolves one existing user id from an OCPP idTag value.
    *
    * The idTag is normally a short opaque token issued by OcppIdTagService (OCPP 1.6 caps
-   * idTags at 20 characters, so raw user UUIDs cannot travel over the wire); resolved ids
-   * are still verified against the users table before a session is attributed to them.
+   * idTags at 20 characters, so raw user UUIDs cannot travel over the wire; 2.0.1 idTokens
+   * allow 36 characters but use the same issued tokens for consistency); resolved ids are
+   * still verified against the users table before a session is attributed to them.
    */
-  private async resolveUserId(idTag: string): Promise<string | null> {
+  public async resolveUserId(idTag: string): Promise<string | null> {
     const candidateUserId = await this.idTagService.resolveUserId(idTag);
     if (candidateUserId === null || !isUuid(candidateUserId)) {
       return null;
@@ -290,14 +339,18 @@ export class OcppTransactionsService {
     return user?.id ?? null;
   }
 
-  /** Finds one session row eligible for StopTransaction completion handling. */
-  private async findSessionForStop(
+  /**
+   * Finds the newest session bound to one OCPP transaction id, scoped to the charge point that
+   * owns the connector. Transaction ids are stored as strings: 1.6 uses stringified integers,
+   * 2.0.1 uses the charging station's opaque transaction id verbatim.
+   */
+  public async findSessionByTransactionId(
     chargePointId: string,
-    transactionId: number,
-  ): Promise<SessionStopLookupRecord | null> {
+    transactionId: string,
+  ): Promise<OcppSessionLookupRecord | null> {
     return this.prismaService.session.findFirst({
       where: {
-        transactionId: String(transactionId),
+        transactionId,
         connector: {
           station: {
             operatorId: chargePointId,
@@ -420,14 +473,15 @@ function buildInvalidStartTransactionResponse(): OcppStartTransactionResponse {
 
 /**
  * Calculates delivered energy in kWh from transaction meter registers, or null when the
- * session has no recorded meterStart to diff against.
+ * session has no recorded meterStart (or the stop message carried no register) to diff against.
  */
 function calculateEnergyDeliveredFromRegisters(
   meterStartWh: number | null | undefined,
-  meterStopWh: number,
+  meterStopWh: number | null,
 ): number | null {
   if (
     typeof meterStartWh !== 'number' ||
+    typeof meterStopWh !== 'number' ||
     !Number.isFinite(meterStopWh) ||
     meterStopWh < meterStartWh
   ) {

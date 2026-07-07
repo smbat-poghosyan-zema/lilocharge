@@ -4,8 +4,19 @@ export const DEFAULT_OCPP_PORT = 9220;
 /** Default host binding for the OCPP WebSocket server. */
 export const DEFAULT_OCPP_HOST = '0.0.0.0';
 
-/** Supported OCPP subprotocols for the central system. */
-export const OCPP_PROTOCOLS = ['ocpp1.6'] as const;
+/** OCPP 1.6-J WebSocket subprotocol identifier. */
+export const OCPP_PROTOCOL_1_6 = 'ocpp1.6';
+
+/** OCPP 2.0.1 WebSocket subprotocol identifier. */
+export const OCPP_PROTOCOL_2_0_1 = 'ocpp2.0.1';
+
+/**
+ * Supported OCPP subprotocols for the central system, in server preference order.
+ *
+ * `ocpp-rpc` negotiates per client: the first entry here that the charge point also offered
+ * wins, so 1.6-only and 2.0.1-only charge points can connect to the same listener.
+ */
+export const OCPP_PROTOCOLS = [OCPP_PROTOCOL_1_6, OCPP_PROTOCOL_2_0_1] as const;
 
 /** Default heartbeat interval returned during BootNotification acceptance. */
 export const DEFAULT_BOOT_NOTIFICATION_INTERVAL_SECONDS = 300;

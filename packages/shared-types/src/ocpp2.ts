@@ -7,6 +7,7 @@
 
 /** OCPP 2.0.1 actions supported by the central system. */
 export enum Ocpp2Action {
+  AUTHORIZE = 'Authorize',
   BOOT_NOTIFICATION = 'BootNotification',
   HEARTBEAT = 'Heartbeat',
   STATUS_NOTIFICATION = 'StatusNotification',
@@ -147,6 +148,16 @@ export interface Ocpp2IdToken {
     | 'Local'
     | 'MacAddress'
     | 'NoAuthorization';
+}
+
+/** OCPP 2.0.1 Authorize request payload. */
+export interface Ocpp2AuthorizeRequest {
+  readonly idToken: Ocpp2IdToken;
+}
+
+/** OCPP 2.0.1 Authorize response payload. */
+export interface Ocpp2AuthorizeResponse {
+  readonly idTokenInfo: Ocpp2IdTokenInfo;
 }
 
 /** OCPP 2.0.1 Transaction data. */

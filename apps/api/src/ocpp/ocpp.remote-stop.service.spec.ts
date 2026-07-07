@@ -22,7 +22,7 @@ function buildCommand(overrides?: Partial<OcppRemoteStopCommand>): OcppRemoteSto
 }
 
 /** Builds one OCPP server client fixture with typed call and handler mocks. */
-function buildClient(identity: string): OcppClientFixture {
+function buildClient(identity: string, protocol: string = 'ocpp1.6'): OcppClientFixture {
   const callMock = jest.fn<Promise<unknown>, [string, unknown, OcppRpcCallOptions?]>();
   const call = <TResponse>(
     method: string,
@@ -40,7 +40,7 @@ function buildClient(identity: string): OcppClientFixture {
       handshake: { endpoint: '/ocpp' },
       identity,
       on: jest.fn<void, [string, (...args: unknown[]) => void]>(),
-      protocol: 'ocpp1.6',
+      protocol,
       session: {},
     },
   };
@@ -87,6 +87,30 @@ describe('OcppRemoteStopService', () => {
     expect(result).toEqual({
       attemptCount: 1,
       chargePointId: 'CP-001',
+      status: 'Accepted',
+    });
+  });
+
+  it('sends RequestStopTransaction with a string transaction id to ocpp2.0.1 clients', async () => {
+    const fixture = buildClient('CP-201', 'ocpp2.0.1');
+    registryService.registerChargePoint(fixture.client);
+    fixture.callMock.mockResolvedValue({
+      status: 'Accepted',
+    } satisfies OcppRemoteStopTransactionResponse);
+
+    const result = await service.remoteStopTransaction(
+      buildCommand({ chargePointId: 'CP-201', retryDelayMs: 0, timeoutMs: 1500 }),
+    );
+
+    expect(fixture.callMock).toHaveBeenCalledTimes(1);
+    expect(fixture.callMock).toHaveBeenCalledWith(
+      'RequestStopTransaction',
+      { transactionId: '7001' },
+      { callTimeoutMs: 1500 },
+    );
+    expect(result).toEqual({
+      attemptCount: 1,
+      chargePointId: 'CP-201',
       status: 'Accepted',
     });
   });

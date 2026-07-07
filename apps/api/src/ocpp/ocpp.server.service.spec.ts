@@ -7,6 +7,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 import type { OcppServerAuthCallback, OcppServerClient } from './ocpp.server.types';
 import type { OcppChargePointRegistration } from './ocpp.registry.service';
 import type { OcppRoutingService } from './ocpp.routing.service';
+import type { Ocpp2RoutingService } from './ocpp2.routing.service';
 import type {
   OcppServerFactory,
   OcppServerFactoryOptions,
@@ -45,6 +46,10 @@ interface OcppServerFactoryMock extends Pick<OcppServerFactory, 'createServer' |
 }
 
 interface OcppRoutingServiceMock extends Pick<OcppRoutingService, 'attachClientHandlers'> {
+  readonly attachClientHandlers: jest.Mock<void, [OcppServerClient]>;
+}
+
+interface Ocpp2RoutingServiceMock extends Pick<Ocpp2RoutingService, 'attachClientHandlers'> {
   readonly attachClientHandlers: jest.Mock<void, [OcppServerClient]>;
 }
 
@@ -107,6 +112,7 @@ describe('OcppServerService', () => {
   let prismaMock: PrismaServiceMock;
   let registryMock: OcppRegistryServiceMock;
   let routingMock: OcppRoutingServiceMock;
+  let ocpp2RoutingMock: Ocpp2RoutingServiceMock;
   let serverMock: OcppServerMock;
   let service: OcppServerService;
   let tlsServerMock: TlsServerMock;
@@ -144,6 +150,9 @@ describe('OcppServerService', () => {
     routingMock = {
       attachClientHandlers: jest.fn<void, [OcppServerClient]>(),
     };
+    ocpp2RoutingMock = {
+      attachClientHandlers: jest.fn<void, [OcppServerClient]>(),
+    };
     registryMock = {
       registerChargePoint: jest
         .fn<OcppChargePointRegistration, [OcppServerClient, Date?]>()
@@ -157,6 +166,7 @@ describe('OcppServerService', () => {
     };
     service = new OcppServerService(
       routingMock as unknown as OcppRoutingService,
+      ocpp2RoutingMock as unknown as Ocpp2RoutingService,
       registryMock as unknown as OcppRegistryService,
       factoryMock as unknown as OcppServerFactory,
       prismaMock as unknown as PrismaService,
@@ -183,7 +193,7 @@ describe('OcppServerService', () => {
     await service.onModuleInit();
 
     expect(factoryMock.createServer).toHaveBeenCalledWith({
-      protocols: ['ocpp1.6'],
+      protocols: ['ocpp1.6', 'ocpp2.0.1'],
       strictMode: true,
     });
     expect(serverMock.listen).toHaveBeenCalledWith(9220, '0.0.0.0');
@@ -204,7 +214,8 @@ describe('OcppServerService', () => {
 
     const [acceptedSession, acceptedProtocol] = accept.mock.calls[0] ?? [undefined, undefined];
 
-    expect(acceptedProtocol).toBe('ocpp1.6');
+    // No explicit protocol: ocpp-rpc negotiates per client from the server preference order.
+    expect(acceptedProtocol).toBeUndefined();
     expect(typeof acceptedSession?.connectedAt).toBe('string');
     expect(reject).toHaveBeenCalledWith(401, 'Charge point identity is required');
   });
@@ -292,7 +303,30 @@ describe('OcppServerService', () => {
 
     expect(registryMock.registerChargePoint).toHaveBeenCalledWith(client);
     expect(routingMock.attachClientHandlers).toHaveBeenCalledWith(client);
+    expect(ocpp2RoutingMock.attachClientHandlers).not.toHaveBeenCalled();
     expect(registryMock.unregisterChargePoint).toHaveBeenCalledWith('CP-001');
+  });
+
+  it('routes clients that negotiated ocpp2.0.1 through the 2.0.1 action router', async () => {
+    await service.onModuleInit();
+
+    const client: OcppServerClient = {
+      handle: jest.fn<
+        void,
+        [string | ((...args: unknown[]) => unknown), ((...args: unknown[]) => unknown)?]
+      >(),
+      handshake: { endpoint: '/ocpp' },
+      identity: 'CP-201',
+      on: jest.fn<void, [string, (...args: unknown[]) => void]>(),
+      protocol: 'ocpp2.0.1',
+      session: {},
+    };
+
+    serverEventListeners.get('client')?.(client);
+
+    expect(registryMock.registerChargePoint).toHaveBeenCalledWith(client);
+    expect(ocpp2RoutingMock.attachClientHandlers).toHaveBeenCalledWith(client);
+    expect(routingMock.attachClientHandlers).not.toHaveBeenCalled();
   });
 
   it('looks up ACTIVE sessions for the charge point after a disconnect', async () => {

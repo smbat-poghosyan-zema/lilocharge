@@ -1,9 +1,10 @@
 import type {
+  Ocpp2RequestStopTransactionRequest,
   OcppRemoteStopTransactionRequest,
   OcppRemoteStopTransactionResponse,
   OcppRemoteStopTransactionResponseStatus,
 } from '@lilocharge/shared-types';
-import { OcppAction } from '@lilocharge/shared-types';
+import { Ocpp2Action, OcppAction } from '@lilocharge/shared-types';
 import {
   BadRequestException,
   Injectable,
@@ -12,6 +13,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 
+import { OCPP_PROTOCOL_2_0_1 } from './ocpp.constants';
 import { OcppRegistryService } from './ocpp.registry.service';
 import type { OcppRpcCallOptions, OcppServerClient } from './ocpp.server.types';
 
@@ -73,17 +75,25 @@ export class OcppRemoteStopService {
       DEFAULT_REMOTE_STOP_TIMEOUT_MS,
       'timeoutMs',
     );
+    // The wire command depends on the negotiated subprotocol: 1.6 clients get
+    // RemoteStopTransaction with an integer transactionId, 2.0.1 clients get
+    // RequestStopTransaction with the same transaction id serialized as a string. Known
+    // limitation: the API-facing command payload is integer-based, so 2.0.1 transactions whose
+    // station-assigned id is not a positive integer cannot be addressed through this path (the
+    // sessions API already skips dispatch for them and finalizes server-side).
+    const isOcpp2Client = client.protocol === OCPP_PROTOCOL_2_0_1;
+    const wireAction: string = isOcpp2Client
+      ? Ocpp2Action.REQUEST_STOP_TRANSACTION
+      : OcppAction.REMOTE_STOP_TRANSACTION;
+    const wirePayload: OcppRemoteStopTransactionRequest | Ocpp2RequestStopTransactionRequest =
+      isOcpp2Client ? { transactionId: String(command.payload.transactionId) } : command.payload;
     let lastError: unknown;
 
     for (let attemptCount = 1; attemptCount <= maxAttempts; attemptCount += 1) {
       try {
-        const response = await call<OcppRemoteStopTransactionResponse>(
-          OcppAction.REMOTE_STOP_TRANSACTION,
-          command.payload,
-          {
-            callTimeoutMs: timeoutMs,
-          },
-        );
+        const response = await call<OcppRemoteStopTransactionResponse>(wireAction, wirePayload, {
+          callTimeoutMs: timeoutMs,
+        });
         const remoteStopResponse = parseRemoteStopResponse(response);
 
         if (remoteStopResponse === null) {

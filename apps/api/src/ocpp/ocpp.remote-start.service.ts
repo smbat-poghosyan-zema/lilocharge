@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 
 import type {
+  Ocpp2RequestStartTransactionRequest,
   OcppRemoteStartTransactionRequest,
   OcppRemoteStartTransactionResponse,
   OcppRemoteStartTransactionResponseStatus,
 } from '@lilocharge/shared-types';
-import { OcppAction } from '@lilocharge/shared-types';
+import { Ocpp2Action, OcppAction } from '@lilocharge/shared-types';
 import {
   BadRequestException,
   Injectable,
@@ -16,6 +17,7 @@ import {
 } from '@nestjs/common';
 
 import { RedisService } from '../redis/redis.service';
+import { OCPP_PROTOCOL_2_0_1 } from './ocpp.constants';
 import { OcppRegistryService } from './ocpp.registry.service';
 import type { OcppRpcCallOptions, OcppServerClient } from './ocpp.server.types';
 
@@ -102,6 +104,7 @@ export class OcppRemoteStartService {
   private readonly logger: Logger = new Logger(OcppRemoteStartService.name);
   private readonly trackingStore: OcppRemoteStartTrackingStore;
   private nextSequence: number = Date.now();
+  private nextRemoteStartId: number = Math.max(1, Math.floor(Date.now() / MILLISECONDS_PER_SECOND));
 
   constructor(
     private readonly registryService: OcppRegistryService,
@@ -154,17 +157,24 @@ export class OcppRemoteStartService {
       DEFAULT_TRANSACTION_TRACKING_TTL_MS,
       'trackingTtlMs',
     );
+    // The wire command depends on the subprotocol the charge point negotiated: 1.6 clients get
+    // RemoteStartTransaction, 2.0.1 clients get RequestStartTransaction with an idToken wrapper.
+    // API callers keep passing the protocol-neutral {connectorId, idTag} payload either way.
+    const isOcpp2Client = client.protocol === OCPP_PROTOCOL_2_0_1;
+    const wireAction: string = isOcpp2Client
+      ? Ocpp2Action.REQUEST_START_TRANSACTION
+      : OcppAction.REMOTE_START_TRANSACTION;
+    const wirePayload: OcppRemoteStartTransactionRequest | Ocpp2RequestStartTransactionRequest =
+      isOcpp2Client
+        ? buildOcpp2RequestStartPayload(command.payload, this.allocateRemoteStartId())
+        : command.payload;
     let lastError: unknown;
 
     for (let attemptCount = 1; attemptCount <= maxAttempts; attemptCount += 1) {
       try {
-        const response = await call<OcppRemoteStartTransactionResponse>(
-          OcppAction.REMOTE_START_TRANSACTION,
-          command.payload,
-          {
-            callTimeoutMs: timeoutMs,
-          },
-        );
+        const response = await call<OcppRemoteStartTransactionResponse>(wireAction, wirePayload, {
+          callTimeoutMs: timeoutMs,
+        });
         const remoteStartResponse = parseRemoteStartResponse(response);
 
         if (remoteStartResponse === null) {
@@ -371,6 +381,29 @@ export class OcppRemoteStartService {
 
     return this.nextSequence;
   }
+
+  /** Allocates one positive integer remoteStartId for 2.0.1 RequestStartTransaction commands. */
+  private allocateRemoteStartId(): number {
+    const allocated = this.nextRemoteStartId;
+    this.nextRemoteStartId += 1;
+
+    return allocated;
+  }
+}
+
+/** Builds one OCPP 2.0.1 RequestStartTransaction wire payload from the protocol-neutral command. */
+function buildOcpp2RequestStartPayload(
+  payload: OcppRemoteStartTransactionRequest,
+  remoteStartId: number,
+): Ocpp2RequestStartTransactionRequest {
+  return {
+    evseId: payload.connectorId,
+    idToken: {
+      idToken: payload.idTag,
+      type: 'Central',
+    },
+    remoteStartId,
+  };
 }
 
 /** In-memory tracking store used when Redis is unavailable (unit tests, degraded startup). */

@@ -15,6 +15,8 @@ import { OcppServerFactory } from './ocpp.server.factory';
 import { OcppServerService } from './ocpp.server.service';
 import { StationStatusBroadcastService } from './ocpp.status-broadcast.service';
 import { OcppTransactionsService } from './ocpp.transactions.service';
+import { Ocpp2RoutingService } from './ocpp2.routing.service';
+import { Ocpp2TransactionsService } from './ocpp2.transactions.service';
 
 /** Feature module providing OCPP central-system server, routing, and connection registry services. */
 @Module({
@@ -34,6 +36,8 @@ import { OcppTransactionsService } from './ocpp.transactions.service';
     OcppServerFactory,
     OcppRegistryService,
     OcppRoutingService,
+    Ocpp2RoutingService,
+    Ocpp2TransactionsService,
     OcppServerService,
     StationStatusBroadcastService,
     OcppTransactionsService,
@@ -45,6 +49,8 @@ import { OcppTransactionsService } from './ocpp.transactions.service';
     OcppRemoteStopService,
     OcppRegistryService,
     OcppRoutingService,
+    Ocpp2RoutingService,
+    Ocpp2TransactionsService,
     OcppServerService,
     StationStatusBroadcastService,
     OcppTransactionsService,

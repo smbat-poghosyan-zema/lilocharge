@@ -91,6 +91,8 @@ export type {
 export { Ocpp2Action } from './ocpp2';
 export type {
   Ocpp2AuthorizationStatus,
+  Ocpp2AuthorizeRequest,
+  Ocpp2AuthorizeResponse,
   Ocpp2BootNotificationRequest,
   Ocpp2BootNotificationResponse,
   Ocpp2BootReason,

@@ -55,12 +55,28 @@ export class OcppMeterValuesService {
       return 0;
     }
 
-    const createManyData = buildMeterValueCreateManyData(sessionId, payload.meterValue);
-    if (createManyData.length === 0) {
+    const insertedCount = await this.ingestSessionMeterValues(sessionId, payload.meterValue);
+    if (insertedCount === 0) {
       this.logger.warn(
         `MeterValues ignored for ${chargePointId} connector ${payload.connectorId}: no valid samples found`,
       );
+    }
 
+    return insertedCount;
+  }
+
+  /**
+   * Inserts parsed meter samples for one already-resolved session into the hypertable.
+   *
+   * Used directly by the OCPP 2.0.1 TransactionEvent path, where the session is resolved from
+   * the string transaction id instead of the 1.6 connectorId/transactionId pair.
+   */
+  public async ingestSessionMeterValues(
+    sessionId: string,
+    meterValues: readonly OcppMeterValue[],
+  ): Promise<number> {
+    const createManyData = buildMeterValueCreateManyData(sessionId, meterValues);
+    if (createManyData.length === 0) {
       return 0;
     }
 

@@ -10,10 +10,12 @@ import {
   DEFAULT_OCPP_HOST,
   DEFAULT_OCPP_PORT,
   DISABLED_FLAG_VALUES,
+  OCPP_PROTOCOL_2_0_1,
   OCPP_PROTOCOLS,
 } from './ocpp.constants';
 import { OcppRegistryService } from './ocpp.registry.service';
 import { OcppRoutingService } from './ocpp.routing.service';
+import { Ocpp2RoutingService } from './ocpp2.routing.service';
 import { OcppServerFactory } from './ocpp.server.factory';
 import type { OcppServer, OcppServerClient } from './ocpp.server.types';
 
@@ -91,7 +93,7 @@ export function resolveOcppTlsPaths(
   return { certPath, keyPath };
 }
 
-/** Lifecycle-managed central-system WebSocket server for OCPP 1.6-J charge point connectivity. */
+/** Lifecycle-managed central-system WebSocket server for OCPP 1.6-J and 2.0.1 charge points. */
 @Injectable()
 export class OcppServerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger: Logger = new Logger(OcppServerService.name);
@@ -100,6 +102,7 @@ export class OcppServerService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly routingService: OcppRoutingService,
+    private readonly ocpp2RoutingService: Ocpp2RoutingService,
     private readonly registryService: OcppRegistryService,
     private readonly serverFactory: OcppServerFactory,
     private readonly prismaService: PrismaService,
@@ -150,13 +153,13 @@ export class OcppServerService implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
-      accept(
-        {
-          connectedAt: new Date().toISOString(),
-          endpoint: handshake.endpoint,
-        },
-        OCPP_PROTOCOLS[0],
-      );
+      // No explicit protocol is passed: `ocpp-rpc` then negotiates the first subprotocol in
+      // OCPP_PROTOCOLS (server preference order) that the charge point also offered, so 1.6
+      // and 2.0.1 clients are accepted on the same listener.
+      accept({
+        connectedAt: new Date().toISOString(),
+        endpoint: handshake.endpoint,
+      });
     });
     this.rpcServer.on('client', (client) => {
       this.onClientConnected(client as OcppServerClient);
@@ -238,11 +241,25 @@ export class OcppServerService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** Handles accepted OCPP client connections by registering and wiring routing callbacks. */
+  /**
+   * Handles accepted OCPP client connections by registering and wiring routing callbacks.
+   *
+   * The action router is selected per client from the negotiated WebSocket subprotocol:
+   * `ocpp2.0.1` clients get the TransactionEvent-based 2.0.1 router, everything else falls back
+   * to the 1.6-J router (the default and first-preference subprotocol).
+   */
   private onClientConnected(client: OcppServerClient): void {
     const registration = this.registryService.registerChargePoint(client);
-    this.routingService.attachClientHandlers(client);
-    this.logger.log(`Charge point connected: ${registration.identity}`);
+
+    if (client.protocol === OCPP_PROTOCOL_2_0_1) {
+      this.ocpp2RoutingService.attachClientHandlers(client);
+    } else {
+      this.routingService.attachClientHandlers(client);
+    }
+
+    this.logger.log(
+      `Charge point connected: ${registration.identity} (${client.protocol ?? 'unknown protocol'})`,
+    );
 
     const unregisterClient = (): void => {
       const wasRemoved = this.registryService.unregisterChargePoint(registration.identity);
