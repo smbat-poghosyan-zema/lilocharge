@@ -116,23 +116,20 @@ Every line of code must be:
 
 ## Environment Variables
 
-Backend (apps/api/.env):
+Backend: the authoritative, annotated inventory is `apps/api/.env.example` (~45 vars:
+core, auth — `JWT_SECRET` AND `REFRESH_TOKEN_SECRET` are required or login 500s —
+SMS/Twilio OTP delivery, ArCa/Idram incl. webhook secrets, Apple/Google Pay token
+exchange, S3 uploads, FCM service-account credentials, OCPP auth/TLS, observability).
+Keep that file in sync when introducing a new `process.env.*` read, and mirror
+production-required vars into `infrastructure/k8s/base/{configmap,secrets}.yaml`.
 
-```
-DATABASE_URL=postgresql://...
-REDIS_URL=redis://...
-JWT_SECRET=...
-ARCA_MERCHANT_ID=...
-IDRAM_API_KEY=...
-MAPBOX_TOKEN=...
-FCM_SERVER_KEY=...
-```
-
-Mobile (apps/mobile/.env):
+Mobile (inlined at bundle time — set per EAS profile, not at runtime):
 
 ```
 EXPO_PUBLIC_API_URL=http://localhost:3000
 EXPO_PUBLIC_MAPBOX_TOKEN=...
+EXPO_PUBLIC_PUSH_ENABLED=1          # push bootstrap is off by default
+EXPO_PUBLIC_FORCE_MOCK_MAP=1        # Expo Go escape hatch only — never in builds
 ```
 
 ## Error Handling
