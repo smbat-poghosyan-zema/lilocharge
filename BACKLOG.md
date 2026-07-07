@@ -6,6 +6,10 @@ Derived from [AUDIT-REPORT.md](AUDIT-REPORT.md) (2026-07-02). Every NOT DONE and
 **Effort:** S ≤ 1 day · M = 1–5 days · L > 1 week.
 **Category:** fix (defect in existing code) / refactor / implement (missing feature) / test.
 
+> **Round 2 (2026-07-07):** an independent re-audit verified Rounds P0-P2 as genuinely done
+> and opened a new, smaller round — see **Round 2** at the bottom of this file (R1-R23;
+> eight ship-blockers R1-R8 in the money path, device readiness, and deployment config).
+
 > **Status update (2026-07-07):** All P2 tasks (#29-#37) are now implemented too — the backlog is
 > closed. Highlights: Prometheus/OTel MeterProvider actually registered (#29); **OCPP 2.0.1 core
 > charging profile implemented** — subprotocol negotiation, BootNotification/Heartbeat/
@@ -104,3 +108,50 @@ Derived from [AUDIT-REPORT.md](AUDIT-REPORT.md) (2026-07-02). Every NOT DONE and
 2. **Charging core (P0 #1, #2, #3, #4, #6, #8):** after this, a user can actually find a real station and charge a car.
 3. **Money path (P1 #9–#12):** payments become real and auditable.
 4. **Hardening + product completeness (P1 #15–#28)**, then P2.
+
+---
+
+# Round 2 — from the 2026-07-07 re-audit
+
+Independent re-verification (fresh-eyes API/mobile/config audits — see the re-audit
+section of [AUDIT-REPORT.md](AUDIT-REPORT.md)) confirmed Rounds P0-P2 are genuinely done
+and surfaced a new, much smaller round. Priorities: **R-P0** = ship-blocker (money path
+or first-hour device experience), **R-P1** = pre-production hardening, **R-P2** = debt.
+
+## R-P0 — ship-blockers
+
+| # | Task | Area | Effort |
+|---|---|---|---|
+| R1 | **Link charger-inbound StartTransaction/TransactionEvent(Started) to the API-created session** instead of creating a duplicate: consume the (currently write-only) Redis remote-start tracking to attach `transactionId` to the AUTHORIZED/ACTIVE API session; only create a fresh session when no tracked remote start matches. Add a mixed-flow e2e (API start → charger StartTransaction → meter values → API stop sends RemoteStop → single session billed correctly). Today the flagship QR flow double-books, cannot stop the charger, refunds the pre-auth, and completes the duplicate unbilled. | api/ocpp+sessions | M |
+| R2 | **Extend the one-session-per-connector guard to the OCPP creation paths** (`createActiveOcppSession`, used by 1.6 StartTransaction and 2.0.1 Started) — currently 1 of 3 paths guarded. | api/sessions | S |
+| R3 | **Unify stop-path settlement**: `finalizeStoppedSession` (1.6 Stop + 2.0.1 Ended) must apply the zero-energy-refund rule and the wallet-deduct branch that only the API stop path has — wallet-default users are currently never billed on charger-initiated stops, and 0-kWh charger stops bill time/session fees. | api/ocpp+sessions | M |
+| R4 | **Wallet/payment atomicity batch**: conditional-update or SERIALIZABLE wallet balance writes (lost-update today); persist-then-reuse idempotency for top-up and session pre-auth (currently minted only after gateway success → retry double-charges); conditional status transitions so webhooks cannot race the synchronous capture; deduct BEFORE completing wallet sessions (or create a receivable). Unique index on `wallet_transactions.idempotency_key`. | api/wallet+payments | M |
+| R5 | **Mobile receipt fix**: authenticated fetch + share/save instead of bare `Linking.openURL` (always 401 today); hide the button for non-COMPLETED sessions. | mobile/sessions | S |
+| R6 | **Monitoring socket fixes**: use `getApiBaseUrl()` in `session-monitoring-client.ts` (connects to localhost on devices — one line) and add auth to the API-side monitoring gateway (currently anyone can subscribe to any session's live metrics). | mobile+api | S |
+| R7 | **Token refresh + session-context subscription**: use the persisted refresh token on 401/expiry (`/auth/refresh` is never called today) and make `OnboardingSessionProvider` subscribe to storage so a wiped session propagates — users currently break silently one hour after login. | mobile/auth | M |
+| R8 | **Production config completion**: add to K8s manifests + deploy script (and prune ghosts `MAPBOX_TOKEN`/`FCM_SERVER_KEY`): `REFRESH_TOKEN_SECRET` (login 500s), `ARCA/IDRAM_WEBHOOK_SECRET` (callbacks 503), SMS/Twilio vars (OTP silently skipped), FCM service-account vars (push no-ops), uploads S3 vars (503), `CORS_ORIGIN` (+ pick one CORS layer). Reference: `apps/api/.env.example`. | infra/k8s | M |
+
+## R-P1 — pre-production hardening
+
+| # | Task | Area | Effort |
+|---|---|---|---|
+| R9 | OCPP ingress path: route/LB for port 9220 with session affinity + WebSocket-appropriate timeouts (unreachable from outside the cluster today; 60s proxy-read-timeout would drop sockets). | infra/k8s | M |
+| R10 | Migration job: pin/ship the prisma CLI in the image (job currently downloads unpinned latest at runtime — v6 vs client v5); document `migrate resolve --applied` baseline for pre-existing DBs in DEPLOYMENT.md. | infra | S |
+| R11 | Fix `backend.yml` deploy job condition (`secrets.*` is invalid in job-level `if` — workflow errors on main); keep `workflows.spec.ts` in sync. | ci | S |
+| R12 | Mobile release readiness: bundle ids, permission plugins + localized usage strings (camera/photos/location/notifications), `@rnmapbox/maps` download token, per-profile `EXPO_PUBLIC_*` env in `eas.json`. | mobile/config | M |
+| R13 | Push lifecycle: re-run bootstrap after login (fresh installs register no token until restart) and unregister the token on logout. | mobile/notifications | S |
+| R14 | Logout sweep: clear favorites storage, the api-cache MMKV (previous user's wallet/profile data), and the push token (uses R13). | mobile/auth | S |
+| R15 | Onboarding payment step: hand off to the real payment-methods flow (ARCA/IDRAM selections are inert; Pay bridges to nonexistent native modules) or clearly mark it skippable-informational. | mobile/onboarding | S |
+| R16 | Move tokens to `expo-secure-store` or encrypted MMKV (plaintext today, 7-day refresh token). | mobile/auth | S |
+| R17 | Support string transaction ids for 2.0.1 remote stop (station-assigned UUID-like ids can't be remote-stopped today). | api/ocpp | S |
+| R18 | Multi-replica correctness: move OCPP transaction-id/sequence allocation off in-memory wall-clock counters (collides across HPA replicas); consider prod fail-fast when Redis is absent and when `OCPP_AUTH_MODE=open`. | api/ocpp | M |
+
+## R-P2 — debt and polish
+
+| # | Task | Area | Effort |
+|---|---|---|---|
+| R19 | Dedupe cross-agent helpers: single `buildCandidateEvseIds` (×3 + hand-synced inverse), shared `resolveErrorMessage` (×16), mobile `formatDramAmount` (×3) and `normalizeRouteParam` (×6) into shared homes. | api+mobile | S |
+| R20 | Decide wallet-refund reachability (`refundBalance` + REFUND type have zero producers) and remove or wire; delete mobile dead code (image-optimization, performance-hooks, expo-status-bar dep, unused cache helpers after R14 consumes them). | api+mobile | S |
+| R21 | OTP SMS localization (English-only in an Armenian-first product; DTO carries no language). | api/auth+sms | S |
+| R22 | UX polish: FAILED/CANCELLED summary badge styled as success; sign-in redirect loses the scanned connector; remove the debug API-URL footer from profile; i18n the lazy-load error boundary string; drop the 1 unused i18n key. | mobile | S |
+| R23 | Ops polish: HPA/resource tuning per docs/load-test-results.md (request≈1000m vs current 250m); note SMTP is blocked by the 443-only egress policy; presign content-type constraint; webhook 404 → 200-ack-and-log; `GetWalletTransactionsDto` missing `@Max`; backup-restore timescaledb pre/post_restore documentation. | infra+api | S |

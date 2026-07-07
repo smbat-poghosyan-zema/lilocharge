@@ -33,6 +33,19 @@ short pointer to the current evidence.
   p95 < 200 ms up to ~100 concurrent connections; 1,500 concurrent WS
   connections held. See load-test-results.md for caveats.
 
+## Re-audit Round 2 (2026-07-07) — pre-launch blockers
+
+An independent re-verification round (AUDIT-REPORT.md, re-audit section) confirmed the
+backlog was genuinely executed and found a smaller set of defects concentrated at the
+seams between parallel workstreams. **R1–R8 in BACKLOG.md Round 2 are launch blockers**:
+charger-inbound StartTransaction is not linked to API-created sessions (double-booked
+sessions, unstoppable charger, wrongly refunded pre-auths on the flagship QR flow),
+stop-path settlement and the connector-concurrency guard cover only the API path,
+wallet writes race, the mobile receipt link always 401s, the monitoring socket targets
+localhost on devices, tokens are never refreshed (users break after 1 hour), and the
+K8s manifests are missing ~6 groups of required env vars (login 500s, callbacks 503,
+OTP silently skipped as deployed). Fix these before any launch activity below.
+
 ## Genuinely remaining go-live items
 
 These are environment-dependent and cannot be closed from inside the repo:

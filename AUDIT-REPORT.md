@@ -1,4 +1,125 @@
-# LiloCharge — Codebase Completeness Audit
+# LiloCharge — Codebase Audits
+
+Two audit rounds live in this file: the **2026-07-07 re-audit** (current state, below)
+and the original **2026-07-02 completeness audit** (historical baseline, further down —
+kept verbatim; everything it classified NOT DONE / NEEDS REFACTORING has since been
+implemented and independently re-verified).
+
+---
+
+# Re-Audit — 2026-07-07 (current state)
+
+**Scope:** independent verification round after the full P0/P1/P2 backlog implementation
+(~25 commits by parallel agent workstreams). Three fresh-eyes read-only audits: API deep
+verification, mobile deep verification, and configuration/deployment coherence. "Done"
+claims were spot-checked in code, not trusted.
+**Companion:** [BACKLOG.md](BACKLOG.md) Round 2 — every NEEDS-ADJUSTMENT finding below
+maps to a task there.
+
+## Verdict in one paragraph
+
+The backlog was genuinely executed, not just marked done — every P0/P1/P2 headline
+(baseline migration, OCPP command wiring + hardening + 2.0.1 core, SMS OTP, signed
+webhooks, idempotency, helmet/readiness, real Prometheus, charging/wallet/community UIs,
+i18n 353/353/353 key parity, Detox flows, CI gates) was verified real, with high and
+uniform code quality inside each module. The remaining defects cluster exactly where
+parallel workstreams meet: the API-start and charger-start session worlds were each
+finished but never joined, wallet/gateway settlement diverges per stop path, idempotency
+persist-then-reuse was applied by one agent but not the others, and the deployment
+config surface never learned about ~45 new env vars. **Ship-blockers exist in the money
+path (R1–R4) and device readiness (R5–R7); all are small and well-localized relative to
+the work already done.**
+
+## Test/build state (verified 2026-07-07)
+
+API: 84 unit suites / 678 tests + 7 e2e suites / 63 tests green (coverage floors
+enforced: 85% statements). Mobile: 68 suites / 529 tests green (86% floor). tsc + eslint
+clean everywhere; `prisma migrate deploy` verified against a fresh DB; load tests
+executed (docs/load-test-results.md).
+
+## A — DONE-VERIFIED (highlights; file:line evidence in the agent reports)
+
+- Sessions API ↔ OCPP: RemoteStart before activation with 409 on offline/reject; stop
+  computes real cost (no more 0-billing). Register-delta billing (`meterStop − meterStart`)
+  authoritative on OCPP stops.
+- OCPP: auth modes with fail-fast config + timing-safe compares; wss support; Redis-backed
+  idTag (20-char protocol-conformant tokens) and remote-start tracking; Authorize in both
+  protocols; **2.0.1 core profile real** (negotiation, TransactionEvent lifecycle,
+  protocol-aware remote commands). idTag-TTL-vs-long-sessions is a non-issue (stop
+  resolves by transactionId).
+- Payments: HMAC webhooks (constant-time, forward-only transitions, replay-safe acks);
+  capture/refund idempotency persisted-then-reused; wallet/gateway separation enforced;
+  pseudo-token fallback removed (503 instead).
+- Guard coverage complete: global JwtAuthGuard + Throttler; every user-scoped controller
+  Idor-guarded; only justified `@Public` surfaces. Uploads SigV4 spot-checked correct.
+- Mobile: every route reachable (no dead ends); QR flow coherent end-to-end including
+  terminal-status redirects; all 10 API modules identically wired; caching is
+  fallback-only (not wrong for volatile data); favorites sync sound; i18n parity perfect
+  (353 keys × 3 locales, 1 unused key); Detox testIDs all real.
+- Hygiene: 0 TODO/FIXME in product code; production casts down to 1 documented instance.
+
+## B — NEEDS ADJUSTMENT (see BACKLOG.md Round 2 for the task list)
+
+**Money path (ship-blockers):**
+1. **API-started sessions and the charger's answering StartTransaction are never
+   linked** — a second ACTIVE session is created; the API session never gets a
+   transactionId (so stop skips RemoteStop → charger keeps delivering), meter values
+   attach to the duplicate, the API session finalizes at 0 kWh → **pre-auth refunded
+   while real charging happened**; the duplicate completes unbilled. The Redis
+   correlation tracking built for this is write-only (zero production readers).
+2. One-session-per-connector guard covers only the API creation path (1 of 3);
+   zero-energy auto-refund and wallet settlement cover only the API stop path (1 of 3) —
+   wallet-default users are never billed on charger-initiated stops.
+3. Wallet balance writes are lost-update-prone (read→compute→set at default isolation);
+   top-up and session pre-auth mint idempotency keys only after gateway success
+   (retry double-charges); webhook can race the synchronous capture path.
+4. Wallet stop ordering: session completes (and notifies) before the deduct — an
+   insufficient balance at stop leaves a COMPLETED, unpaid session.
+
+**Device readiness (mobile):**
+5. Receipt download can never work (bare URL via Linking.openURL against a JWT-guarded
+   endpoint → always 401). Monitoring socket connects to `http://localhost:3000` on
+   devices (one-line fix; REST clients use `EXPO_PUBLIC_API_URL`, this one doesn't) —
+   and the API-side monitoring gateway has no auth at all.
+6. The persisted refresh token is never used and the session context never re-reads
+   storage — every user silently breaks one hour after login until cold restart.
+7. Push tokens register only at app launch (fresh-install login registers nothing until
+   restart) and are never unregistered on logout; logout also leaves favorites and the
+   previous user's cached API data (wallet balance, profile) in MMKV. Tokens sit in
+   unencrypted MMKV. Onboarding's payment step is still inert (Pay bridges to
+   nonexistent native modules; ARCA/IDRAM selections do nothing) and doesn't hand off
+   to the real payment-methods flow.
+
+**Deployment config (the K8s deployment as-written would):**
+8. 500 every login (`REFRESH_TOKEN_SECRET` absent), 503 every payment callback (webhook
+   secrets absent), silently skip OTP SMS (SMS vars absent → registration dead), send no
+   pushes (injects legacy `FCM_SERVER_KEY`, never read; needs service-account vars),
+   503 uploads, block browser clients (CORS_ORIGIN unset + double CORS layers).
+9. OCPP port 9220 is unreachable from outside the cluster (no ingress route/LB, no
+   session-affinity annotation, 60s proxy-read-timeout would drop WebSockets anyway).
+   Migration job downloads unpinned latest prisma at runtime (v6 vs client v5).
+   `backend.yml` deploy job uses `secrets.*` in a job-level `if` (workflow errors on main).
+10. Mobile `app.json` is not release-buildable: no bundle ids, no permission plugins/
+    strings for camera/photos/location/notifications, no Mapbox download token, no per-
+    profile `EXPO_PUBLIC_*` env in `eas.json`.
+
+**Cross-agent debt:** evseId candidate builder still ×3 (+hand-maintained inverse);
+`resolveErrorMessage` ×16; mobile `formatDramAmount` ×3 and `normalizeRouteParam` ×6;
+in-memory OCPP transaction-id allocation collides across replicas; wallet refund service
+and several mobile helpers are exported-never-called; 2.0.1 string transaction ids can't
+be remote-stopped.
+
+## C — NICE-TO-HAVE (selection)
+
+Presign content-type constraints; webhook 404→200 acks; `OCPP_AUTH_MODE=open` fail-fast
+in production; OTP SMS localization (English-only today); FAILED session summary styled
+as success; sign-in redirect loses the scanned connector; debug API-URL footer in
+profile; HPA/resource tuning per measured load results; SMTP blocked by the 443-only
+egress policy; dead-code sweep (image-optimization, performance-hooks, expo-status-bar).
+
+---
+
+# Original Completeness Audit — 2026-07-02 (historical baseline)
 
 **Date:** 2026-07-02
 **Scope:** Full monorepo (`apps/api`, `apps/mobile`, `packages/*`, `infrastructure/*`, `docs/*`) compared against the README feature list and the PromptBook build plan (the de-facto PRD — `docs/prd.md` referenced by README and AGENTS.md does not exist).
