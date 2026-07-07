@@ -13,6 +13,11 @@
  * - Message delivery within acceptable latency
  *
  * @module load-tests/websocket-load-test
+ *
+ * CAVEAT: this script approximates socket.io framing over a raw k6 WebSocket
+ * (no full Engine.IO handshake). Validate it against a real deployment before
+ * trusting its numbers; docs/load-test-results.md records measurements taken
+ * with a real socket.io-client connection storm instead.
  */
 
 import ws from 'k6/ws';

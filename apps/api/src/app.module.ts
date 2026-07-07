@@ -25,7 +25,11 @@ import { WalletModule } from './wallet/wallet.module';
 /** Root application module for the LiloCharge API service. */
 @Module({
   imports: [
-    ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
+    // 100 req/min/IP in production; LOADTEST_THROTTLE_LIMIT exists solely so load
+    // generators can exercise real latency instead of measuring 429 rejections.
+    ThrottlerModule.forRoot([
+      { ttl: 60000, limit: Number(process.env.LOADTEST_THROTTLE_LIMIT ?? 100) },
+    ]),
     LoggerModule,
     SentryModule,
     HealthModule,
