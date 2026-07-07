@@ -1,5 +1,11 @@
 # AGENTS.md - LiloCharge AI Agent Instructions
 
+> **Start with [CLAUDE.md](CLAUDE.md)** for the session-tested execution playbook:
+> exact build/test/verify commands, the e2e test-stack recipe, sandboxed-environment
+> workarounds (Prisma engines, no-Docker infra, blocked binary hosts), domain invariants
+> (AMD cents, OCPP identity/idTag/billing rules, i18n three-locale parity), and
+> multi-agent working agreements. This file covers coding standards and conventions.
+
 ## Core Principles
 
 You are building **LiloCharge**, a production-grade EV charging aggregator for Armenia.
