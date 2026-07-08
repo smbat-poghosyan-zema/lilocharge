@@ -1,5 +1,5 @@
 import { ConnectorType, StationStatus } from '@lilocharge/shared-types';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { useAppTranslation } from '../../i18n/use-app-translation';
 
@@ -20,6 +20,11 @@ const AVAILABILITY_FILTER_OPTIONS: readonly StationStatus[] = [
 ];
 
 const POWER_FILTER_STEPS_KW: readonly number[] = [0, 22, 50, 120, 180, 240, 350];
+
+const CHIP_ROW_CONTENT_CLASS = 'pb-1 pr-0.5';
+const CHIP_BASE = 'mr-2 rounded-full border px-2.5 py-1.5 active:opacity-75';
+const CHIP_UNSELECTED = 'border-border bg-neutral-0';
+const CHIP_SELECTED = 'border-primary bg-primary';
 
 /**
  * Station filter payload used by station map query refresh requests.
@@ -51,34 +56,35 @@ export function StationFilters({ filters, operators, onChange }: StationFiltersP
   const hasActiveFilters = hasAnyActiveFilters(filters);
 
   return (
-    <View style={styles.container} testID="station-filter-container">
-      <View style={styles.header}>
-        <Text style={styles.title}>{t('stations.map.filters.title')}</Text>
+    <View
+      className="mb-2.5 w-full rounded-lg border border-border bg-neutral-0/95 p-3"
+      testID="station-filter-container"
+    >
+      <View className="mb-2 flex-row items-center justify-between">
+        <Text className="text-[13px] font-bold text-neutral-900">
+          {t('stations.map.filters.title')}
+        </Text>
         <Pressable
           accessibilityRole="button"
+          className={`rounded-full bg-neutral-200 px-2.5 py-[5px] active:opacity-75 ${
+            hasActiveFilters ? '' : 'opacity-60'
+          }`}
           disabled={!hasActiveFilters}
           onPress={(): void => {
             onChange(buildDefaultStationFilters());
           }}
-          style={({ pressed }) => {
-            return [
-              styles.clearButton,
-              !hasActiveFilters ? styles.clearButtonDisabled : null,
-              pressed ? styles.clearButtonPressed : null,
-            ];
-          }}
           testID="station-filter-clear-button"
         >
-          <Text style={styles.clearButtonText}>{t('stations.map.filters.clear')}</Text>
+          <Text className="text-[11px] font-bold text-neutral-900">
+            {t('stations.map.filters.clear')}
+          </Text>
         </Pressable>
       </View>
 
-      <Text style={styles.sectionLabel}>{t('stations.map.filters.connectorTypesLabel')}</Text>
-      <ScrollView
-        horizontal
-        contentContainerStyle={styles.chipRow}
-        showsHorizontalScrollIndicator={false}
-      >
+      <Text className="mb-1.5 mt-1 text-xs font-bold text-neutral-900">
+        {t('stations.map.filters.connectorTypesLabel')}
+      </Text>
+      <ScrollView horizontal contentContainerClassName={CHIP_ROW_CONTENT_CLASS} showsHorizontalScrollIndicator={false}>
         {CONNECTOR_FILTER_OPTIONS.map((option) => {
           const isSelected = filters.connectorTypes.includes(option);
 
@@ -86,22 +92,18 @@ export function StationFilters({ filters, operators, onChange }: StationFiltersP
             <Pressable
               key={option}
               accessibilityRole="button"
+              className={`${CHIP_BASE} ${isSelected ? CHIP_SELECTED : CHIP_UNSELECTED}`}
               onPress={(): void => {
                 onChange({
                   ...filters,
                   connectorTypes: toggleSelection(filters.connectorTypes, option),
                 });
               }}
-              style={({ pressed }) => {
-                return [
-                  styles.chip,
-                  isSelected ? styles.chipSelected : null,
-                  pressed ? styles.chipPressed : null,
-                ];
-              }}
               testID={`station-filter-connector-${option}`}
             >
-              <Text style={isSelected ? styles.chipTextSelected : styles.chipText}>
+              <Text
+                className={`text-xs font-semibold ${isSelected ? 'text-neutral-0' : 'text-neutral-700'}`}
+              >
                 {t(`onboarding.vehicle.connectorTypes.${option}`)}
               </Text>
             </Pressable>
@@ -109,17 +111,19 @@ export function StationFilters({ filters, operators, onChange }: StationFiltersP
         })}
       </ScrollView>
 
-      <Text style={styles.sectionLabel}>{t('stations.map.filters.powerLabel')}</Text>
-      <Text style={styles.powerValueText}>{resolvePowerLabel(filters.minimumPowerKw, t)}</Text>
-      <View style={styles.powerTrack}>
+      <Text className="mb-1.5 mt-1 text-xs font-bold text-neutral-900">
+        {t('stations.map.filters.powerLabel')}
+      </Text>
+      <Text className="mb-1.5 text-xs font-bold text-neutral-900">
+        {resolvePowerLabel(filters.minimumPowerKw, t)}
+      </Text>
+      <View className="mb-2 h-1 overflow-hidden rounded-full bg-neutral-200">
         <View
-          style={[
-            styles.powerTrackFill,
-            { width: `${resolvePowerProgressPercent(filters.minimumPowerKw)}%` },
-          ]}
+          className="h-full bg-primary"
+          style={{ width: `${resolvePowerProgressPercent(filters.minimumPowerKw)}%` }}
         />
       </View>
-      <View style={styles.powerSteps}>
+      <View className="mb-2.5 flex-row justify-between">
         {POWER_FILTER_STEPS_KW.map((step) => {
           const isSelectedStep =
             step === 0 ? filters.minimumPowerKw === undefined : filters.minimumPowerKw === step;
@@ -128,21 +132,21 @@ export function StationFilters({ filters, operators, onChange }: StationFiltersP
             <Pressable
               key={step}
               accessibilityRole="button"
+              className="flex-1 items-center active:opacity-75"
               onPress={(): void => {
                 onChange({
                   ...filters,
                   minimumPowerKw: step === 0 ? undefined : step,
                 });
               }}
-              style={({ pressed }) => {
-                return [styles.powerStep, pressed ? styles.chipPressed : null];
-              }}
               testID={`station-filter-power-step-${step}`}
             >
               <View
-                style={[styles.powerStepDot, isSelectedStep ? styles.powerStepDotSelected : null]}
+                className={`mb-1 h-3 w-3 rounded-[6px] border ${
+                  isSelectedStep ? 'border-primary bg-primary' : 'border-neutral-400 bg-neutral-200'
+                }`}
               />
-              <Text style={styles.powerStepLabel}>
+              <Text className="text-[10px] font-semibold text-neutral-700">
                 {step === 0 ? t('stations.map.filters.powerAnyShort') : step}
               </Text>
             </Pressable>
@@ -150,12 +154,10 @@ export function StationFilters({ filters, operators, onChange }: StationFiltersP
         })}
       </View>
 
-      <Text style={styles.sectionLabel}>{t('stations.map.filters.availabilityLabel')}</Text>
-      <ScrollView
-        horizontal
-        contentContainerStyle={styles.chipRow}
-        showsHorizontalScrollIndicator={false}
-      >
+      <Text className="mb-1.5 mt-1 text-xs font-bold text-neutral-900">
+        {t('stations.map.filters.availabilityLabel')}
+      </Text>
+      <ScrollView horizontal contentContainerClassName={CHIP_ROW_CONTENT_CLASS} showsHorizontalScrollIndicator={false}>
         {AVAILABILITY_FILTER_OPTIONS.map((status) => {
           const isSelected = filters.availabilityStatuses.includes(status);
 
@@ -163,22 +165,18 @@ export function StationFilters({ filters, operators, onChange }: StationFiltersP
             <Pressable
               key={status}
               accessibilityRole="button"
+              className={`${CHIP_BASE} ${isSelected ? CHIP_SELECTED : CHIP_UNSELECTED}`}
               onPress={(): void => {
                 onChange({
                   ...filters,
                   availabilityStatuses: toggleSelection(filters.availabilityStatuses, status),
                 });
               }}
-              style={({ pressed }) => {
-                return [
-                  styles.chip,
-                  isSelected ? styles.chipSelected : null,
-                  pressed ? styles.chipPressed : null,
-                ];
-              }}
               testID={`station-filter-availability-${status}`}
             >
-              <Text style={isSelected ? styles.chipTextSelected : styles.chipText}>
+              <Text
+                className={`text-xs font-semibold ${isSelected ? 'text-neutral-0' : 'text-neutral-700'}`}
+              >
                 {t(`stations.map.sheet.status.${status.toLowerCase()}`)}
               </Text>
             </Pressable>
@@ -186,12 +184,10 @@ export function StationFilters({ filters, operators, onChange }: StationFiltersP
         })}
       </ScrollView>
 
-      <Text style={styles.sectionLabel}>{t('stations.map.filters.operatorsLabel')}</Text>
-      <ScrollView
-        horizontal
-        contentContainerStyle={styles.chipRow}
-        showsHorizontalScrollIndicator={false}
-      >
+      <Text className="mb-1.5 mt-1 text-xs font-bold text-neutral-900">
+        {t('stations.map.filters.operatorsLabel')}
+      </Text>
+      <ScrollView horizontal contentContainerClassName={CHIP_ROW_CONTENT_CLASS} showsHorizontalScrollIndicator={false}>
         {operators.map((operator) => {
           const isSelected = filters.operatorIds.includes(operator.id);
 
@@ -199,22 +195,18 @@ export function StationFilters({ filters, operators, onChange }: StationFiltersP
             <Pressable
               key={operator.id}
               accessibilityRole="button"
+              className={`${CHIP_BASE} ${isSelected ? CHIP_SELECTED : CHIP_UNSELECTED}`}
               onPress={(): void => {
                 onChange({
                   ...filters,
                   operatorIds: toggleSelection(filters.operatorIds, operator.id),
                 });
               }}
-              style={({ pressed }) => {
-                return [
-                  styles.chip,
-                  isSelected ? styles.chipSelected : null,
-                  pressed ? styles.chipPressed : null,
-                ];
-              }}
               testID={`station-filter-operator-${operator.id}`}
             >
-              <Text style={isSelected ? styles.chipTextSelected : styles.chipText}>
+              <Text
+                className={`text-xs font-semibold ${isSelected ? 'text-neutral-0' : 'text-neutral-700'}`}
+              >
                 {operator.name}
               </Text>
             </Pressable>
@@ -292,124 +284,3 @@ function resolvePowerProgressPercent(minimumPowerKw: number | undefined): number
 
   return (selectedStepIndex / (POWER_FILTER_STEPS_KW.length - 1)) * 100;
 }
-
-const styles = StyleSheet.create({
-  chip: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#CBD5E1',
-    borderRadius: 999,
-    borderWidth: 1,
-    marginRight: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  chipPressed: {
-    opacity: 0.75,
-  },
-  chipRow: {
-    paddingBottom: 4,
-    paddingRight: 2,
-  },
-  chipSelected: {
-    backgroundColor: '#166534',
-    borderColor: '#166534',
-  },
-  chipText: {
-    color: '#334155',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  chipTextSelected: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  clearButton: {
-    backgroundColor: '#E2E8F0',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  clearButtonDisabled: {
-    opacity: 0.6,
-  },
-  clearButtonPressed: {
-    opacity: 0.75,
-  },
-  clearButtonText: {
-    color: '#0F172A',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  container: {
-    backgroundColor: 'rgba(255,255,255,0.96)',
-    borderColor: '#E2E8F0',
-    borderRadius: 14,
-    borderWidth: 1,
-    marginBottom: 10,
-    padding: 12,
-    width: '100%',
-  },
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  powerStep: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  powerStepDot: {
-    backgroundColor: '#CBD5E1',
-    borderColor: '#94A3B8',
-    borderRadius: 6,
-    borderWidth: 1,
-    height: 12,
-    marginBottom: 4,
-    width: 12,
-  },
-  powerStepDotSelected: {
-    backgroundColor: '#166534',
-    borderColor: '#166534',
-  },
-  powerStepLabel: {
-    color: '#334155',
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  powerSteps: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  powerTrack: {
-    backgroundColor: '#CBD5E1',
-    borderRadius: 999,
-    height: 4,
-    marginBottom: 8,
-    overflow: 'hidden',
-  },
-  powerTrackFill: {
-    backgroundColor: '#166534',
-    height: '100%',
-  },
-  powerValueText: {
-    color: '#0F172A',
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: 6,
-  },
-  sectionLabel: {
-    color: '#1E293B',
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: 6,
-    marginTop: 4,
-  },
-  title: {
-    color: '#0F172A',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-});

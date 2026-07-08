@@ -2,9 +2,12 @@ import { ConnectorType } from '@lilocharge/shared-types';
 import type { ApiErrorResponse } from '@lilocharge/shared-types';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { ApiClientError } from '../../api';
+import { Button } from '../../components/ui/button';
+import { FormField } from '../../components/ui/form-field';
+import { ScreenContainer } from '../../components/ui/screen-container';
 import { useAppTranslation } from '../../i18n/use-app-translation';
 import { onboardingApi, type OnboardingApi } from './onboarding-api';
 import { useOnboardingSession } from './onboarding-session';
@@ -44,26 +47,24 @@ export function VehicleSetupScreen({ api }: VehicleSetupScreenProps): JSX.Elemen
 
   if (onboardingSession.state.userId === null) {
     return (
-      <View style={styles.container}>
-        <Text accessibilityRole="header" style={styles.title}>
-          {t('onboarding.vehicle.title')}
-        </Text>
-        <Text style={styles.subtitle}>{t('onboarding.vehicle.missingUser')}</Text>
-        <Pressable
-          accessibilityRole="button"
-          style={({ pressed }): object[] => [
-            styles.secondaryButton,
-            pressed ? styles.buttonPressed : {},
-          ]}
-          onPress={(): void => {
-            router.replace('/onboarding/register');
-          }}
-        >
-          <Text style={styles.secondaryButtonText}>
-            {t('onboarding.vehicle.actions.backToRegistration')}
+      <ScreenContainer>
+        <View className="flex-1 justify-center px-6">
+          <Text accessibilityRole="header" className="text-[28px] font-bold text-text">
+            {t('onboarding.vehicle.title')}
           </Text>
-        </Pressable>
-      </View>
+          <Text className="mt-2 text-[15px] text-text-muted">
+            {t('onboarding.vehicle.missingUser')}
+          </Text>
+          <Button
+            className="mt-5"
+            onPress={(): void => {
+              router.replace('/onboarding/register');
+            }}
+            title={t('onboarding.vehicle.actions.backToRegistration')}
+            variant="secondary"
+          />
+        </View>
+      </ScreenContainer>
     );
   }
 
@@ -105,132 +106,122 @@ export function VehicleSetupScreen({ api }: VehicleSetupScreenProps): JSX.Elemen
   };
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.scrollContainer}
-      keyboardShouldPersistTaps="handled"
-      testID="vehicle-setup-screen"
-    >
-      <View style={styles.header}>
-        <Text accessibilityRole="header" style={styles.title}>
-          {t('onboarding.vehicle.title')}
-        </Text>
-        <Text style={styles.subtitle}>{t('onboarding.vehicle.subtitle')}</Text>
-      </View>
-
-      <View style={styles.form}>
-        <TextInput
-          accessibilityLabel={t('onboarding.vehicle.fields.make')}
-          placeholder={t('onboarding.vehicle.fields.make')}
-          style={styles.input}
-          testID="vehicle-make-input"
-          value={make}
-          onChangeText={setMake}
-        />
-        <TextInput
-          accessibilityLabel={t('onboarding.vehicle.fields.model')}
-          placeholder={t('onboarding.vehicle.fields.model')}
-          style={styles.input}
-          testID="vehicle-model-input"
-          value={model}
-          onChangeText={setModel}
-        />
-        <TextInput
-          accessibilityLabel={t('onboarding.vehicle.fields.year')}
-          keyboardType="number-pad"
-          placeholder={t('onboarding.vehicle.fields.year')}
-          style={styles.input}
-          testID="vehicle-year-input"
-          value={year}
-          onChangeText={setYear}
-        />
-        <TextInput
-          accessibilityLabel={t('onboarding.vehicle.fields.batteryCapacity')}
-          keyboardType="decimal-pad"
-          placeholder={t('onboarding.vehicle.fields.batteryCapacity')}
-          style={styles.input}
-          testID="vehicle-battery-capacity-input"
-          value={batteryCapacity}
-          onChangeText={setBatteryCapacity}
-        />
-        <TextInput
-          accessibilityLabel={t('onboarding.vehicle.fields.maxChargePower')}
-          keyboardType="decimal-pad"
-          placeholder={t('onboarding.vehicle.fields.maxChargePower')}
-          style={styles.input}
-          testID="vehicle-max-charge-power-input"
-          value={maxChargePower}
-          onChangeText={setMaxChargePower}
-        />
-
-        <Text style={styles.connectorLabel}>{t('onboarding.vehicle.fields.connectorType')}</Text>
-        <View style={styles.connectorGrid}>
-          {CONNECTOR_OPTIONS.map((option) => {
-            const selected = connectorType === option;
-
-            return (
-              <Pressable
-                key={option}
-                accessibilityRole="button"
-                style={({ pressed }): object[] => [
-                  styles.connectorChip,
-                  selected ? styles.connectorChipSelected : {},
-                  pressed ? styles.buttonPressed : {},
-                ]}
-                testID={`vehicle-connector-${option}`}
-                onPress={(): void => {
-                  setConnectorType(option);
-                }}
-              >
-                <Text
-                  style={selected ? styles.connectorChipTextSelected : styles.connectorChipText}
-                >
-                  {t(`onboarding.vehicle.connectorTypes.${option}`)}
-                </Text>
-              </Pressable>
-            );
-          })}
+    <ScreenContainer keyboardAvoiding scroll testID="vehicle-setup-screen">
+      <View className="px-6 py-6">
+        <View className="mb-2">
+          <Text accessibilityRole="header" className="text-[28px] font-bold text-text">
+            {t('onboarding.vehicle.title')}
+          </Text>
+          <Text className="mt-2 text-[15px] text-text-muted">
+            {t('onboarding.vehicle.subtitle')}
+          </Text>
         </View>
 
-        {errorMessage ? (
-          <Text style={styles.errorText} testID="vehicle-error">
-            {errorMessage}
-          </Text>
-        ) : null}
+        <View className="mt-5 gap-3">
+          <FormField
+            accessibilityLabel={t('onboarding.vehicle.fields.make')}
+            label={t('onboarding.vehicle.fields.make')}
+            onChangeText={setMake}
+            placeholder={t('onboarding.vehicle.fields.make')}
+            testID="vehicle-make-input"
+            value={make}
+          />
+          <FormField
+            accessibilityLabel={t('onboarding.vehicle.fields.model')}
+            label={t('onboarding.vehicle.fields.model')}
+            onChangeText={setModel}
+            placeholder={t('onboarding.vehicle.fields.model')}
+            testID="vehicle-model-input"
+            value={model}
+          />
+          <FormField
+            accessibilityLabel={t('onboarding.vehicle.fields.year')}
+            keyboardType="number-pad"
+            label={t('onboarding.vehicle.fields.year')}
+            onChangeText={setYear}
+            placeholder={t('onboarding.vehicle.fields.year')}
+            testID="vehicle-year-input"
+            value={year}
+          />
+          <FormField
+            accessibilityLabel={t('onboarding.vehicle.fields.batteryCapacity')}
+            keyboardType="decimal-pad"
+            label={t('onboarding.vehicle.fields.batteryCapacity')}
+            onChangeText={setBatteryCapacity}
+            placeholder={t('onboarding.vehicle.fields.batteryCapacity')}
+            testID="vehicle-battery-capacity-input"
+            value={batteryCapacity}
+          />
+          <FormField
+            accessibilityLabel={t('onboarding.vehicle.fields.maxChargePower')}
+            keyboardType="decimal-pad"
+            label={t('onboarding.vehicle.fields.maxChargePower')}
+            onChangeText={setMaxChargePower}
+            placeholder={t('onboarding.vehicle.fields.maxChargePower')}
+            testID="vehicle-max-charge-power-input"
+            value={maxChargePower}
+          />
 
-        <Pressable
-          accessibilityRole="button"
-          disabled={isSubmitting}
-          style={({ pressed }): object[] => [
-            styles.primaryButton,
-            isSubmitting ? styles.buttonDisabled : {},
-            pressed ? styles.buttonPressed : {},
-          ]}
-          testID="vehicle-save"
-          onPress={(): void => {
-            void handleSaveVehicle();
-          }}
-        >
-          <Text style={styles.primaryButtonText}>
-            {isSubmitting
-              ? t('onboarding.vehicle.actions.submitting')
-              : t('onboarding.vehicle.actions.save')}
+          <Text className="mt-1 text-sm font-semibold text-text">
+            {t('onboarding.vehicle.fields.connectorType')}
           </Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          style={({ pressed }): object[] => [
-            styles.secondaryButton,
-            pressed ? styles.buttonPressed : {},
-          ]}
-          testID="vehicle-skip"
-          onPress={(): void => {
-            router.push('/onboarding/payment');
-          }}
-        >
-          <Text style={styles.secondaryButtonText}>{t('onboarding.vehicle.actions.skip')}</Text>
-        </Pressable>
+          <View className="flex-row flex-wrap">
+            {CONNECTOR_OPTIONS.map((option) => {
+              const selected = connectorType === option;
+
+              return (
+                <Pressable
+                  accessibilityRole="button"
+                  className={`mb-2.5 mr-2.5 rounded-full border px-3 py-2 active:opacity-75 ${
+                    selected ? 'border-primary bg-primary' : 'border-border'
+                  }`}
+                  key={option}
+                  onPress={(): void => {
+                    setConnectorType(option);
+                  }}
+                  testID={`vehicle-connector-${option}`}
+                >
+                  <Text
+                    className={`text-[13px] font-semibold ${
+                      selected ? 'text-neutral-0' : 'text-neutral-700'
+                    }`}
+                  >
+                    {t(`onboarding.vehicle.connectorTypes.${option}`)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {errorMessage ? (
+            <Text className="text-sm font-semibold text-danger" testID="vehicle-error">
+              {errorMessage}
+            </Text>
+          ) : null}
+
+          <Button
+            disabled={isSubmitting}
+            onPress={(): void => {
+              void handleSaveVehicle();
+            }}
+            testID="vehicle-save"
+            title={
+              isSubmitting
+                ? t('onboarding.vehicle.actions.submitting')
+                : t('onboarding.vehicle.actions.save')
+            }
+          />
+          <Button
+            onPress={(): void => {
+              router.push('/onboarding/payment');
+            }}
+            testID="vehicle-skip"
+            title={t('onboarding.vehicle.actions.skip')}
+            variant="secondary"
+          />
+        </View>
       </View>
-    </ScrollView>
+    </ScreenContainer>
   );
 }
 
@@ -252,118 +243,3 @@ function extractOnboardingErrorMessage(error: unknown, fallbackMessage: string):
 
   return fallbackMessage;
 }
-
-const styles = StyleSheet.create({
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonPressed: {
-    opacity: 0.85,
-  },
-  connectorChip: {
-    borderColor: '#D1D5DB',
-    borderRadius: 999,
-    borderWidth: 1,
-    marginBottom: 10,
-    marginRight: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  connectorChipSelected: {
-    backgroundColor: '#166534',
-    borderColor: '#166534',
-  },
-  connectorChipText: {
-    color: '#374151',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  connectorChipTextSelected: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  connectorGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 10,
-    marginTop: 8,
-  },
-  connectorLabel: {
-    color: '#111827',
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  container: {
-    backgroundColor: '#FFFFFF',
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  errorText: {
-    color: '#DC2626',
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  form: {
-    marginTop: 20,
-  },
-  header: {
-    marginBottom: 8,
-  },
-  input: {
-    borderColor: '#D1D5DB',
-    borderRadius: 10,
-    borderWidth: 1,
-    color: '#111827',
-    fontSize: 16,
-    marginBottom: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#166534',
-    borderRadius: 10,
-    marginTop: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  scrollContainer: {
-    backgroundColor: '#FFFFFF',
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 24,
-  },
-  secondaryButton: {
-    alignItems: 'center',
-    borderColor: '#166534',
-    borderRadius: 10,
-    borderWidth: 1,
-    marginTop: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  secondaryButtonText: {
-    color: '#166534',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  subtitle: {
-    color: '#4B5563',
-    fontSize: 15,
-    marginTop: 8,
-  },
-  title: {
-    color: '#111827',
-    fontSize: 28,
-    fontWeight: '700',
-  },
-});

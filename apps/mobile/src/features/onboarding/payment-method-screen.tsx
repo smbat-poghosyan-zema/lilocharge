@@ -1,9 +1,11 @@
 import type { ApiErrorResponse } from '@lilocharge/shared-types';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { ApiClientError } from '../../api';
+import { Button } from '../../components/ui/button';
+import { ScreenContainer } from '../../components/ui/screen-container';
 import {
   resolveApplePayMerchantIdentifier,
   resolveGooglePayMerchantIdentifier,
@@ -161,79 +163,78 @@ export function PaymentMethodScreen({
   };
 
   return (
-    <View style={styles.container} testID="onboarding-payment-screen">
-      <Text accessibilityRole="header" style={styles.title}>
-        {t('onboarding.payment.title')}
-      </Text>
-      <Text style={styles.subtitle}>{t('onboarding.payment.subtitle')}</Text>
+    <ScreenContainer testID="onboarding-payment-screen">
+      <View className="flex-1 justify-center px-6">
+        <Text accessibilityRole="header" className="text-[28px] font-bold text-text">
+          {t('onboarding.payment.title')}
+        </Text>
+        <Text className="mt-2 text-[15px] text-text-muted">
+          {t('onboarding.payment.subtitle')}
+        </Text>
 
-      <View style={styles.options}>
-        {PAYMENT_OPTIONS.map((gateway) => {
-          const selected = onboardingSession.state.selectedPaymentGateway === gateway;
+        <View className="mt-4 gap-2.5">
+          {PAYMENT_OPTIONS.map((gateway) => {
+            const selected = onboardingSession.state.selectedPaymentGateway === gateway;
 
-          return (
-            <Pressable
-              key={gateway}
-              accessibilityRole="button"
-              style={({ pressed }): object[] => [
-                styles.optionButton,
-                selected ? styles.optionButtonSelected : {},
-                pressed ? styles.buttonPressed : {},
-              ]}
-              testID={`onboarding-payment-option-${gateway}`}
-              onPress={(): void => {
-                onboardingSession.selectPaymentGateway(gateway);
-              }}
-            >
-              <Text style={selected ? styles.optionTextSelected : styles.optionText}>
-                {t(`onboarding.payment.methods.${gateway}`)}
-              </Text>
-            </Pressable>
-          );
-        })}
+            return (
+              <Pressable
+                accessibilityRole="button"
+                className={`min-h-11 justify-center rounded-md border px-3.5 py-3.5 active:opacity-75 ${
+                  selected ? 'border-primary bg-primary' : 'border-border'
+                }`}
+                key={gateway}
+                onPress={(): void => {
+                  onboardingSession.selectPaymentGateway(gateway);
+                }}
+                testID={`onboarding-payment-option-${gateway}`}
+              >
+                <Text
+                  className={`text-base font-semibold ${
+                    selected ? 'text-neutral-0' : 'text-text'
+                  }`}
+                >
+                  {t(`onboarding.payment.methods.${gateway}`)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {errorMessage ? (
+          <Text
+            className="mt-2 text-sm font-semibold text-danger"
+            testID="onboarding-payment-error"
+          >
+            {errorMessage}
+          </Text>
+        ) : null}
+
+        <Button
+          className="mt-4"
+          disabled={isSubmitting}
+          onPress={(): void => {
+            void handleFinishOnboarding();
+          }}
+          testID="onboarding-payment-finish"
+          title={
+            isSubmitting
+              ? t('onboarding.payment.actions.submitting')
+              : t('onboarding.payment.actions.finish')
+          }
+        />
+        <Button
+          className="mt-3"
+          disabled={isSubmitting}
+          onPress={(): void => {
+            onboardingSession.completeOnboarding();
+            router.replace('/(tabs)/stations');
+          }}
+          testID="onboarding-payment-skip"
+          title={t('onboarding.payment.actions.skip')}
+          variant="secondary"
+        />
       </View>
-
-      {errorMessage ? (
-        <Text style={styles.errorText} testID="onboarding-payment-error">
-          {errorMessage}
-        </Text>
-      ) : null}
-
-      <Pressable
-        accessibilityRole="button"
-        disabled={isSubmitting}
-        style={({ pressed }): object[] => [
-          styles.primaryButton,
-          isSubmitting ? styles.buttonDisabled : {},
-          pressed ? styles.buttonPressed : {},
-        ]}
-        testID="onboarding-payment-finish"
-        onPress={(): void => {
-          void handleFinishOnboarding();
-        }}
-      >
-        <Text style={styles.primaryButtonText}>
-          {isSubmitting
-            ? t('onboarding.payment.actions.submitting')
-            : t('onboarding.payment.actions.finish')}
-        </Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        disabled={isSubmitting}
-        style={({ pressed }): object[] => [
-          styles.secondaryButton,
-          pressed ? styles.buttonPressed : {},
-        ]}
-        testID="onboarding-payment-skip"
-        onPress={(): void => {
-          onboardingSession.completeOnboarding();
-          router.replace('/(tabs)/stations');
-        }}
-      >
-        <Text style={styles.secondaryButtonText}>{t('onboarding.payment.actions.skip')}</Text>
-      </Pressable>
-    </View>
+    </ScreenContainer>
   );
 }
 
@@ -295,85 +296,3 @@ function resolvePaymentSetupFailureMessage(
 
   return translate('onboarding.payment.errors.applePaySetupFailed');
 }
-
-const styles = StyleSheet.create({
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonPressed: {
-    opacity: 0.85,
-  },
-  container: {
-    backgroundColor: '#FFFFFF',
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  errorText: {
-    color: '#DC2626',
-    fontSize: 14,
-    marginTop: 8,
-  },
-  optionButton: {
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-  },
-  optionButtonSelected: {
-    backgroundColor: '#14532D',
-    borderColor: '#14532D',
-  },
-  optionText: {
-    color: '#111827',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  optionTextSelected: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  options: {
-    marginTop: 18,
-  },
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#166534',
-    borderRadius: 10,
-    marginTop: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    alignItems: 'center',
-    borderColor: '#166534',
-    borderRadius: 10,
-    borderWidth: 1,
-    marginTop: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  secondaryButtonText: {
-    color: '#166534',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  subtitle: {
-    color: '#4B5563',
-    fontSize: 15,
-    marginTop: 8,
-  },
-  title: {
-    color: '#111827',
-    fontSize: 28,
-    fontWeight: '700',
-  },
-});

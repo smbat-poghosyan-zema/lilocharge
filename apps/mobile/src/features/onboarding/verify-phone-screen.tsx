@@ -1,9 +1,12 @@
 import type { ApiErrorResponse } from '@lilocharge/shared-types';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { ApiClientError } from '../../api';
+import { Button } from '../../components/ui/button';
+import { FormField } from '../../components/ui/form-field';
+import { ScreenContainer } from '../../components/ui/screen-container';
 import { useAppTranslation } from '../../i18n/use-app-translation';
 import { onboardingApi, type OnboardingApi } from './onboarding-api';
 import { useOnboardingSession } from './onboarding-session';
@@ -28,26 +31,24 @@ export function VerifyPhoneScreen({ api }: VerifyPhoneScreenProps): JSX.Element 
 
   if (onboardingSession.state.registrationDraft === null) {
     return (
-      <View style={styles.container}>
-        <Text accessibilityRole="header" style={styles.title}>
-          {t('onboarding.verifyPhone.title')}
-        </Text>
-        <Text style={styles.subtitle}>{t('onboarding.verifyPhone.missingRegistration')}</Text>
-        <Pressable
-          accessibilityRole="button"
-          style={({ pressed }): object[] => [
-            styles.secondaryButton,
-            pressed ? styles.buttonPressed : {},
-          ]}
-          onPress={(): void => {
-            router.replace('/onboarding/register');
-          }}
-        >
-          <Text style={styles.secondaryButtonText}>
-            {t('onboarding.verifyPhone.actions.backToRegistration')}
+      <ScreenContainer>
+        <View className="flex-1 justify-center px-6">
+          <Text accessibilityRole="header" className="text-[28px] font-bold text-text">
+            {t('onboarding.verifyPhone.title')}
           </Text>
-        </Pressable>
-      </View>
+          <Text className="mt-2 text-[15px] text-text-muted">
+            {t('onboarding.verifyPhone.missingRegistration')}
+          </Text>
+          <Button
+            className="mt-5"
+            onPress={(): void => {
+              router.replace('/onboarding/register');
+            }}
+            title={t('onboarding.verifyPhone.actions.backToRegistration')}
+            variant="secondary"
+          />
+        </View>
+      </ScreenContainer>
     );
   }
 
@@ -89,51 +90,48 @@ export function VerifyPhoneScreen({ api }: VerifyPhoneScreenProps): JSX.Element 
   };
 
   return (
-    <View style={styles.container} testID="verify-phone-screen">
-      <Text accessibilityRole="header" style={styles.title}>
-        {t('onboarding.verifyPhone.title')}
-      </Text>
-      <Text style={styles.subtitle}>
-        {t('onboarding.verifyPhone.subtitle', { phone: registrationDraft.phone })}
-      </Text>
-
-      <TextInput
-        accessibilityLabel={t('onboarding.verifyPhone.fields.code')}
-        keyboardType="number-pad"
-        maxLength={6}
-        placeholder={t('onboarding.verifyPhone.fields.codePlaceholder')}
-        style={styles.input}
-        testID="verify-phone-code-input"
-        value={code}
-        onChangeText={setCode}
-      />
-
-      {errorMessage ? (
-        <Text style={styles.errorText} testID="verify-phone-error">
-          {errorMessage}
+    <ScreenContainer keyboardAvoiding testID="verify-phone-screen">
+      <View className="flex-1 justify-center px-6">
+        <Text accessibilityRole="header" className="text-[28px] font-bold text-text">
+          {t('onboarding.verifyPhone.title')}
         </Text>
-      ) : null}
-
-      <Pressable
-        accessibilityRole="button"
-        disabled={isSubmitting}
-        style={({ pressed }): object[] => [
-          styles.primaryButton,
-          isSubmitting ? styles.buttonDisabled : {},
-          pressed ? styles.buttonPressed : {},
-        ]}
-        testID="verify-phone-continue"
-        onPress={(): void => {
-          void handleVerifyCode();
-        }}
-      >
-        <Text style={styles.primaryButtonText}>
-          {isSubmitting
-            ? t('onboarding.verifyPhone.actions.submitting')
-            : t('onboarding.verifyPhone.actions.verify')}
+        <Text className="mt-2 text-[15px] text-text-muted">
+          {t('onboarding.verifyPhone.subtitle', { phone: registrationDraft.phone })}
         </Text>
-      </Pressable>
-    </View>
+
+        <FormField
+          accessibilityLabel={t('onboarding.verifyPhone.fields.code')}
+          className="mt-5"
+          keyboardType="number-pad"
+          label={t('onboarding.verifyPhone.fields.code')}
+          maxLength={6}
+          onChangeText={setCode}
+          placeholder={t('onboarding.verifyPhone.fields.codePlaceholder')}
+          testID="verify-phone-code-input"
+          value={code}
+        />
+
+        {errorMessage ? (
+          <Text className="mt-2 text-sm font-semibold text-danger" testID="verify-phone-error">
+            {errorMessage}
+          </Text>
+        ) : null}
+
+        <Button
+          className="mt-4"
+          disabled={isSubmitting}
+          onPress={(): void => {
+            void handleVerifyCode();
+          }}
+          testID="verify-phone-continue"
+          title={
+            isSubmitting
+              ? t('onboarding.verifyPhone.actions.submitting')
+              : t('onboarding.verifyPhone.actions.verify')
+          }
+        />
+      </View>
+    </ScreenContainer>
   );
 }
 
@@ -155,73 +153,3 @@ function extractOnboardingErrorMessage(error: unknown, fallbackMessage: string):
 
   return fallbackMessage;
 }
-
-const styles = StyleSheet.create({
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonPressed: {
-    opacity: 0.85,
-  },
-  container: {
-    backgroundColor: '#FFFFFF',
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  errorText: {
-    color: '#DC2626',
-    fontSize: 14,
-    marginBottom: 8,
-    marginTop: 8,
-  },
-  input: {
-    borderColor: '#D1D5DB',
-    borderRadius: 10,
-    borderWidth: 1,
-    color: '#111827',
-    fontSize: 20,
-    letterSpacing: 4,
-    marginTop: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    textAlign: 'center',
-  },
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#166534',
-    borderRadius: 10,
-    marginTop: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    alignItems: 'center',
-    borderColor: '#166534',
-    borderRadius: 10,
-    borderWidth: 1,
-    marginTop: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  secondaryButtonText: {
-    color: '#166534',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  subtitle: {
-    color: '#4B5563',
-    fontSize: 15,
-    marginTop: 8,
-  },
-  title: {
-    color: '#111827',
-    fontSize: 28,
-    fontWeight: '700',
-  },
-});

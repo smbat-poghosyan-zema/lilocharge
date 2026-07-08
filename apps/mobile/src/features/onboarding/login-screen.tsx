@@ -1,7 +1,10 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Text, View } from 'react-native';
 
+import { Button } from '../../components/ui/button';
+import { FormField } from '../../components/ui/form-field';
+import { ScreenContainer } from '../../components/ui/screen-container';
 import { useAppTranslation } from '../../i18n/use-app-translation';
 import { onboardingApi, type OnboardingApi } from './onboarding-api';
 import { useOnboardingSession } from './onboarding-session';
@@ -59,131 +62,59 @@ export function LoginScreen({ api }: LoginScreenProps): JSX.Element {
   };
 
   return (
-    <View style={styles.container}>
-      <Text accessibilityRole="header" style={styles.title}>
-        {t('onboarding.login.title')}
-      </Text>
-      <Text style={styles.subtitle}>{t('onboarding.login.subtitle')}</Text>
+    <ScreenContainer keyboardAvoiding>
+      <View className="flex-1 justify-center px-6">
+        <Text accessibilityRole="header" className="text-[28px] font-bold text-text">
+          {t('onboarding.login.title')}
+        </Text>
+        <Text className="mt-2 text-[15px] text-text-muted">{t('onboarding.login.subtitle')}</Text>
 
-      <View style={styles.form}>
-        <TextInput
-          accessibilityLabel={t('onboarding.login.fields.email')}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          placeholder={t('onboarding.login.fields.email')}
-          style={styles.input}
-          value={email}
-          onChangeText={setEmail}
-        />
-        <TextInput
-          accessibilityLabel={t('onboarding.login.fields.password')}
-          autoCapitalize="none"
-          placeholder={t('onboarding.login.fields.password')}
-          secureTextEntry
-          style={styles.input}
-          value={password}
-          onChangeText={setPassword}
-        />
+        <View className="mt-6 gap-3">
+          <FormField
+            accessibilityLabel={t('onboarding.login.fields.email')}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            label={t('onboarding.login.fields.email')}
+            onChangeText={setEmail}
+            placeholder={t('onboarding.login.fields.email')}
+            value={email}
+          />
+          <FormField
+            accessibilityLabel={t('onboarding.login.fields.password')}
+            autoCapitalize="none"
+            label={t('onboarding.login.fields.password')}
+            onChangeText={setPassword}
+            placeholder={t('onboarding.login.fields.password')}
+            secureTextEntry
+            value={password}
+          />
 
-        {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+          {errorMessage ? (
+            <Text className="text-sm font-semibold text-danger">{errorMessage}</Text>
+          ) : null}
 
-        <Pressable
-          accessibilityRole="button"
-          disabled={isSubmitting}
-          style={({ pressed }): object[] => [
-            styles.primaryButton,
-            isSubmitting ? styles.buttonDisabled : {},
-            pressed ? styles.buttonPressed : {},
-          ]}
-          testID="login-sign-in"
-          onPress={(): void => {
-            void handleSignIn();
-          }}
-        >
-          <Text style={styles.primaryButtonText}>
-            {isSubmitting
-              ? t('onboarding.login.actions.submitting')
-              : t('onboarding.login.actions.signIn')}
-          </Text>
-        </Pressable>
+          <Button
+            disabled={isSubmitting}
+            onPress={(): void => {
+              void handleSignIn();
+            }}
+            testID="login-sign-in"
+            title={
+              isSubmitting
+                ? t('onboarding.login.actions.submitting')
+                : t('onboarding.login.actions.signIn')
+            }
+          />
 
-        <Pressable
-          accessibilityRole="link"
-          style={styles.secondaryButton}
-          onPress={(): void => {
-            router.replace('/onboarding/register');
-          }}
-        >
-          <Text style={styles.secondaryButtonText}>
-            {t('onboarding.login.actions.goToRegister')}
-          </Text>
-        </Pressable>
+          <Button
+            onPress={(): void => {
+              router.replace('/onboarding/register');
+            }}
+            title={t('onboarding.login.actions.goToRegister')}
+            variant="link"
+          />
+        </View>
       </View>
-    </View>
+    </ScreenContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonPressed: {
-    opacity: 0.85,
-  },
-  container: {
-    backgroundColor: '#FFFFFF',
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  errorText: {
-    color: '#DC2626',
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  form: {
-    marginTop: 24,
-  },
-  input: {
-    borderColor: '#D1D5DB',
-    borderRadius: 10,
-    borderWidth: 1,
-    color: '#111827',
-    fontSize: 16,
-    marginBottom: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#166534',
-    borderRadius: 10,
-    marginTop: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    alignItems: 'center',
-    marginTop: 16,
-    paddingVertical: 8,
-  },
-  secondaryButtonText: {
-    color: '#166534',
-    fontSize: 15,
-  },
-  subtitle: {
-    color: '#4B5563',
-    fontSize: 15,
-    marginTop: 8,
-  },
-  title: {
-    color: '#111827',
-    fontSize: 28,
-    fontWeight: '700',
-  },
-});

@@ -1,9 +1,12 @@
 import type { ApiErrorResponse } from '@lilocharge/shared-types';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { ApiClientError } from '../../api';
+import { Button } from '../../components/ui/button';
+import { FormField } from '../../components/ui/form-field';
+import { ScreenContainer } from '../../components/ui/screen-container';
 import { useAppTranslation } from '../../i18n/use-app-translation';
 import { onboardingApi, type OnboardingApi } from './onboarding-api';
 import { resolveSupportedLanguage } from './onboarding-language';
@@ -71,93 +74,86 @@ export function RegistrationScreen({ api }: RegistrationScreenProps): JSX.Elemen
   };
 
   return (
-    <View style={styles.container} testID="registration-screen">
-      <Text accessibilityRole="header" style={styles.title}>
-        {t('onboarding.registration.title')}
-      </Text>
-      <Text style={styles.subtitle}>{t('onboarding.registration.subtitle')}</Text>
+    <ScreenContainer keyboardAvoiding testID="registration-screen">
+      <View className="flex-1 justify-center px-6">
+        <Text accessibilityRole="header" className="text-[28px] font-bold text-text">
+          {t('onboarding.registration.title')}
+        </Text>
+        <Text className="mt-2 text-[15px] text-text-muted">
+          {t('onboarding.registration.subtitle')}
+        </Text>
 
-      <View style={styles.form}>
-        <TextInput
-          accessibilityLabel={t('onboarding.registration.fields.displayName')}
-          autoCapitalize="words"
-          placeholder={t('onboarding.registration.fields.displayName')}
-          style={styles.input}
-          testID="registration-display-name-input"
-          value={displayName}
-          onChangeText={setDisplayName}
-        />
-        <TextInput
-          accessibilityLabel={t('onboarding.registration.fields.email')}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          placeholder={t('onboarding.registration.fields.email')}
-          style={styles.input}
-          testID="registration-email-input"
-          value={email}
-          onChangeText={setEmail}
-        />
-        <TextInput
-          accessibilityLabel={t('onboarding.registration.fields.phone')}
-          autoCapitalize="none"
-          keyboardType="phone-pad"
-          placeholder={t('onboarding.registration.fields.phonePlaceholder')}
-          style={styles.input}
-          testID="registration-phone-input"
-          value={phone}
-          onChangeText={setPhone}
-        />
-        <TextInput
-          accessibilityLabel={t('onboarding.registration.fields.password')}
-          autoCapitalize="none"
-          placeholder={t('onboarding.registration.fields.password')}
-          secureTextEntry
-          style={styles.input}
-          testID="registration-password-input"
-          value={password}
-          onChangeText={setPassword}
-        />
+        <View className="mt-6 gap-3">
+          <FormField
+            accessibilityLabel={t('onboarding.registration.fields.displayName')}
+            autoCapitalize="words"
+            label={t('onboarding.registration.fields.displayName')}
+            onChangeText={setDisplayName}
+            placeholder={t('onboarding.registration.fields.displayName')}
+            testID="registration-display-name-input"
+            value={displayName}
+          />
+          <FormField
+            accessibilityLabel={t('onboarding.registration.fields.email')}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            label={t('onboarding.registration.fields.email')}
+            onChangeText={setEmail}
+            placeholder={t('onboarding.registration.fields.email')}
+            testID="registration-email-input"
+            value={email}
+          />
+          <FormField
+            accessibilityLabel={t('onboarding.registration.fields.phone')}
+            autoCapitalize="none"
+            keyboardType="phone-pad"
+            label={t('onboarding.registration.fields.phone')}
+            onChangeText={setPhone}
+            placeholder={t('onboarding.registration.fields.phonePlaceholder')}
+            testID="registration-phone-input"
+            value={phone}
+          />
+          <FormField
+            accessibilityLabel={t('onboarding.registration.fields.password')}
+            autoCapitalize="none"
+            label={t('onboarding.registration.fields.password')}
+            onChangeText={setPassword}
+            placeholder={t('onboarding.registration.fields.password')}
+            secureTextEntry
+            testID="registration-password-input"
+            value={password}
+          />
 
-        {errorMessage ? (
-          <Text style={styles.errorText} testID="registration-error">
-            {errorMessage}
-          </Text>
-        ) : null}
+          {errorMessage ? (
+            <Text className="text-sm font-semibold text-danger" testID="registration-error">
+              {errorMessage}
+            </Text>
+          ) : null}
 
-        <Pressable
-          accessibilityRole="button"
-          disabled={isSubmitting}
-          style={({ pressed }): object[] => [
-            styles.primaryButton,
-            isSubmitting ? styles.buttonDisabled : {},
-            pressed ? styles.buttonPressed : {},
-          ]}
-          testID="registration-continue"
-          onPress={(): void => {
-            void handleContinue();
-          }}
-        >
-          <Text style={styles.primaryButtonText}>
-            {isSubmitting
-              ? t('onboarding.registration.actions.submitting')
-              : t('onboarding.registration.actions.continue')}
-          </Text>
-        </Pressable>
+          <Button
+            disabled={isSubmitting}
+            onPress={(): void => {
+              void handleContinue();
+            }}
+            testID="registration-continue"
+            title={
+              isSubmitting
+                ? t('onboarding.registration.actions.submitting')
+                : t('onboarding.registration.actions.continue')
+            }
+          />
 
-        <Pressable
-          accessibilityRole="link"
-          style={styles.secondaryButton}
-          testID="registration-go-to-login"
-          onPress={(): void => {
-            router.push('/onboarding/login');
-          }}
-        >
-          <Text style={styles.secondaryButtonText}>
-            {t('onboarding.registration.actions.goToLogin')}
-          </Text>
-        </Pressable>
+          <Button
+            onPress={(): void => {
+              router.push('/onboarding/login');
+            }}
+            testID="registration-go-to-login"
+            title={t('onboarding.registration.actions.goToLogin')}
+            variant="link"
+          />
+        </View>
       </View>
-    </View>
+    </ScreenContainer>
   );
 }
 
@@ -179,68 +175,3 @@ function extractOnboardingErrorMessage(error: unknown, fallbackMessage: string):
 
   return fallbackMessage;
 }
-
-const styles = StyleSheet.create({
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonPressed: {
-    opacity: 0.85,
-  },
-  container: {
-    backgroundColor: '#FFFFFF',
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  errorText: {
-    color: '#DC2626',
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  form: {
-    marginTop: 24,
-  },
-  input: {
-    borderColor: '#D1D5DB',
-    borderRadius: 10,
-    borderWidth: 1,
-    color: '#111827',
-    fontSize: 16,
-    marginBottom: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#166534',
-    borderRadius: 10,
-    marginTop: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    alignItems: 'center',
-    marginTop: 16,
-    paddingVertical: 8,
-  },
-  secondaryButtonText: {
-    color: '#166534',
-    fontSize: 15,
-  },
-  subtitle: {
-    color: '#4B5563',
-    fontSize: 15,
-    marginTop: 8,
-  },
-  title: {
-    color: '#111827',
-    fontSize: 28,
-    fontWeight: '700',
-  },
-});

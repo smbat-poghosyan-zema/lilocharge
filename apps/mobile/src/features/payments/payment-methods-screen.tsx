@@ -5,22 +5,27 @@ import type {
 } from '@lilocharge/shared-types';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, Pressable, Text, TextInput, View } from 'react-native';
 
+import { Button } from '../../components/ui/button';
+import { Card } from '../../components/ui/card';
+import { ScreenContainer } from '../../components/ui/screen-container';
+import { StatusBadge } from '../../components/ui/status-badge';
 import { useAppTranslation } from '../../i18n/use-app-translation';
+import { NEUTRAL_500, PRIMARY } from '../../theme/colors';
 import { useOnboardingSession } from '../onboarding/onboarding-session';
 import { paymentsApi, type PaymentsApi } from './payments-api';
 
 const TOKENIZED_GATEWAYS: readonly TokenizedPaymentGatewayCode[] = ['ARCA', 'IDRAM'];
+
+const CENTERED_CLASS = 'flex-1 items-center justify-center gap-3 bg-background px-6';
+const FIELD_LABEL_CLASS = 'mt-3 text-xs font-bold uppercase text-text-muted';
+const TEXT_INPUT_CLASS =
+  'mt-1.5 min-h-11 rounded-sm border border-border bg-neutral-50 px-3 py-2.5 text-sm text-text';
+const OPTION_CLASS = 'rounded-sm border border-border bg-neutral-50 px-3 py-2.5';
+const OPTION_SELECTED_CLASS = 'border-primary bg-primary-50';
+const OPTION_TEXT_CLASS = 'text-sm font-semibold text-text';
+const OPTION_TEXT_SELECTED_CLASS = 'text-sm font-semibold text-primary-900';
 
 type PaymentMethodsState =
   | { readonly status: 'error' }
@@ -176,195 +181,170 @@ export function PaymentMethodsScreen({
 
   if (userId === null) {
     return (
-      <View style={styles.centeredContainer}>
-        <Text style={styles.mutedText} testID="payment-methods-signed-out">
+      <View className={CENTERED_CLASS}>
+        <Text className="text-[13px] text-text-muted" testID="payment-methods-signed-out">
           {t('payments.signedOut.message')}
         </Text>
-        <Pressable
-          accessibilityRole="button"
+        <Button
           onPress={(): void => {
             router.replace('/onboarding/login');
           }}
-          style={({ pressed }) => {
-            return [styles.primaryButton, pressed ? styles.buttonPressed : null];
-          }}
           testID="payment-methods-sign-in"
-        >
-          <Text style={styles.primaryButtonText}>{t('payments.signedOut.signIn')}</Text>
-        </Pressable>
+          title={t('payments.signedOut.signIn')}
+        />
       </View>
     );
   }
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.scrollContent}
-      style={styles.container}
-      testID="payment-methods-screen"
-    >
-      <Text accessibilityRole="header" style={styles.title}>
-        {t('payments.title')}
-      </Text>
-      <Text style={styles.subtitle}>{t('payments.subtitle')}</Text>
-
-      {actionError !== null ? (
-        <Text style={styles.errorText} testID="payment-methods-action-error">
-          {actionError}
+    <ScreenContainer scroll testID="payment-methods-screen">
+      <View className="gap-3 p-4">
+        <Text accessibilityRole="header" className="text-2xl font-bold text-text">
+          {t('payments.title')}
         </Text>
-      ) : null}
+        <Text className="text-[15px] text-neutral-700">{t('payments.subtitle')}</Text>
 
-      {methodsState.status === 'loading' ? (
-        <View style={styles.sectionCard} testID="payment-methods-loading">
-          <ActivityIndicator color="#0F766E" />
-          <Text style={styles.mutedText}>{t('payments.loading')}</Text>
-        </View>
-      ) : null}
-
-      {methodsState.status === 'error' ? (
-        <View style={styles.sectionCard}>
-          <Text style={styles.errorText} testID="payment-methods-error">
-            {t('payments.loadError')}
+        {actionError !== null ? (
+          <Text
+            className="text-sm font-semibold text-danger"
+            testID="payment-methods-action-error"
+          >
+            {actionError}
           </Text>
-          <Pressable
-            accessibilityRole="button"
-            onPress={reloadMethods}
-            style={({ pressed }) => {
-              return [styles.secondaryButton, pressed ? styles.buttonPressed : null];
-            }}
-            testID="payment-methods-retry"
-          >
-            <Text style={styles.secondaryButtonText}>{t('payments.retry')}</Text>
-          </Pressable>
-        </View>
-      ) : null}
+        ) : null}
 
-      {methodsState.status === 'loaded' ? (
-        <View style={styles.sectionCard}>
-          {methodsState.methods.length === 0 ? (
-            <Text style={styles.mutedText} testID="payment-methods-empty">
-              {t('payments.empty')}
+        {methodsState.status === 'loading' ? (
+          <Card testID="payment-methods-loading">
+            <ActivityIndicator color={PRIMARY} />
+            <Text className="mt-1.5 text-[13px] text-text-muted">{t('payments.loading')}</Text>
+          </Card>
+        ) : null}
+
+        {methodsState.status === 'error' ? (
+          <Card>
+            <Text className="text-sm font-semibold text-danger" testID="payment-methods-error">
+              {t('payments.loadError')}
             </Text>
-          ) : null}
-          {methodsState.methods.map((method) => (
-            <PaymentMethodRow
-              key={method.id}
-              method={method}
-              onDelete={handleDeleteMethod}
-              onSetDefault={handleSetDefaultMethod}
+            <Button
+              className="mt-3 self-start"
+              onPress={reloadMethods}
+              testID="payment-methods-retry"
+              title={t('payments.retry')}
+              variant="secondary"
             />
-          ))}
-        </View>
-      ) : null}
+          </Card>
+        ) : null}
 
-      <View style={styles.sectionCard}>
-        {!isFormVisible ? (
-          <Pressable
-            accessibilityRole="button"
-            onPress={(): void => {
-              setIsFormVisible(true);
-            }}
-            style={({ pressed }) => {
-              return [styles.primaryButton, pressed ? styles.buttonPressed : null];
-            }}
-            testID="payment-methods-add-toggle"
-          >
-            <Text style={styles.primaryButtonText}>{t('payments.add.toggle')}</Text>
-          </Pressable>
-        ) : (
-          <View testID="payment-methods-add-form">
-            <Text style={styles.sectionTitle}>{t('payments.add.title')}</Text>
-
-            <Text style={styles.fieldLabel}>{t('payments.add.gatewayLabel')}</Text>
-            <View style={styles.gatewayRow}>
-              {TOKENIZED_GATEWAYS.map((gatewayOption) => {
-                const isSelected = gateway === gatewayOption;
-
-                return (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isSelected }}
-                    key={gatewayOption}
-                    onPress={(): void => {
-                      setGateway(gatewayOption);
-                    }}
-                    style={({ pressed }) => {
-                      return [
-                        styles.gatewayOption,
-                        isSelected ? styles.gatewayOptionSelected : null,
-                        pressed ? styles.buttonPressed : null,
-                      ];
-                    }}
-                    testID={`payment-methods-gateway-${gatewayOption}`}
-                  >
-                    <Text
-                      style={[
-                        styles.gatewayOptionText,
-                        isSelected ? styles.gatewayOptionTextSelected : null,
-                      ]}
-                    >
-                      {t(`payments.gateways.${gatewayOption}`)}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <Text style={styles.fieldLabel}>{t('payments.add.tokenLabel')}</Text>
-            <Text style={styles.helpText}>{t('payments.add.tokenHelp')}</Text>
-            <TextInput
-              autoCapitalize="none"
-              autoCorrect={false}
-              onChangeText={setToken}
-              style={styles.textInput}
-              testID="payment-methods-token-input"
-              value={token}
-            />
-
-            <Text style={styles.fieldLabel}>{t('payments.add.displayLabelLabel')}</Text>
-            <TextInput
-              onChangeText={setDisplayLabel}
-              placeholder={t('payments.add.displayLabelPlaceholder')}
-              style={styles.textInput}
-              testID="payment-methods-label-input"
-              value={displayLabel}
-            />
-
-            {formError !== null ? (
-              <Text style={styles.errorText} testID="payment-methods-form-error">
-                {formError}
+        {methodsState.status === 'loaded' ? (
+          <Card>
+            {methodsState.methods.length === 0 ? (
+              <Text className="text-[13px] text-text-muted" testID="payment-methods-empty">
+                {t('payments.empty')}
               </Text>
             ) : null}
+            {methodsState.methods.map((method) => (
+              <PaymentMethodRow
+                key={method.id}
+                method={method}
+                onDelete={handleDeleteMethod}
+                onSetDefault={handleSetDefaultMethod}
+              />
+            ))}
+          </Card>
+        ) : null}
 
-            <Pressable
-              accessibilityRole="button"
-              disabled={isSubmitting}
-              onPress={handleRegisterMethod}
-              style={({ pressed }) => {
-                return [styles.primaryButton, pressed ? styles.buttonPressed : null];
-              }}
-              testID="payment-methods-submit"
-            >
-              <Text style={styles.primaryButtonText}>
-                {isSubmitting ? t('payments.add.submitting') : t('payments.add.submit')}
-              </Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
+        <Card>
+          {!isFormVisible ? (
+            <Button
               onPress={(): void => {
-                setIsFormVisible(false);
-                setFormError(null);
+                setIsFormVisible(true);
               }}
-              style={({ pressed }) => {
-                return [styles.secondaryButton, pressed ? styles.buttonPressed : null];
-              }}
-              testID="payment-methods-add-cancel"
-            >
-              <Text style={styles.secondaryButtonText}>{t('payments.add.cancel')}</Text>
-            </Pressable>
-          </View>
-        )}
+              testID="payment-methods-add-toggle"
+              title={t('payments.add.toggle')}
+            />
+          ) : (
+            <View testID="payment-methods-add-form">
+              <Text className="text-[15px] font-bold text-text">{t('payments.add.title')}</Text>
+
+              <Text className={FIELD_LABEL_CLASS}>{t('payments.add.gatewayLabel')}</Text>
+              <View className="mt-2 flex-row gap-2">
+                {TOKENIZED_GATEWAYS.map((gatewayOption) => {
+                  const isSelected = gateway === gatewayOption;
+
+                  return (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isSelected }}
+                      className={`${OPTION_CLASS} ${isSelected ? OPTION_SELECTED_CLASS : ''} active:opacity-75`}
+                      key={gatewayOption}
+                      onPress={(): void => {
+                        setGateway(gatewayOption);
+                      }}
+                      testID={`payment-methods-gateway-${gatewayOption}`}
+                    >
+                      <Text
+                        className={isSelected ? OPTION_TEXT_SELECTED_CLASS : OPTION_TEXT_CLASS}
+                      >
+                        {t(`payments.gateways.${gatewayOption}`)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <Text className={FIELD_LABEL_CLASS}>{t('payments.add.tokenLabel')}</Text>
+              <Text className="mt-1 text-xs text-text-muted">{t('payments.add.tokenHelp')}</Text>
+              <TextInput
+                autoCapitalize="none"
+                autoCorrect={false}
+                className={TEXT_INPUT_CLASS}
+                onChangeText={setToken}
+                placeholderTextColor={NEUTRAL_500}
+                testID="payment-methods-token-input"
+                value={token}
+              />
+
+              <Text className={FIELD_LABEL_CLASS}>{t('payments.add.displayLabelLabel')}</Text>
+              <TextInput
+                className={TEXT_INPUT_CLASS}
+                onChangeText={setDisplayLabel}
+                placeholder={t('payments.add.displayLabelPlaceholder')}
+                placeholderTextColor={NEUTRAL_500}
+                testID="payment-methods-label-input"
+                value={displayLabel}
+              />
+
+              {formError !== null ? (
+                <Text
+                  className="mt-2 text-sm font-semibold text-danger"
+                  testID="payment-methods-form-error"
+                >
+                  {formError}
+                </Text>
+              ) : null}
+
+              <Button
+                className="mt-3"
+                disabled={isSubmitting}
+                onPress={handleRegisterMethod}
+                testID="payment-methods-submit"
+                title={isSubmitting ? t('payments.add.submitting') : t('payments.add.submit')}
+              />
+              <Button
+                className="mt-3"
+                onPress={(): void => {
+                  setIsFormVisible(false);
+                  setFormError(null);
+                }}
+                testID="payment-methods-add-cancel"
+                title={t('payments.add.cancel')}
+                variant="secondary"
+              />
+            </View>
+          )}
+        </Card>
       </View>
-    </ScrollView>
+    </ScreenContainer>
   );
 }
 
@@ -383,52 +363,58 @@ function PaymentMethodRow({ method, onDelete, onSetDefault }: PaymentMethodRowPr
   const gatewayLabel = t(`payments.gateways.${method.gateway}`);
 
   return (
-    <View style={styles.methodCard} testID={`payment-method-${method.id}`}>
-      <View style={styles.methodHeader}>
-        <View style={styles.methodIdentity}>
-          <View style={[styles.gatewayBadge, { backgroundColor: resolveGatewayColor(method.gateway) }]}>
-            <Text style={styles.gatewayBadgeText}>{gatewayLabel.slice(0, 1)}</Text>
+    <View
+      className="mt-2.5 rounded-md border border-border bg-neutral-50 px-3 py-2.5"
+      testID={`payment-method-${method.id}`}
+    >
+      <View className="flex-row items-center justify-between">
+        <View className="flex-row items-center gap-2.5">
+          <View
+            className={`h-9 w-9 items-center justify-center rounded-sm ${resolveGatewayBadgeClass(
+              method.gateway,
+            )}`}
+          >
+            <Text className="text-base font-bold text-neutral-0">{gatewayLabel.slice(0, 1)}</Text>
           </View>
-          <View style={styles.methodLabels}>
-            <Text style={styles.methodTitle}>{method.displayLabel ?? gatewayLabel}</Text>
-            <Text style={styles.mutedText}>
+          <View className="shrink">
+            <Text className="text-sm font-bold text-text">
+              {method.displayLabel ?? gatewayLabel}
+            </Text>
+            <Text className="mt-0.5 text-[13px] text-text-muted">
               {gatewayLabel}
               {method.last4 !== null ? ` · •••• ${method.last4}` : ''}
             </Text>
           </View>
         </View>
         {method.isDefault ? (
-          <View style={styles.defaultBadge} testID={`payment-method-default-badge-${method.id}`}>
-            <Text style={styles.defaultBadgeText}>{t('payments.defaultBadge')}</Text>
-          </View>
+          <StatusBadge
+            label={t('payments.defaultBadge')}
+            testID={`payment-method-default-badge-${method.id}`}
+            variant="primary"
+          />
         ) : null}
       </View>
-      <View style={styles.methodActions}>
+      <View className="flex-row gap-2">
         {!method.isDefault ? (
-          <Pressable
-            accessibilityRole="button"
+          <Button
+            className="mt-3 self-start"
             onPress={(): void => {
               onSetDefault(method.id);
             }}
-            style={({ pressed }) => {
-              return [styles.secondaryButton, pressed ? styles.buttonPressed : null];
-            }}
             testID={`payment-method-set-default-${method.id}`}
-          >
-            <Text style={styles.secondaryButtonText}>{t('payments.makeDefault')}</Text>
-          </Pressable>
+            title={t('payments.makeDefault')}
+            variant="secondary"
+          />
         ) : null}
         <Pressable
           accessibilityRole="button"
+          className="mt-3 min-h-11 items-center justify-center self-start rounded-full bg-danger-bg px-4 active:opacity-75"
           onPress={(): void => {
             onDelete(method.id);
           }}
-          style={({ pressed }) => {
-            return [styles.deleteButton, pressed ? styles.buttonPressed : null];
-          }}
           testID={`payment-method-delete-${method.id}`}
         >
-          <Text style={styles.deleteButtonText}>{t('payments.delete')}</Text>
+          <Text className="text-sm font-bold text-danger">{t('payments.delete')}</Text>
         </Pressable>
       </View>
     </View>
@@ -436,217 +422,19 @@ function PaymentMethodRow({ method, onDelete, onSetDefault }: PaymentMethodRowPr
 }
 
 /**
- * Maps a payment gateway onto its badge accent color.
+ * Maps a payment gateway onto its badge accent background token class.
  */
-function resolveGatewayColor(gateway: PaymentGatewayCode): string {
+function resolveGatewayBadgeClass(gateway: PaymentGatewayCode): string {
   switch (gateway) {
     case 'ARCA':
-      return '#1D4ED8';
+      return 'bg-info';
     case 'IDRAM':
-      return '#B91C1C';
+      return 'bg-danger';
     case 'WALLET':
-      return '#0F766E';
+      return 'bg-primary';
     case 'APPLE_PAY':
     case 'GOOGLE_PAY':
     default:
-      return '#111827';
+      return 'bg-neutral-900';
   }
 }
-
-const styles = StyleSheet.create({
-  buttonPressed: {
-    opacity: 0.75,
-  },
-  centeredContainer: {
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    flex: 1,
-    gap: 10,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  container: {
-    backgroundColor: '#F3F4F6',
-    flex: 1,
-  },
-  defaultBadge: {
-    backgroundColor: '#ECFDF5',
-    borderColor: '#0F766E',
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-  },
-  defaultBadgeText: {
-    color: '#065F46',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  deleteButton: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#FEE2E2',
-    borderRadius: 999,
-    marginTop: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 9,
-  },
-  deleteButtonText: {
-    color: '#991B1B',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  errorText: {
-    color: '#991B1B',
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 8,
-  },
-  fieldLabel: {
-    color: '#6B7280',
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 12,
-    textTransform: 'uppercase',
-  },
-  gatewayBadge: {
-    alignItems: 'center',
-    borderRadius: 10,
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  gatewayBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  gatewayOption: {
-    backgroundColor: '#F9FAFB',
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  gatewayOptionSelected: {
-    backgroundColor: '#ECFDF5',
-    borderColor: '#0F766E',
-  },
-  gatewayOptionText: {
-    color: '#111827',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  gatewayOptionTextSelected: {
-    color: '#065F46',
-  },
-  gatewayRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 8,
-  },
-  helpText: {
-    color: '#6B7280',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  methodActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  methodCard: {
-    backgroundColor: '#F9FAFB',
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    borderWidth: 1,
-    marginTop: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  methodHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  methodIdentity: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 10,
-  },
-  methodLabels: {
-    flexShrink: 1,
-  },
-  methodTitle: {
-    color: '#111827',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  mutedText: {
-    color: '#6B7280',
-    fontSize: 13,
-    marginTop: 2,
-  },
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#0F766E',
-    borderRadius: 12,
-    marginTop: 12,
-    paddingVertical: 12,
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  scrollContent: {
-    gap: 12,
-    padding: 16,
-  },
-  secondaryButton: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#0F766E',
-    borderRadius: 999,
-    borderWidth: 1,
-    marginTop: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 9,
-  },
-  secondaryButtonText: {
-    color: '#0F766E',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  sectionCard: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E5E7EB',
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 16,
-  },
-  sectionTitle: {
-    color: '#111827',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  subtitle: {
-    color: '#374151',
-    fontSize: 15,
-  },
-  textInput: {
-    backgroundColor: '#F9FAFB',
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    borderWidth: 1,
-    color: '#111827',
-    fontSize: 14,
-    marginTop: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  title: {
-    color: '#111827',
-    fontSize: 24,
-    fontWeight: '700',
-  },
-});
