@@ -2,17 +2,13 @@ import type { ReviewPhotoContentType } from '@lilocharge/shared-types';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import {
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 
 import { ApiClientError } from '../../api';
+import { Button } from '../../components/ui/button';
+import { Card } from '../../components/ui/card';
+import { FormField } from '../../components/ui/form-field';
+import { ScreenContainer } from '../../components/ui/screen-container';
 import { useAppTranslation } from '../../i18n/use-app-translation';
 import { normalizeRouteParam } from '../../utils/route-params';
 import { useOnboardingSession } from '../onboarding/onboarding-session';
@@ -26,6 +22,13 @@ import {
 const MAX_PHOTOS = 5;
 const MAX_COMMENT_LENGTH = 1000;
 const RATING_VALUES: readonly number[] = [1, 2, 3, 4, 5];
+
+const CENTERED_CONTAINER_CLASS =
+  'flex-1 items-center justify-center gap-2.5 bg-background px-6';
+const ERROR_TEXT_CLASS = 'text-sm font-semibold text-danger';
+const MUTED_TEXT_CLASS = 'mt-1.5 text-center text-[13px] text-text-muted';
+const SECTION_TITLE_CLASS = 'text-[15px] font-bold text-text';
+const MULTILINE_INPUT_STYLE = { minHeight: 96, textAlignVertical: 'top' } as const;
 
 /** One locally picked review photo pending upload. */
 interface PendingReviewPhoto {
@@ -191,8 +194,8 @@ export function ReviewFormScreen({
 
   if (stationId === null) {
     return (
-      <View style={styles.centeredContainer}>
-        <Text style={styles.errorText} testID="review-form-missing-station">
+      <View className={CENTERED_CONTAINER_CLASS}>
+        <Text className={ERROR_TEXT_CLASS} testID="review-form-missing-station">
           {t('reviews.form.missingStation')}
         </Text>
       </View>
@@ -201,309 +204,146 @@ export function ReviewFormScreen({
 
   if (userId === null) {
     return (
-      <View style={styles.centeredContainer}>
-        <Text style={styles.mutedText} testID="review-form-signed-out">
+      <View className={CENTERED_CONTAINER_CLASS}>
+        <Text className={MUTED_TEXT_CLASS} testID="review-form-signed-out">
           {t('reviews.form.signedOut.message')}
         </Text>
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          className="mt-3"
           onPress={(): void => {
             router.replace('/onboarding/login');
           }}
-          style={({ pressed }) => {
-            return [styles.primaryButton, pressed ? styles.buttonPressed : null];
-          }}
           testID="review-form-sign-in"
-        >
-          <Text style={styles.primaryButtonText}>{t('reviews.form.signedOut.signIn')}</Text>
-        </Pressable>
+          title={t('reviews.form.signedOut.signIn')}
+        />
       </View>
     );
   }
 
   if (isSubmitted) {
     return (
-      <View style={styles.centeredContainer} testID="review-form-success">
-        <Text style={styles.successTitle}>{t('reviews.form.success.title')}</Text>
-        <Text style={styles.mutedText}>{t('reviews.form.success.message')}</Text>
+      <View className={CENTERED_CONTAINER_CLASS} testID="review-form-success">
+        <Text className="text-xl font-bold text-primary-900">{t('reviews.form.success.title')}</Text>
+        <Text className={MUTED_TEXT_CLASS}>{t('reviews.form.success.message')}</Text>
         {isPhotoNoticeVisible ? (
-          <Text style={styles.noticeText} testID="review-form-notice">
+          <Text
+            className="text-center text-[13px] font-semibold text-warning"
+            testID="review-form-notice"
+          >
             {t('reviews.form.photosUnavailable')}
           </Text>
         ) : null}
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          className="mt-3"
           onPress={(): void => {
             router.back();
           }}
-          style={({ pressed }) => {
-            return [styles.primaryButton, pressed ? styles.buttonPressed : null];
-          }}
           testID="review-form-done"
-        >
-          <Text style={styles.primaryButtonText}>{t('reviews.form.success.done')}</Text>
-        </Pressable>
+          title={t('reviews.form.success.done')}
+        />
       </View>
     );
   }
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.scrollContent}
-      style={styles.container}
-      testID="review-form-screen"
-    >
-      <Text accessibilityRole="header" style={styles.title}>
-        {t('reviews.form.title')}
-      </Text>
-      <Text style={styles.subtitle}>{t('reviews.form.subtitle')}</Text>
+    <ScreenContainer keyboardAvoiding scroll testID="review-form-screen">
+      <View className="gap-3 p-4">
+        <Text accessibilityRole="header" className="text-2xl font-bold text-text">
+          {t('reviews.form.title')}
+        </Text>
+        <Text className="text-[15px] text-neutral-700">{t('reviews.form.subtitle')}</Text>
 
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>{t('reviews.form.ratingLabel')}</Text>
-        <View style={styles.starRow}>
-          {RATING_VALUES.map((starValue) => {
-            const isFilled = starValue <= rating;
+        <Card>
+          <Text className={SECTION_TITLE_CLASS}>{t('reviews.form.ratingLabel')}</Text>
+          <View className="mt-2 flex-row gap-1">
+            {RATING_VALUES.map((starValue) => {
+              const isFilled = starValue <= rating;
 
-            return (
+              return (
+                <Pressable
+                  accessibilityLabel={t('reviews.form.starLabel', { value: starValue })}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isFilled }}
+                  key={starValue}
+                  onPress={(): void => {
+                    setRating(starValue);
+                  }}
+                  className="p-1 active:opacity-75"
+                  testID={`review-form-star-${starValue}`}
+                >
+                  <Text className={`text-3xl ${isFilled ? 'text-warning' : 'text-neutral-400'}`}>
+                    {isFilled ? '★' : '☆'}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Card>
+
+        <Card>
+          <FormField
+            accessibilityLabel={t('reviews.form.commentLabel')}
+            label={t('reviews.form.commentLabel')}
+            maxLength={MAX_COMMENT_LENGTH}
+            multiline
+            onChangeText={setComment}
+            placeholder={t('reviews.form.commentPlaceholder')}
+            style={MULTILINE_INPUT_STYLE}
+            testID="review-form-comment-input"
+            value={comment}
+          />
+        </Card>
+
+        <Card>
+          <Text className={SECTION_TITLE_CLASS}>
+            {t('reviews.form.photosLabel', { count: photos.length })}
+          </Text>
+          {photos.map((photo, photoIndex) => (
+            <View
+              key={`${photo.localUri}-${photoIndex}`}
+              className="mt-2.5 flex-row items-center gap-2.5"
+              testID={`review-form-photo-${photoIndex}`}
+            >
+              <Image source={{ uri: photo.localUri }} className="h-14 w-14 rounded-[8px]" />
               <Pressable
-                accessibilityLabel={t('reviews.form.starLabel', { value: starValue })}
                 accessibilityRole="button"
-                accessibilityState={{ selected: isFilled }}
-                key={starValue}
                 onPress={(): void => {
-                  setRating(starValue);
+                  handleRemovePhoto(photoIndex);
                 }}
-                style={({ pressed }) => {
-                  return [styles.starButton, pressed ? styles.buttonPressed : null];
-                }}
-                testID={`review-form-star-${starValue}`}
+                className="rounded-full bg-danger-bg px-3.5 py-[7px] active:opacity-75"
+                testID={`review-form-remove-photo-${photoIndex}`}
               >
-                <Text style={[styles.starText, isFilled ? styles.starTextFilled : null]}>
-                  {isFilled ? '★' : '☆'}
+                <Text className="text-[13px] font-bold text-danger">
+                  {t('reviews.form.removePhoto')}
                 </Text>
               </Pressable>
-            );
-          })}
-        </View>
-      </View>
+            </View>
+          ))}
+          {photos.length < MAX_PHOTOS ? (
+            <Button
+              className="mt-3 self-start"
+              onPress={handleAddPhoto}
+              testID="review-form-add-photo"
+              title={t('reviews.form.addPhoto')}
+              variant="secondary"
+            />
+          ) : null}
+        </Card>
 
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>{t('reviews.form.commentLabel')}</Text>
-        <TextInput
-          maxLength={MAX_COMMENT_LENGTH}
-          multiline
-          onChangeText={setComment}
-          placeholder={t('reviews.form.commentPlaceholder')}
-          style={[styles.textInput, styles.commentInput]}
-          testID="review-form-comment-input"
-          value={comment}
+        {formError !== null ? (
+          <Text className={ERROR_TEXT_CLASS} testID="review-form-error">
+            {formError}
+          </Text>
+        ) : null}
+
+        <Button
+          className="mt-3"
+          disabled={isSubmitting}
+          onPress={handleSubmit}
+          testID="review-form-submit"
+          title={isSubmitting ? t('reviews.form.submitting') : t('reviews.form.submit')}
         />
       </View>
-
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>
-          {t('reviews.form.photosLabel', { count: photos.length })}
-        </Text>
-        {photos.map((photo, photoIndex) => (
-          <View
-            key={`${photo.localUri}-${photoIndex}`}
-            style={styles.photoRow}
-            testID={`review-form-photo-${photoIndex}`}
-          >
-            <Image source={{ uri: photo.localUri }} style={styles.photoThumbnail} />
-            <Pressable
-              accessibilityRole="button"
-              onPress={(): void => {
-                handleRemovePhoto(photoIndex);
-              }}
-              style={({ pressed }) => {
-                return [styles.removePhotoButton, pressed ? styles.buttonPressed : null];
-              }}
-              testID={`review-form-remove-photo-${photoIndex}`}
-            >
-              <Text style={styles.removePhotoButtonText}>{t('reviews.form.removePhoto')}</Text>
-            </Pressable>
-          </View>
-        ))}
-        {photos.length < MAX_PHOTOS ? (
-          <Pressable
-            accessibilityRole="button"
-            onPress={handleAddPhoto}
-            style={({ pressed }) => {
-              return [styles.secondaryButton, pressed ? styles.buttonPressed : null];
-            }}
-            testID="review-form-add-photo"
-          >
-            <Text style={styles.secondaryButtonText}>{t('reviews.form.addPhoto')}</Text>
-          </Pressable>
-        ) : null}
-      </View>
-
-      {formError !== null ? (
-        <Text style={styles.errorText} testID="review-form-error">
-          {formError}
-        </Text>
-      ) : null}
-
-      <Pressable
-        accessibilityRole="button"
-        disabled={isSubmitting}
-        onPress={handleSubmit}
-        style={({ pressed }) => {
-          return [styles.primaryButton, pressed ? styles.buttonPressed : null];
-        }}
-        testID="review-form-submit"
-      >
-        <Text style={styles.primaryButtonText}>
-          {isSubmitting ? t('reviews.form.submitting') : t('reviews.form.submit')}
-        </Text>
-      </Pressable>
-    </ScrollView>
+    </ScreenContainer>
   );
 }
-
-
-const styles = StyleSheet.create({
-  buttonPressed: {
-    opacity: 0.75,
-  },
-  centeredContainer: {
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    flex: 1,
-    gap: 10,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  commentInput: {
-    minHeight: 96,
-    textAlignVertical: 'top',
-  },
-  container: {
-    backgroundColor: '#F3F4F6',
-    flex: 1,
-  },
-  errorText: {
-    color: '#991B1B',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  mutedText: {
-    color: '#6B7280',
-    fontSize: 13,
-    marginTop: 6,
-    textAlign: 'center',
-  },
-  noticeText: {
-    color: '#92400E',
-    fontSize: 13,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  photoRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 10,
-  },
-  photoThumbnail: {
-    borderRadius: 8,
-    height: 56,
-    width: 56,
-  },
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#0F766E',
-    borderRadius: 12,
-    marginTop: 12,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  removePhotoButton: {
-    backgroundColor: '#FEE2E2',
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-  },
-  removePhotoButtonText: {
-    color: '#991B1B',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  scrollContent: {
-    gap: 12,
-    padding: 16,
-  },
-  secondaryButton: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#0F766E',
-    borderRadius: 999,
-    borderWidth: 1,
-    marginTop: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 9,
-  },
-  secondaryButtonText: {
-    color: '#0F766E',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  sectionCard: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E5E7EB',
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 16,
-  },
-  sectionTitle: {
-    color: '#111827',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  starButton: {
-    padding: 4,
-  },
-  starRow: {
-    flexDirection: 'row',
-    gap: 4,
-    marginTop: 8,
-  },
-  starText: {
-    color: '#9CA3AF',
-    fontSize: 30,
-  },
-  starTextFilled: {
-    color: '#D97706',
-  },
-  subtitle: {
-    color: '#374151',
-    fontSize: 15,
-  },
-  successTitle: {
-    color: '#065F46',
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  textInput: {
-    backgroundColor: '#F9FAFB',
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    borderWidth: 1,
-    color: '#111827',
-    fontSize: 14,
-    marginTop: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  title: {
-    color: '#111827',
-    fontSize: 24,
-    fontWeight: '700',
-  },
-});

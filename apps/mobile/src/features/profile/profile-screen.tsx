@@ -5,10 +5,14 @@ import type {
 } from '@lilocharge/shared-types';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
+import { Button } from '../../components/ui/button';
+import { Card } from '../../components/ui/card';
+import { ScreenContainer } from '../../components/ui/screen-container';
 import { persistLanguage } from '../../i18n/language-preference';
 import { useAppTranslation } from '../../i18n/use-app-translation';
+import { PRIMARY } from '../../theme/colors';
 import { useOnboardingSession } from '../onboarding/onboarding-session';
 import { profileApi, type ProfileApi } from './profile-api';
 
@@ -22,6 +26,17 @@ const LANGUAGE_OPTIONS: readonly LanguageOption[] = [
   { code: 'ru', nativeLabel: 'Русский' },
   { code: 'en', nativeLabel: 'English' },
 ];
+
+const SECTION_TITLE_CLASS = 'text-[15px] font-bold text-text';
+const MUTED_TEXT_CLASS = 'mt-1.5 text-[13px] text-text-muted';
+const FIELD_LABEL_CLASS = 'mt-2.5 text-xs font-bold uppercase text-text-muted';
+const FIELD_VALUE_CLASS = 'mt-0.5 text-[15px] font-semibold text-text';
+const NAV_ROW_CLASS =
+  'mt-2 flex-row items-center justify-between rounded-sm border border-border bg-neutral-50 px-3 py-3 active:opacity-75';
+const OPTION_CLASS =
+  'mt-2 rounded-sm border border-border bg-neutral-50 px-3 py-2.5 active:opacity-75';
+const OPTION_SELECTED_CLASS = 'border-primary bg-primary-50';
+const OPTION_TEXT_CLASS = 'text-sm font-semibold text-text';
 
 type AccountState =
   | { readonly status: 'error' }
@@ -101,121 +116,100 @@ export function ProfileScreen({ profileApiClient = profileApi }: ProfileScreenPr
   };
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.scrollContent}
-      style={styles.container}
-      testID="profile-screen"
-    >
-      <Text accessibilityRole="header" style={styles.title}>
-        {t('profile.title')}
-      </Text>
-      <Text style={styles.subtitle}>{t('profile.subtitle')}</Text>
+    <ScreenContainer scroll testID="profile-screen">
+      <View className="gap-3 p-4">
+        <Text accessibilityRole="header" className="text-2xl font-bold text-text">
+          {t('profile.title')}
+        </Text>
+        <Text className="text-[15px] text-neutral-700">{t('profile.subtitle')}</Text>
 
-      {userId === null ? (
-        <View style={styles.sectionCard}>
-          <Text style={styles.mutedText} testID="profile-signed-out">
-            {t('profile.signedOut.message')}
-          </Text>
+        {userId === null ? (
+          <Card>
+            <Text className={MUTED_TEXT_CLASS} testID="profile-signed-out">
+              {t('profile.signedOut.message')}
+            </Text>
+            <Button
+              className="mt-3"
+              onPress={(): void => {
+                router.replace('/onboarding/login');
+              }}
+              testID="profile-sign-in"
+              title={t('profile.signedOut.signIn')}
+            />
+          </Card>
+        ) : (
+          <AccountSections
+            accountState={accountState}
+            onRetry={(): void => {
+              setReloadToken((previousToken) => previousToken + 1);
+            }}
+          />
+        )}
+
+        <Card>
+          <Text className={SECTION_TITLE_CLASS}>{t('profile.navigation.title')}</Text>
           <Pressable
             accessibilityRole="button"
             onPress={(): void => {
-              router.replace('/onboarding/login');
+              router.push('/payment-methods');
             }}
-            style={({ pressed }) => {
-              return [styles.primaryButton, pressed ? styles.buttonPressed : null];
-            }}
-            testID="profile-sign-in"
+            className={NAV_ROW_CLASS}
+            testID="profile-payment-methods"
           >
-            <Text style={styles.primaryButtonText}>{t('profile.signedOut.signIn')}</Text>
+            <Text className="text-sm font-semibold text-text">
+              {t('profile.navigation.paymentMethods')}
+            </Text>
+            <Text className="text-lg font-bold text-text-muted">›</Text>
           </Pressable>
-        </View>
-      ) : (
-        <AccountSections
-          accountState={accountState}
-          onRetry={(): void => {
-            setReloadToken((previousToken) => previousToken + 1);
-          }}
-        />
-      )}
+          <Pressable
+            accessibilityRole="button"
+            onPress={(): void => {
+              router.push('/wallet');
+            }}
+            className={NAV_ROW_CLASS}
+            testID="profile-wallet"
+          >
+            <Text className="text-sm font-semibold text-text">{t('profile.navigation.wallet')}</Text>
+            <Text className="text-lg font-bold text-text-muted">›</Text>
+          </Pressable>
+        </Card>
 
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>{t('profile.navigation.title')}</Text>
-        <Pressable
-          accessibilityRole="button"
-          onPress={(): void => {
-            router.push('/payment-methods');
-          }}
-          style={({ pressed }) => {
-            return [styles.navigationRow, pressed ? styles.buttonPressed : null];
-          }}
-          testID="profile-payment-methods"
-        >
-          <Text style={styles.navigationRowText}>{t('profile.navigation.paymentMethods')}</Text>
-          <Text style={styles.navigationRowChevron}>›</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={(): void => {
-            router.push('/wallet');
-          }}
-          style={({ pressed }) => {
-            return [styles.navigationRow, pressed ? styles.buttonPressed : null];
-          }}
-          testID="profile-wallet"
-        >
-          <Text style={styles.navigationRowText}>{t('profile.navigation.wallet')}</Text>
-          <Text style={styles.navigationRowChevron}>›</Text>
-        </Pressable>
-      </View>
+        <Card>
+          <Text className={SECTION_TITLE_CLASS}>{t('profile.language.title')}</Text>
+          {LANGUAGE_OPTIONS.map((option) => {
+            const isSelected = i18n.language === option.code;
 
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>{t('profile.language.title')}</Text>
-        {LANGUAGE_OPTIONS.map((option) => {
-          const isSelected = i18n.language === option.code;
-
-          return (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ selected: isSelected }}
-              key={option.code}
-              onPress={(): void => {
-                handleSelectLanguage(option.code);
-              }}
-              style={({ pressed }) => {
-                return [
-                  styles.languageOption,
-                  isSelected ? styles.languageOptionSelected : null,
-                  pressed ? styles.buttonPressed : null,
-                ];
-              }}
-              testID={`profile-language-${option.code}`}
-            >
-              <Text
-                style={[
-                  styles.languageOptionText,
-                  isSelected ? styles.languageOptionTextSelected : null,
-                ]}
+            return (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
+                key={option.code}
+                onPress={(): void => {
+                  handleSelectLanguage(option.code);
+                }}
+                className={`${OPTION_CLASS} ${isSelected ? OPTION_SELECTED_CLASS : ''}`}
+                testID={`profile-language-${option.code}`}
               >
-                {option.nativeLabel}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+                <Text className={`${OPTION_TEXT_CLASS} ${isSelected ? 'text-primary-900' : ''}`}>
+                  {option.nativeLabel}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </Card>
 
-      {userId !== null ? (
-        <Pressable
-          accessibilityRole="button"
-          onPress={handleLogout}
-          style={({ pressed }) => {
-            return [styles.logoutButton, pressed ? styles.buttonPressed : null];
-          }}
-          testID="profile-logout"
-        >
-          <Text style={styles.logoutButtonText}>{t('profile.logout')}</Text>
-        </Pressable>
-      ) : null}
-    </ScrollView>
+        {userId !== null ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={handleLogout}
+            className="mt-1 items-center rounded-md bg-danger-bg py-3.5 active:opacity-75"
+            testID="profile-logout"
+          >
+            <Text className="text-[15px] font-bold text-danger">{t('profile.logout')}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </ScreenContainer>
   );
 }
 
@@ -233,30 +227,27 @@ function AccountSections({ accountState, onRetry }: AccountSectionsProps): JSX.E
 
   if (accountState.status === 'loading') {
     return (
-      <View style={styles.sectionCard} testID="profile-loading">
-        <ActivityIndicator color="#0F766E" />
-        <Text style={styles.mutedText}>{t('profile.loading')}</Text>
-      </View>
+      <Card testID="profile-loading">
+        <ActivityIndicator color={PRIMARY} />
+        <Text className={MUTED_TEXT_CLASS}>{t('profile.loading')}</Text>
+      </Card>
     );
   }
 
   if (accountState.status === 'error') {
     return (
-      <View style={styles.sectionCard}>
-        <Text style={styles.errorText} testID="profile-load-error">
+      <Card>
+        <Text className="text-sm font-semibold text-danger" testID="profile-load-error">
           {t('profile.loadError')}
         </Text>
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          className="mt-3 self-start"
           onPress={onRetry}
-          style={({ pressed }) => {
-            return [styles.secondaryButton, pressed ? styles.buttonPressed : null];
-          }}
           testID="profile-retry"
-        >
-          <Text style={styles.secondaryButtonText}>{t('profile.retry')}</Text>
-        </Pressable>
-      </View>
+          title={t('profile.retry')}
+          variant="secondary"
+        />
+      </Card>
     );
   }
 
@@ -264,190 +255,45 @@ function AccountSections({ accountState, onRetry }: AccountSectionsProps): JSX.E
 
   return (
     <>
-      <View style={styles.sectionCard} testID="profile-account">
-        <Text style={styles.sectionTitle}>{t('profile.account.title')}</Text>
-        <Text style={styles.fieldLabel}>{t('profile.account.nameLabel')}</Text>
-        <Text style={styles.fieldValue} testID="profile-display-name">
+      <Card testID="profile-account">
+        <Text className={SECTION_TITLE_CLASS}>{t('profile.account.title')}</Text>
+        <Text className={FIELD_LABEL_CLASS}>{t('profile.account.nameLabel')}</Text>
+        <Text className={FIELD_VALUE_CLASS} testID="profile-display-name">
           {profile.displayName}
         </Text>
-        <Text style={styles.fieldLabel}>{t('profile.account.emailLabel')}</Text>
-        <Text style={styles.fieldValue} testID="profile-email">
+        <Text className={FIELD_LABEL_CLASS}>{t('profile.account.emailLabel')}</Text>
+        <Text className={FIELD_VALUE_CLASS} testID="profile-email">
           {profile.email}
         </Text>
-        <Text style={styles.fieldLabel}>{t('profile.account.phoneLabel')}</Text>
-        <Text style={styles.fieldValue} testID="profile-phone">
+        <Text className={FIELD_LABEL_CLASS}>{t('profile.account.phoneLabel')}</Text>
+        <Text className={FIELD_VALUE_CLASS} testID="profile-phone">
           {profile.phone ?? t('profile.account.phoneMissing')}
         </Text>
-      </View>
+      </Card>
 
-      <View style={styles.sectionCard} testID="profile-vehicles">
-        <Text style={styles.sectionTitle}>{t('profile.vehicles.title')}</Text>
+      <Card testID="profile-vehicles">
+        <Text className={SECTION_TITLE_CLASS}>{t('profile.vehicles.title')}</Text>
         {vehicles.length === 0 ? (
-          <Text style={styles.mutedText} testID="profile-vehicles-empty">
+          <Text className={MUTED_TEXT_CLASS} testID="profile-vehicles-empty">
             {t('profile.vehicles.empty')}
           </Text>
         ) : null}
         {vehicles.map((vehicle) => (
-          <View key={vehicle.id} style={styles.vehicleCard} testID={`profile-vehicle-${vehicle.id}`}>
-            <Text style={styles.fieldValue}>
+          <View
+            key={vehicle.id}
+            className="mt-2.5 rounded-md border border-border bg-neutral-50 px-3 py-2.5"
+            testID={`profile-vehicle-${vehicle.id}`}
+          >
+            <Text className={FIELD_VALUE_CLASS}>
               {vehicle.make} {vehicle.model} · {vehicle.year}
             </Text>
-            <Text style={styles.mutedText}>
+            <Text className={MUTED_TEXT_CLASS}>
               {t(`onboarding.vehicle.connectorTypes.${vehicle.connectorType}`)} ·{' '}
               {t('sessions.units.energy', { value: vehicle.batteryCapacity })}
             </Text>
           </View>
         ))}
-      </View>
+      </Card>
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  buttonPressed: {
-    opacity: 0.75,
-  },
-  container: {
-    backgroundColor: '#F3F4F6',
-    flex: 1,
-  },
-  errorText: {
-    color: '#991B1B',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  fieldLabel: {
-    color: '#6B7280',
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 10,
-    textTransform: 'uppercase',
-  },
-  fieldValue: {
-    color: '#111827',
-    fontSize: 15,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  languageOption: {
-    backgroundColor: '#F9FAFB',
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    borderWidth: 1,
-    marginTop: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  languageOptionSelected: {
-    backgroundColor: '#ECFDF5',
-    borderColor: '#0F766E',
-  },
-  languageOptionText: {
-    color: '#111827',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  languageOptionTextSelected: {
-    color: '#065F46',
-  },
-  logoutButton: {
-    alignItems: 'center',
-    backgroundColor: '#FEE2E2',
-    borderRadius: 12,
-    marginTop: 4,
-    paddingVertical: 13,
-  },
-  logoutButtonText: {
-    color: '#991B1B',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  mutedText: {
-    color: '#6B7280',
-    fontSize: 13,
-    marginTop: 6,
-  },
-  navigationRow: {
-    alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    borderWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-  },
-  navigationRowChevron: {
-    color: '#6B7280',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  navigationRowText: {
-    color: '#111827',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#0F766E',
-    borderRadius: 12,
-    marginTop: 12,
-    paddingVertical: 12,
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  scrollContent: {
-    gap: 12,
-    padding: 16,
-  },
-  secondaryButton: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#0F766E',
-    borderRadius: 999,
-    borderWidth: 1,
-    marginTop: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 9,
-  },
-  secondaryButtonText: {
-    color: '#0F766E',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  sectionCard: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E5E7EB',
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 16,
-  },
-  sectionTitle: {
-    color: '#111827',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  subtitle: {
-    color: '#374151',
-    fontSize: 15,
-  },
-  title: {
-    color: '#111827',
-    fontSize: 24,
-    fontWeight: '700',
-  },
-  vehicleCard: {
-    backgroundColor: '#F9FAFB',
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    borderWidth: 1,
-    marginTop: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-});

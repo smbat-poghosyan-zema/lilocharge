@@ -1,6 +1,6 @@
 import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { useAppTranslation } from '../i18n/use-app-translation';
 
@@ -25,22 +25,8 @@ export function OfflineBanner(): JSX.Element | null {
   }
 
   return (
-    <View accessibilityRole="alert" style={styles.container} testID="offline-banner">
-      <Text style={styles.text}>{t('offline.banner')}</Text>
+    <View accessibilityRole="alert" className="items-center bg-danger px-4 py-1.5" testID="offline-banner">
+      <Text className="text-[13px] font-semibold text-neutral-0">{t('offline.banner')}</Text>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    alignItems: 'center',
-    backgroundColor: '#B91C1C',
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-  },
-  text: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-});

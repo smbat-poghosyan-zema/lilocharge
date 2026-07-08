@@ -1,8 +1,11 @@
 import type { FavoriteStation } from '@lilocharge/shared-types';
 import { StationStatus } from '@lilocharge/shared-types';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 
+import { Card } from '../../components/ui/card';
+import { ScreenContainer } from '../../components/ui/screen-container';
+import { EmptyState } from '../../components/ui/state-views';
 import { useAppTranslation } from '../../i18n/use-app-translation';
 import { favoritesStorage, type FavoritesStorage } from './favorites-storage';
 import { createFavoritesSync, type FavoritesSync } from './favorites-sync';
@@ -64,63 +67,61 @@ export function FavoritesScreen({
   };
 
   return (
-    <View style={styles.container} testID="favorites-screen">
-      <View style={styles.headerContainer}>
-        <Text accessibilityRole="header" style={styles.title}>
+    <ScreenContainer testID="favorites-screen">
+      <View className="border-b border-border bg-neutral-0 px-[18px] pb-3.5 pt-[22px]">
+        <Text accessibilityRole="header" className="text-2xl font-bold text-text">
           {t('favorites.title')}
         </Text>
-        <Text style={styles.subtitle}>{t('favorites.subtitle')}</Text>
+        <Text className="mt-1.5 text-sm text-neutral-700">{t('favorites.subtitle')}</Text>
         {hasSyncLoadError ? (
-          <Text style={styles.syncErrorText} testID="favorites-sync-load-error">
+          <Text className="mt-2 text-[13px] text-danger" testID="favorites-sync-load-error">
             {t('favorites.sync.loadError')}
           </Text>
         ) : null}
         {hasSyncActionError ? (
-          <Text style={styles.syncErrorText} testID="favorites-sync-error">
+          <Text className="mt-2 text-[13px] text-danger" testID="favorites-sync-error">
             {t('favorites.sync.error')}
           </Text>
         ) : null}
       </View>
 
       {favorites.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText} testID="favorites-empty-state">
-            {t('favorites.empty')}
-          </Text>
-        </View>
+        <EmptyState message={t('favorites.empty')} testID="favorites-empty-state" />
       ) : (
-        <ScrollView contentContainerStyle={styles.listContainer} testID="favorites-list">
-          {favorites.map((favorite) => (
-            <View
-              key={favorite.stationId}
-              style={styles.favoriteCard}
-              testID={`favorite-card-${favorite.stationId}`}
-            >
-              <Text style={styles.favoriteName}>{favorite.station.name}</Text>
-              <Text style={styles.favoriteOperator}>{favorite.station.operatorName}</Text>
-              <Text style={styles.favoriteAddress}>
-                {favorite.station.address}, {favorite.station.city}
-              </Text>
-              <Text style={styles.favoriteStatus}>
-                {resolveStationStatusLabel(favorite.station.status, t)}
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                onPress={(): void => {
-                  void handleRemoveFavorite(favorite.stationId);
-                }}
-                style={({ pressed }) => {
-                  return [styles.removeButton, pressed ? styles.removeButtonPressed : null];
-                }}
-                testID={`favorite-remove-${favorite.stationId}`}
+        <ScrollView testID="favorites-list">
+          <View className="gap-3 p-4 pb-7">
+            {favorites.map((favorite) => (
+              <Card
+                key={favorite.stationId}
+                className="p-3.5"
+                testID={`favorite-card-${favorite.stationId}`}
               >
-                <Text style={styles.removeButtonText}>{t('favorites.actions.remove')}</Text>
-              </Pressable>
-            </View>
-          ))}
+                <Text className="text-[17px] font-bold text-text">{favorite.station.name}</Text>
+                <Text className="mt-1 text-sm text-text">{favorite.station.operatorName}</Text>
+                <Text className="mt-1.5 text-[13px] text-neutral-700">
+                  {favorite.station.address}, {favorite.station.city}
+                </Text>
+                <Text className="mt-2 text-[13px] font-bold text-primary">
+                  {resolveStationStatusLabel(favorite.station.status, t)}
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={(): void => {
+                    void handleRemoveFavorite(favorite.stationId);
+                  }}
+                  className="mt-3 self-start rounded-full bg-danger-bg px-3 py-[7px] active:opacity-75"
+                  testID={`favorite-remove-${favorite.stationId}`}
+                >
+                  <Text className="text-xs font-bold text-danger">
+                    {t('favorites.actions.remove')}
+                  </Text>
+                </Pressable>
+              </Card>
+            ))}
+          </View>
         </ScrollView>
       )}
-    </View>
+    </ScreenContainer>
   );
 }
 
@@ -140,93 +141,3 @@ function resolveStationStatusLabel(status: StationStatus, t: (key: string) => st
       return t('stations.map.sheet.status.available');
   }
 }
-
-const styles = StyleSheet.create({
-  container: {
-    backgroundColor: '#F3F4F6',
-    flex: 1,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  emptyText: {
-    color: '#6B7280',
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  favoriteAddress: {
-    color: '#374151',
-    fontSize: 13,
-    marginTop: 6,
-  },
-  favoriteCard: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E5E7EB',
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 14,
-  },
-  favoriteName: {
-    color: '#111827',
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  favoriteOperator: {
-    color: '#1F2937',
-    fontSize: 14,
-    marginTop: 4,
-  },
-  favoriteStatus: {
-    color: '#0F766E',
-    fontSize: 13,
-    fontWeight: '700',
-    marginTop: 8,
-  },
-  headerContainer: {
-    backgroundColor: '#FFFFFF',
-    borderBottomColor: '#E5E7EB',
-    borderBottomWidth: 1,
-    paddingBottom: 14,
-    paddingHorizontal: 18,
-    paddingTop: 22,
-  },
-  listContainer: {
-    gap: 12,
-    padding: 16,
-    paddingBottom: 28,
-  },
-  removeButton: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#FEE2E2',
-    borderRadius: 999,
-    marginTop: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  removeButtonPressed: {
-    opacity: 0.75,
-  },
-  removeButtonText: {
-    color: '#991B1B',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  subtitle: {
-    color: '#4B5563',
-    fontSize: 14,
-    marginTop: 6,
-  },
-  syncErrorText: {
-    color: '#B91C1C',
-    fontSize: 13,
-    marginTop: 8,
-  },
-  title: {
-    color: '#111827',
-    fontSize: 24,
-    fontWeight: '700',
-  },
-});

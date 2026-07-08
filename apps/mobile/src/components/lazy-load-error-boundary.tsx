@@ -1,5 +1,5 @@
 import { Component, type ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import i18n from '../i18n/i18n';
 
@@ -36,8 +36,10 @@ export class LazyLoadErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
       }
 
       return (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{i18n.t('errors.screenLoadFailed')}</Text>
+        <View className="flex-1 items-center justify-center bg-background p-6">
+          <Text className="text-center text-base font-semibold text-danger">
+            {i18n.t('errors.screenLoadFailed')}
+          </Text>
         </View>
       );
     }
@@ -45,19 +47,3 @@ export class LazyLoadErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
     return this.props.children;
   }
 }
-
-const styles = StyleSheet.create({
-  errorContainer: {
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    flex: 1,
-    justifyContent: 'center',
-    padding: 24,
-  },
-  errorText: {
-    color: '#DC2626',
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-});
