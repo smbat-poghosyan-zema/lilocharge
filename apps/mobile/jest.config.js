@@ -8,7 +8,7 @@ module.exports = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   testMatch: ['**/*.spec.ts', '**/*.spec.tsx', '**/*.test.ts', '**/*.test.tsx'],
   transformIgnorePatterns: [
-    'node_modules/(?!(?:.pnpm/)?((jest-)?react-native|@react-native|expo(nent)?|@expo(nent)?|expo-router|@expo-google-fonts|react-navigation|@react-navigation|unimodules|sentry-expo|native-base|react-native-svg))',
+    'node_modules/(?!(?:.pnpm/)?((jest-)?react-native|@react-native|expo(nent)?|@expo(nent)?|expo-router|@expo-google-fonts|react-navigation|@react-navigation|unimodules|sentry-expo|native-base|react-native-svg|nativewind|react-native-css-interop))',
   ],
   clearMocks: true,
   // Enforced floor for CI (mobile.yml runs jest with --coverage). Measured on

@@ -2,7 +2,7 @@ import type { SessionResponse } from '@lilocharge/shared-types';
 import { SessionStatus } from '@lilocharge/shared-types';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { useAppTranslation } from '../../i18n/use-app-translation';
 import { normalizeRouteParam } from '../../utils/route-params';
@@ -21,6 +21,10 @@ interface SessionSummaryScreenProps {
   readonly sessionsApiClient?: Pick<SessionsApi, 'getSession'>;
   readonly shareReceipt?: (userId: string, sessionId: string) => Promise<void>;
 }
+
+const SECONDARY_BUTTON_CLASS =
+  'items-center rounded-lg border border-primary bg-neutral-0 py-3.5';
+const SECONDARY_BUTTON_TEXT_CLASS = 'text-[15px] font-bold text-primary';
 
 /**
  * Final summary of one charging session with cost breakdown, status badge,
@@ -77,8 +81,8 @@ export function SessionSummaryScreen({
 
   if (sessionId === null || userId === null || hasLoadError) {
     return (
-      <View style={styles.centeredContainer}>
-        <Text style={styles.errorText} testID="summary-load-error">
+      <View className="flex-1 items-center justify-center gap-3 bg-background px-6">
+        <Text className="text-center text-sm font-semibold text-danger" testID="summary-load-error">
           {t('sessions.summary.loadError')}
         </Text>
         {sessionId !== null && userId !== null ? (
@@ -87,12 +91,10 @@ export function SessionSummaryScreen({
             onPress={(): void => {
               void loadSession();
             }}
-            style={({ pressed }) => {
-              return [styles.secondaryButton, pressed ? styles.buttonPressed : null];
-            }}
+            className={SECONDARY_BUTTON_CLASS}
             testID="summary-retry"
           >
-            <Text style={styles.secondaryButtonText}>{t('sessions.actions.retry')}</Text>
+            <Text className={SECONDARY_BUTTON_TEXT_CLASS}>{t('sessions.actions.retry')}</Text>
           </Pressable>
         ) : null}
       </View>
@@ -101,9 +103,9 @@ export function SessionSummaryScreen({
 
   if (session === null) {
     return (
-      <View style={styles.centeredContainer} testID="summary-loading">
+      <View className="flex-1 items-center justify-center gap-3 bg-background px-6" testID="summary-loading">
         <ActivityIndicator color="#0F766E" size="large" />
-        <Text style={styles.mutedText}>{t('sessions.summary.loading')}</Text>
+        <Text className="text-sm text-neutral-500">{t('sessions.summary.loading')}</Text>
       </View>
     );
   }
@@ -112,42 +114,45 @@ export function SessionSummaryScreen({
     session.endTime === null
       ? computeDurationSeconds(session.startTime, Date.now())
       : computeDurationSeconds(session.startTime, Date.parse(session.endTime));
-  const statusBadgeStyles = resolveStatusBadgeStyles(session.status);
+  const statusBadgeClass = resolveStatusBadgeClass(session.status);
   const isCompleted = session.status === SessionStatus.COMPLETED;
 
   return (
-    <View style={styles.container}>
-      <View style={styles.headerContainer}>
-        <Text accessibilityRole="header" style={styles.title}>
+    <View className="flex-1 bg-background">
+      <View className="items-start border-b border-border bg-neutral-0 px-5 pb-3.5 pt-6">
+        <Text accessibilityRole="header" className="text-2xl font-bold text-text">
           {t('sessions.summary.title')}
         </Text>
-        <Text style={[styles.statusBadge, statusBadgeStyles.badge]} testID="summary-status">
+        <Text
+          className={`mt-2 overflow-hidden rounded-full px-3 py-1 text-[13px] font-bold ${statusBadgeClass}`}
+          testID="summary-status"
+        >
           {t(`sessions.status.${session.status}`)}
         </Text>
       </View>
 
-      <View style={styles.card}>
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>{t('sessions.summary.energyLabel')}</Text>
-          <Text style={styles.rowValue} testID="summary-energy">
+      <View className="m-4 rounded-lg border border-border bg-neutral-0 p-4">
+        <View className="flex-row items-center justify-between py-2.5">
+          <Text className="text-sm text-neutral-500">{t('sessions.summary.energyLabel')}</Text>
+          <Text className="text-base font-bold text-text" testID="summary-energy">
             {t('sessions.units.energy', { value: formatEnergyKwh(session.energyDelivered) })}
           </Text>
         </View>
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>{t('sessions.summary.durationLabel')}</Text>
-          <Text style={styles.rowValue} testID="summary-duration">
+        <View className="flex-row items-center justify-between py-2.5">
+          <Text className="text-sm text-neutral-500">{t('sessions.summary.durationLabel')}</Text>
+          <Text className="text-base font-bold text-text" testID="summary-duration">
             {formatDurationSeconds(durationSeconds)}
           </Text>
         </View>
-        <View style={[styles.row, styles.totalRow]}>
-          <Text style={styles.totalLabel}>{t('sessions.summary.totalLabel')}</Text>
-          <Text style={styles.totalValue} testID="summary-total">
+        <View className="mt-1 flex-row items-center justify-between border-t border-border pt-3.5">
+          <Text className="text-base font-bold text-text">{t('sessions.summary.totalLabel')}</Text>
+          <Text className="text-xl font-bold text-primary" testID="summary-total">
             {t('sessions.units.amd', { amount: formatAmdFromCents(session.totalCost) })}
           </Text>
         </View>
       </View>
 
-      <View style={styles.footerContainer}>
+      <View className="mt-auto gap-3 p-4">
         {isCompleted ? (
           <Pressable
             accessibilityRole="button"
@@ -155,16 +160,10 @@ export function SessionSummaryScreen({
             onPress={(): void => {
               void handleReceiptPress();
             }}
-            style={({ pressed }) => {
-              return [
-                styles.secondaryButton,
-                pressed ? styles.buttonPressed : null,
-                receiptState === 'downloading' ? styles.buttonPressed : null,
-              ];
-            }}
+            className={`${SECONDARY_BUTTON_CLASS} ${receiptState === 'downloading' ? 'opacity-75' : ''}`}
             testID="summary-receipt"
           >
-            <Text style={styles.secondaryButtonText}>
+            <Text className={SECONDARY_BUTTON_TEXT_CLASS}>
               {receiptState === 'downloading'
                 ? t('sessions.summary.receiptDownloading')
                 : t('sessions.summary.receipt')}
@@ -172,7 +171,7 @@ export function SessionSummaryScreen({
           </Pressable>
         ) : null}
         {receiptState === 'error' ? (
-          <Text style={styles.errorText} testID="summary-receipt-error">
+          <Text className="text-center text-sm font-semibold text-danger" testID="summary-receipt-error">
             {t('sessions.summary.receiptError')}
           </Text>
         ) : null}
@@ -181,12 +180,10 @@ export function SessionSummaryScreen({
           onPress={(): void => {
             router.replace('/(tabs)/stations');
           }}
-          style={({ pressed }) => {
-            return [styles.primaryButton, pressed ? styles.buttonPressed : null];
-          }}
+          className="items-center rounded-lg bg-primary py-4"
           testID="summary-done"
         >
-          <Text style={styles.primaryButtonText}>{t('sessions.summary.done')}</Text>
+          <Text className="text-[17px] font-bold text-neutral-0">{t('sessions.summary.done')}</Text>
         </Pressable>
       </View>
     </View>
@@ -194,149 +191,17 @@ export function SessionSummaryScreen({
 }
 
 /**
- * Resolves the status-badge style for one session status so a FAILED/CANCELLED
+ * Resolves the status-badge utility classes for one session status so a FAILED/CANCELLED
  * charge never reads visually as a successful one.
  */
-function resolveStatusBadgeStyles(status: SessionStatus): { readonly badge: object } {
+function resolveStatusBadgeClass(status: SessionStatus): string {
   if (status === SessionStatus.FAILED || status === SessionStatus.CANCELLED) {
-    return { badge: styles.statusBadgeFailure };
+    return 'bg-danger-bg text-danger';
   }
 
   if (status === SessionStatus.COMPLETED) {
-    return { badge: styles.statusBadgeSuccess };
+    return 'bg-primary-100 text-primary';
   }
 
-  return { badge: styles.statusBadgeNeutral };
+  return 'bg-neutral-200 text-neutral-700';
 }
-
-
-const styles = StyleSheet.create({
-  buttonPressed: {
-    opacity: 0.75,
-  },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E5E7EB',
-    borderRadius: 14,
-    borderWidth: 1,
-    margin: 16,
-    padding: 16,
-  },
-  centeredContainer: {
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    flex: 1,
-    gap: 12,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  container: {
-    backgroundColor: '#F3F4F6',
-    flex: 1,
-  },
-  errorText: {
-    color: '#991B1B',
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  footerContainer: {
-    gap: 12,
-    marginTop: 'auto',
-    padding: 16,
-  },
-  headerContainer: {
-    alignItems: 'flex-start',
-    backgroundColor: '#FFFFFF',
-    borderBottomColor: '#E5E7EB',
-    borderBottomWidth: 1,
-    paddingBottom: 14,
-    paddingHorizontal: 18,
-    paddingTop: 22,
-  },
-  mutedText: {
-    color: '#4B5563',
-    fontSize: 14,
-  },
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#0F766E',
-    borderRadius: 14,
-    paddingVertical: 16,
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  row: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-  },
-  rowLabel: {
-    color: '#4B5563',
-    fontSize: 14,
-  },
-  rowValue: {
-    color: '#111827',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#0F766E',
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingVertical: 14,
-  },
-  secondaryButtonText: {
-    color: '#0F766E',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  statusBadge: {
-    borderRadius: 999,
-    fontSize: 13,
-    fontWeight: '700',
-    marginTop: 8,
-    overflow: 'hidden',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-  },
-  statusBadgeFailure: {
-    backgroundColor: '#FEE2E2',
-    color: '#991B1B',
-  },
-  statusBadgeNeutral: {
-    backgroundColor: '#E5E7EB',
-    color: '#374151',
-  },
-  statusBadgeSuccess: {
-    backgroundColor: '#CCFBF1',
-    color: '#0F766E',
-  },
-  title: {
-    color: '#111827',
-    fontSize: 24,
-    fontWeight: '700',
-  },
-  totalLabel: {
-    color: '#111827',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  totalRow: {
-    borderTopColor: '#E5E7EB',
-    borderTopWidth: 1,
-    marginTop: 4,
-    paddingTop: 14,
-  },
-  totalValue: {
-    color: '#0F766E',
-    fontSize: 20,
-    fontWeight: '700',
-  },
-});

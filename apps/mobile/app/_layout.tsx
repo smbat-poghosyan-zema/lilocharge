@@ -1,3 +1,4 @@
+import '../global.css';
 import { Stack } from 'expo-router';
 import { useEffect } from 'react';
 import { I18nextProvider } from 'react-i18next';

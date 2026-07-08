@@ -1,4 +1,5 @@
 const { getDefaultConfig } = require('expo/metro-config');
+const { withNativeWind } = require('nativewind/metro');
 const path = require('path');
 
 const projectRoot = __dirname;
@@ -41,4 +42,6 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   return context.resolveRequest(context, moduleName, platform);
 };
 
-module.exports = config;
+// Wrap LAST — withNativeWind only adds a CSS transformer and Tailwind watching; it does
+// NOT touch resolver.resolveRequest, so the Mapbox/mapbox-gl mock above survives intact.
+module.exports = withNativeWind(config, { input: './global.css' });
