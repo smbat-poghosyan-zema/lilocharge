@@ -7,9 +7,12 @@ import type {
 import { ConnectorType, StationStatus } from '@lilocharge/shared-types';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { ApiClientError } from '../../api';
+import { Button } from '../../components/ui/button';
+import { Card } from '../../components/ui/card';
+import { LoadingView } from '../../components/ui/state-views';
 import { useAppTranslation } from '../../i18n/use-app-translation';
 import { normalizeRouteParam } from '../../utils/route-params';
 import { useOnboardingSession } from '../onboarding/onboarding-session';
@@ -52,6 +55,16 @@ interface StationConnectorRowProps {
 }
 
 const EMPTY_CONNECTOR_IDS: readonly string[] = [];
+
+const CENTERED_CLASS = 'flex-1 items-center justify-center gap-2.5 bg-background px-6';
+const ERROR_TEXT_CLASS = 'text-center text-sm font-semibold text-danger';
+const DETAIL_LINE_CLASS = 'mt-1.5 text-[13px] text-neutral-700';
+const MUTED_TEXT_CLASS = 'mt-1.5 text-[13px] text-text-muted';
+const SECTION_TITLE_CLASS = 'text-[15px] font-bold text-neutral-900';
+const ROW_CARD_CLASS = 'mt-2.5 rounded-md border border-border bg-neutral-50 px-3 py-2.5';
+const ROW_TITLE_CLASS = 'text-sm font-bold text-neutral-900';
+const COMMUNITY_ACTION_BUTTON_CLASS =
+  'grow items-center rounded-full border border-primary bg-neutral-0 px-3.5 py-[9px] active:opacity-75';
 
 /**
  * Full-page station detail screen: station facts, connectors with per-connector
@@ -129,18 +142,13 @@ export function StationDetailScreen({
   );
 
   if (detailState.status === 'loading') {
-    return (
-      <View style={styles.centeredContainer} testID="station-detail-loading">
-        <ActivityIndicator color="#0F766E" size="large" />
-        <Text style={styles.mutedText}>{t('stations.detail.loading')}</Text>
-      </View>
-    );
+    return <LoadingView message={t('stations.detail.loading')} testID="station-detail-loading" />;
   }
 
   if (detailState.status === 'notFound') {
     return (
-      <View style={styles.centeredContainer}>
-        <Text style={styles.errorText} testID="station-detail-not-found">
+      <View className={CENTERED_CLASS}>
+        <Text className={ERROR_TEXT_CLASS} testID="station-detail-not-found">
           {t('stations.detail.notFound')}
         </Text>
       </View>
@@ -149,22 +157,19 @@ export function StationDetailScreen({
 
   if (detailState.status === 'error') {
     return (
-      <View style={styles.centeredContainer}>
-        <Text style={styles.errorText} testID="station-detail-error">
+      <View className={CENTERED_CLASS}>
+        <Text className={ERROR_TEXT_CLASS} testID="station-detail-error">
           {t('stations.detail.loadError')}
         </Text>
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          className="mt-3"
           onPress={(): void => {
             setReloadToken((previousToken) => previousToken + 1);
           }}
-          style={({ pressed }) => {
-            return [styles.secondaryButton, pressed ? styles.buttonPressed : null];
-          }}
           testID="station-detail-retry"
-        >
-          <Text style={styles.secondaryButtonText}>{t('stations.detail.retry')}</Text>
-        </Pressable>
+          title={t('stations.detail.retry')}
+          variant="secondary"
+        />
       </View>
     );
   }
@@ -173,37 +178,37 @@ export function StationDetailScreen({
 
   return (
     <ScrollView
-      contentContainerStyle={styles.scrollContent}
-      style={styles.container}
+      className="flex-1 bg-background"
+      contentContainerClassName="gap-3 p-4"
       testID="station-detail-screen"
     >
-      <View style={styles.headerCard}>
-        <Text accessibilityRole="header" style={styles.title}>
+      <Card>
+        <Text accessibilityRole="header" className="text-[22px] font-bold text-neutral-900">
           {detail.name}
         </Text>
-        <Text style={styles.statusText}>{resolveStationStatusLabel(detail.status, t)}</Text>
-        <Text style={styles.detailLine}>
+        <Text className="mt-1 text-[13px] font-semibold text-neutral-700">
+          {resolveStationStatusLabel(detail.status, t)}
+        </Text>
+        <Text className={DETAIL_LINE_CLASS}>
           {t('stations.detail.operatorLabel')}: {detail.operatorName}
         </Text>
-        <Text style={styles.detailLine} testID="station-detail-address">
+        <Text className={DETAIL_LINE_CLASS} testID="station-detail-address">
           {t('stations.detail.addressLabel')}: {detail.address}, {detail.city}
         </Text>
-        <Text style={styles.detailLine}>
+        <Text className={DETAIL_LINE_CLASS}>
           {t('stations.detail.openingHoursLabel')}:{' '}
           {detail.openingHours ?? t('stations.detail.openingHoursUnavailable')}
         </Text>
-        <View style={styles.communityActionsRow}>
+        <View className="mt-3 flex-row gap-2">
           <Pressable
             accessibilityRole="button"
             onPress={(): void => {
               router.push(`/stations/${detail.id}/review`);
             }}
-            style={({ pressed }) => {
-              return [styles.communityActionButton, pressed ? styles.buttonPressed : null];
-            }}
+            className={COMMUNITY_ACTION_BUTTON_CLASS}
             testID="station-detail-write-review"
           >
-            <Text style={styles.communityActionButtonText}>
+            <Text className="text-[13px] font-bold text-primary">
               {t('stations.detail.writeReview')}
             </Text>
           </Pressable>
@@ -212,33 +217,31 @@ export function StationDetailScreen({
             onPress={(): void => {
               router.push(`/stations/${detail.id}/report`);
             }}
-            style={({ pressed }) => {
-              return [styles.communityActionButton, pressed ? styles.buttonPressed : null];
-            }}
+            className={COMMUNITY_ACTION_BUTTON_CLASS}
             testID="station-detail-report-problem"
           >
-            <Text style={styles.communityActionButtonText}>
+            <Text className="text-[13px] font-bold text-primary">
               {t('stations.detail.reportProblem')}
             </Text>
           </Pressable>
         </View>
-      </View>
+      </Card>
 
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>{t('stations.detail.amenitiesTitle')}</Text>
+      <Card>
+        <Text className={SECTION_TITLE_CLASS}>{t('stations.detail.amenitiesTitle')}</Text>
         {detail.amenities.length === 0 ? (
-          <Text style={styles.mutedText}>{t('stations.detail.amenitiesEmpty')}</Text>
+          <Text className={MUTED_TEXT_CLASS}>{t('stations.detail.amenitiesEmpty')}</Text>
         ) : (
-          <Text style={styles.detailLine} testID="station-detail-amenities">
+          <Text className={DETAIL_LINE_CLASS} testID="station-detail-amenities">
             {detail.amenities.join(' · ')}
           </Text>
         )}
-      </View>
+      </Card>
 
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>{t('stations.detail.connectorsTitle')}</Text>
+      <Card>
+        <Text className={SECTION_TITLE_CLASS}>{t('stations.detail.connectorsTitle')}</Text>
         {detail.connectors.length === 0 ? (
-          <Text style={styles.mutedText}>{t('stations.detail.noConnectors')}</Text>
+          <Text className={MUTED_TEXT_CLASS}>{t('stations.detail.noConnectors')}</Text>
         ) : null}
         {detail.connectors.map((connector) => (
           <StationConnectorRow
@@ -251,45 +254,45 @@ export function StationDetailScreen({
             pricingPlan={findPricingPlanByConnectorId(connector.id, detail.pricingPlans)}
           />
         ))}
-      </View>
+      </Card>
 
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>{t('stations.detail.pricingTitle')}</Text>
+      <Card>
+        <Text className={SECTION_TITLE_CLASS}>{t('stations.detail.pricingTitle')}</Text>
         {detail.pricingPlans.length === 0 ? (
-          <Text style={styles.mutedText}>{t('stations.detail.noPricing')}</Text>
+          <Text className={MUTED_TEXT_CLASS}>{t('stations.detail.noPricing')}</Text>
         ) : null}
         {detail.pricingPlans.map((pricingPlan) => (
           <View
             key={pricingPlan.id}
-            style={styles.rowCard}
+            className={ROW_CARD_CLASS}
             testID={`station-detail-pricing-plan-${pricingPlan.id}`}
           >
-            <Text style={styles.rowTitle}>{pricingPlan.name}</Text>
-            <Text style={styles.detailLine}>{formatPricingDetails(pricingPlan, t)}</Text>
+            <Text className={ROW_TITLE_CLASS}>{pricingPlan.name}</Text>
+            <Text className={DETAIL_LINE_CLASS}>{formatPricingDetails(pricingPlan, t)}</Text>
           </View>
         ))}
-      </View>
+      </Card>
 
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>{t('stations.detail.reviewsTitle')}</Text>
-        <Text style={styles.mutedText} testID="station-detail-review-summary">
+      <Card>
+        <Text className={SECTION_TITLE_CLASS}>{t('stations.detail.reviewsTitle')}</Text>
+        <Text className={MUTED_TEXT_CLASS} testID="station-detail-review-summary">
           {resolveReviewSummary(detail.averageRating, detail.reviewCount, t)}
         </Text>
         {detail.reviews.map((review) => (
           <View
             key={review.id}
-            style={styles.rowCard}
+            className={ROW_CARD_CLASS}
             testID={`station-detail-review-${review.id}`}
           >
-            <Text style={styles.rowTitle}>
+            <Text className={ROW_TITLE_CLASS}>
               {'★'} {review.rating.toFixed(1)}
             </Text>
-            <Text style={styles.detailLine}>
+            <Text className={DETAIL_LINE_CLASS}>
               {review.comment ?? t('stations.detail.reviewWithoutComment')}
             </Text>
           </View>
         ))}
-      </View>
+      </Card>
     </ScrollView>
   );
 }
@@ -339,27 +342,24 @@ function StationConnectorRow({
   };
 
   return (
-    <View style={styles.rowCard} testID={`station-detail-connector-${connector.id}`}>
-      <View style={styles.connectorHeader}>
-        <Text style={styles.rowTitle}>
+    <View className={ROW_CARD_CLASS} testID={`station-detail-connector-${connector.id}`}>
+      <View className="flex-row items-center justify-between">
+        <Text className={ROW_TITLE_CLASS}>
           {resolveConnectorTypeLabel(connector.connectorType, t)} · {connector.powerKw} kW
         </Text>
-        <View style={styles.connectorStatusBadge}>
+        <View className="flex-row items-center gap-1.5">
           <View
-            style={[
-              styles.connectorStatusDot,
-              { backgroundColor: resolveStationStatusColor(connector.status) },
-            ]}
+            className={`h-2.5 w-2.5 rounded-full ${resolveStationStatusDotClass(connector.status)}`}
           />
-          <Text style={styles.connectorStatusText}>
+          <Text className="text-xs font-semibold text-neutral-700">
             {resolveStationStatusLabel(connector.status, t)}
           </Text>
         </View>
       </View>
-      <Text style={styles.detailLine}>{formatPricingDetails(pricingPlan, t)}</Text>
+      <Text className={DETAIL_LINE_CLASS}>{formatPricingDetails(pricingPlan, t)}</Text>
       {communityStatus !== null ? (
         <Text
-          style={styles.communityStatusText}
+          className="mt-1.5 text-xs font-semibold text-accent"
           testID={`station-detail-community-status-${connector.id}`}
         >
           {formatCommunityStatusHint(
@@ -369,34 +369,28 @@ function StationConnectorRow({
           )}
         </Text>
       ) : null}
-      <Pressable
-        accessibilityRole="button"
+      <Button
+        className="mt-2.5"
         onPress={(): void => {
           onChargeHere(connector.id);
         }}
-        style={({ pressed }) => {
-          return [styles.chargeButton, pressed ? styles.buttonPressed : null];
-        }}
         testID={`station-detail-charge-${connector.id}`}
-      >
-        <Text style={styles.chargeButtonText}>{t('stations.detail.chargeHere')}</Text>
-      </Pressable>
+        title={t('stations.detail.chargeHere')}
+      />
       <Pressable
         accessibilityRole="button"
         onPress={handleToggleStatusPicker}
-        style={({ pressed }) => {
-          return [styles.reportStatusButton, pressed ? styles.buttonPressed : null];
-        }}
+        className="mt-2 items-center rounded-sm border border-accent bg-neutral-0 py-[9px] active:opacity-75"
         testID={`station-detail-report-status-${connector.id}`}
       >
-        <Text style={styles.reportStatusButtonText}>
+        <Text className="text-[13px] font-bold text-accent">
           {t('stations.detail.communityReport.action')}
         </Text>
       </Pressable>
       {isStatusPickerVisible ? (
         <View testID={`station-detail-report-status-picker-${connector.id}`}>
-          <Text style={styles.mutedText}>{t('stations.detail.communityReport.prompt')}</Text>
-          <View style={styles.reportStatusOptionsRow}>
+          <Text className={MUTED_TEXT_CLASS}>{t('stations.detail.communityReport.prompt')}</Text>
+          <View className="mt-2 flex-row flex-wrap gap-2">
             {REPORTABLE_STATUSES.map((reportableStatus) => (
               <Pressable
                 accessibilityRole="button"
@@ -404,12 +398,10 @@ function StationConnectorRow({
                 onPress={(): void => {
                   handleSelectStatus(reportableStatus);
                 }}
-                style={({ pressed }) => {
-                  return [styles.reportStatusOption, pressed ? styles.buttonPressed : null];
-                }}
+                className="rounded-full border border-accent bg-accent/10 px-3 py-[7px] active:opacity-75"
                 testID={`station-detail-report-status-option-${connector.id}-${reportableStatus}`}
               >
-                <Text style={styles.reportStatusOptionText}>
+                <Text className="text-xs font-bold text-accent">
                   {resolveStationStatusLabel(reportableStatus, t)}
                 </Text>
               </Pressable>
@@ -419,7 +411,11 @@ function StationConnectorRow({
       ) : null}
       {reportFeedback !== null ? (
         <Text
-          style={reportFeedback === 'success' ? styles.reportFeedbackSuccess : styles.errorText}
+          className={
+            reportFeedback === 'success'
+              ? 'mt-2 text-xs font-semibold text-primary-900'
+              : ERROR_TEXT_CLASS
+          }
           testID={`station-detail-report-status-feedback-${connector.id}`}
         >
           {resolveReportFeedbackLabel(reportFeedback, t)}
@@ -465,19 +461,19 @@ function resolveStationStatusLabel(status: StationStatus, t: (key: string) => st
 }
 
 /**
- * Maps connector status values to indicator colors.
+ * Maps connector status values to the indicator dot's background token class.
  */
-function resolveStationStatusColor(status: StationStatus): string {
+function resolveStationStatusDotClass(status: StationStatus): string {
   switch (status) {
     case StationStatus.OCCUPIED:
-      return '#D97706';
+      return 'bg-warning';
     case StationStatus.OFFLINE:
-      return '#9CA3AF';
+      return 'bg-neutral-400';
     case StationStatus.MAINTENANCE:
-      return '#B91C1C';
+      return 'bg-danger';
     case StationStatus.AVAILABLE:
     default:
-      return '#059669';
+      return 'bg-success';
   }
 }
 
@@ -566,196 +562,3 @@ function resolveReviewSummary(
     rating: averageRating.toFixed(1),
   });
 }
-
-const styles = StyleSheet.create({
-  buttonPressed: {
-    opacity: 0.75,
-  },
-  centeredContainer: {
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    flex: 1,
-    gap: 10,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  chargeButton: {
-    alignItems: 'center',
-    backgroundColor: '#0F766E',
-    borderRadius: 10,
-    marginTop: 10,
-    paddingVertical: 11,
-  },
-  chargeButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  communityActionButton: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#0F766E',
-    borderRadius: 999,
-    borderWidth: 1,
-    flexGrow: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  communityActionButtonText: {
-    color: '#0F766E',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  communityActionsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
-  },
-  communityStatusText: {
-    color: '#6D28D9',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 6,
-  },
-  connectorHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  connectorStatusBadge: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 6,
-  },
-  connectorStatusDot: {
-    borderRadius: 999,
-    height: 10,
-    width: 10,
-  },
-  connectorStatusText: {
-    color: '#374151',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  container: {
-    backgroundColor: '#F3F4F6',
-    flex: 1,
-  },
-  detailLine: {
-    color: '#374151',
-    fontSize: 13,
-    marginTop: 6,
-  },
-  errorText: {
-    color: '#991B1B',
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  headerCard: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E5E7EB',
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 16,
-  },
-  mutedText: {
-    color: '#6B7280',
-    fontSize: 13,
-    marginTop: 6,
-  },
-  reportFeedbackSuccess: {
-    color: '#065F46',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 8,
-  },
-  reportStatusButton: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#6D28D9',
-    borderRadius: 10,
-    borderWidth: 1,
-    marginTop: 8,
-    paddingVertical: 9,
-  },
-  reportStatusButtonText: {
-    color: '#6D28D9',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  reportStatusOption: {
-    backgroundColor: '#F5F3FF',
-    borderColor: '#6D28D9',
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  reportStatusOptionText: {
-    color: '#6D28D9',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  reportStatusOptionsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 8,
-  },
-  rowCard: {
-    backgroundColor: '#F9FAFB',
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    borderWidth: 1,
-    marginTop: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  rowTitle: {
-    color: '#111827',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  scrollContent: {
-    gap: 12,
-    padding: 16,
-  },
-  secondaryButton: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#0F766E',
-    borderRadius: 999,
-    borderWidth: 1,
-    marginTop: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 9,
-  },
-  secondaryButtonText: {
-    color: '#0F766E',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  sectionCard: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E5E7EB',
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 16,
-  },
-  sectionTitle: {
-    color: '#111827',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  statusText: {
-    color: '#4B5563',
-    fontSize: 13,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  title: {
-    color: '#111827',
-    fontSize: 22,
-    fontWeight: '700',
-  },
-});

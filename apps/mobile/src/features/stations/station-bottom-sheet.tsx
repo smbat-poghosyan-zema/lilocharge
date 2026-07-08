@@ -7,8 +7,9 @@ import type {
 } from '@lilocharge/shared-types';
 import { ConnectorType, StationStatus } from '@lilocharge/shared-types';
 import { useEffect, useMemo, useRef } from 'react';
-import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, ScrollView, Text, View } from 'react-native';
 
+import { Button } from '../../components/ui/button';
 import { useAppTranslation } from '../../i18n/use-app-translation';
 import { isJestRuntime } from '../../utils/is-jest-runtime';
 import { formatDramAmount } from '../sessions/session-format';
@@ -22,6 +23,22 @@ import { stationsApi } from './stations-api';
 const SHEET_SLIDE_DURATION_MS = 220;
 const SHEET_SLIDE_TRANSLATE_Y = 280;
 const REVIEW_PREVIEW_LIMIT = 2;
+
+/**
+ * Drop shadow for the sheet surface. Kept inline because RN shadow props
+ * (`shadowColor`/`shadowOffset`/`shadowOpacity`/`shadowRadius`) have no className
+ * equivalent, and it merges with the animated `transform` on the same element.
+ */
+const SHEET_SHADOW = {
+  shadowColor: '#000000',
+  shadowOffset: { height: -2, width: 0 },
+  shadowOpacity: 0.12,
+  shadowRadius: 8,
+} as const;
+
+const SHEET_DETAIL_CLASS = 'mt-2 text-[13px] text-neutral-700';
+const SECTION_TITLE_CLASS = 'mt-3 text-sm font-bold text-neutral-900';
+const SECTION_MESSAGE_CLASS = 'mt-2 text-xs text-neutral-700';
 
 interface StationBottomSheetProps {
   readonly communityStatusClient?: ConnectorCommunityStatusClient;
@@ -87,29 +104,28 @@ export function StationBottomSheet({
 
   return (
     <Animated.View
-      style={[styles.bottomSheet, { transform: [{ translateY: sheetTranslateY }] }]}
+      className="absolute bottom-0 left-0 right-0 max-h-[62%] rounded-t-xl bg-neutral-0 px-[18px] pb-4 pt-3"
+      style={[SHEET_SHADOW, { transform: [{ translateY: sheetTranslateY }] }]}
       testID="station-bottom-sheet"
     >
-      <View style={styles.bottomSheetHandle} />
-      <View style={styles.bottomSheetHeader}>
-        <View style={styles.bottomSheetHeaderContent}>
-          <Text style={styles.bottomSheetTitle}>{station.name}</Text>
-          <Text style={styles.bottomSheetStatus}>
+      <View className="mb-3 h-1 w-14 self-center rounded-full bg-neutral-200" />
+      <View className="flex-row items-start justify-between">
+        <View className="mr-2.5 flex-1">
+          <Text className="text-lg font-bold text-neutral-900">{station.name}</Text>
+          <Text className="mt-1 text-xs font-semibold text-neutral-700">
             {resolveStationStatusLabel(stationStatus, t)}
           </Text>
         </View>
-        <View style={styles.bottomSheetHeaderActions}>
+        <View className="items-end gap-2">
           <Pressable
             accessibilityRole="button"
             onPress={(): void => {
               onToggleFavorite(station);
             }}
-            style={({ pressed }) => {
-              return [styles.favoriteButton, pressed ? styles.favoriteButtonPressed : null];
-            }}
+            className="rounded-full bg-primary-50 px-3 py-[7px] active:opacity-75"
             testID="station-bottom-sheet-favorite-button"
           >
-            <Text style={styles.favoriteButtonText}>
+            <Text className="text-xs font-bold text-primary-900">
               {isFavorite
                 ? t('stations.map.sheet.removeFavorite')
                 : t('stations.map.sheet.saveFavorite')}
@@ -118,59 +134,62 @@ export function StationBottomSheet({
           <Pressable
             accessibilityRole="button"
             onPress={onClose}
-            style={({ pressed }) => {
-              return [
-                styles.bottomSheetCloseButton,
-                pressed ? styles.bottomSheetCloseButtonPressed : null,
-              ];
-            }}
+            className="rounded-full bg-neutral-200 px-3 py-[7px] active:opacity-75"
             testID="station-bottom-sheet-close-button"
           >
-            <Text style={styles.bottomSheetCloseText}>{t('stations.map.sheet.close')}</Text>
+            <Text className="text-xs font-bold text-neutral-900">
+              {t('stations.map.sheet.close')}
+            </Text>
           </Pressable>
         </View>
       </View>
 
-      <Text style={styles.bottomSheetDetail}>
+      <Text className={SHEET_DETAIL_CLASS}>
         {t('stations.map.sheet.operatorLabel')}: {station.operatorName}
       </Text>
-      <Text style={styles.bottomSheetDetail}>
+      <Text className={SHEET_DETAIL_CLASS}>
         {t('stations.map.sheet.addressLabel')}: {station.address}, {station.city}
       </Text>
-      <Text style={styles.bottomSheetDetail}>
+      <Text className={SHEET_DETAIL_CLASS}>
         {t('stations.map.sheet.distanceLabel')}:{' '}
         {formatDistanceMetersForDisplay(stationDistanceMeters, t)}
       </Text>
-      <Text style={styles.bottomSheetDetail}>
+      <Text className={SHEET_DETAIL_CLASS}>
         {t('stations.map.sheet.openingHoursLabel')}:{' '}
         {stationOpeningHours ?? t('stations.map.sheet.openingHoursUnavailable')}
       </Text>
 
       <ScrollView
-        contentContainerStyle={styles.sheetScrollContent}
+        className="mt-1"
+        contentContainerClassName="pb-1.5"
         showsVerticalScrollIndicator={false}
-        style={styles.sheetScrollView}
       >
-        <View style={styles.sectionTitleRow}>
-          <Text style={styles.sectionTitle}>{t('stations.map.sheet.connectorsTitle')}</Text>
+        <View className="flex-row items-center gap-2">
+          <Text className={SECTION_TITLE_CLASS}>{t('stations.map.sheet.connectorsTitle')}</Text>
           {hasActiveConnectorFilters ? (
-            <Text style={styles.filteredBadge} testID="station-bottom-sheet-filtered-badge">
+            <Text
+              className="overflow-hidden rounded-full bg-primary-50 px-2 py-0.5 text-[11px] font-bold text-primary-900"
+              testID="station-bottom-sheet-filtered-badge"
+            >
               {t('stations.map.sheet.filteredLabel')}
             </Text>
           ) : null}
         </View>
         {isLoadingDetail ? (
-          <Text style={styles.sectionMessage} testID="station-bottom-sheet-detail-loading">
+          <Text className={SECTION_MESSAGE_CLASS} testID="station-bottom-sheet-detail-loading">
             {t('stations.map.sheet.detailLoading')}
           </Text>
         ) : null}
         {hasDetailLoadError ? (
-          <Text style={styles.sectionErrorMessage} testID="station-bottom-sheet-detail-error">
+          <Text
+            className="mt-2 text-xs text-danger"
+            testID="station-bottom-sheet-detail-error"
+          >
             {t('stations.map.sheet.detailError')}
           </Text>
         ) : null}
         {!isLoadingDetail && !hasDetailLoadError && connectors.length === 0 ? (
-          <Text style={styles.sectionMessage}>{t('stations.map.sheet.noConnectors')}</Text>
+          <Text className={SECTION_MESSAGE_CLASS}>{t('stations.map.sheet.noConnectors')}</Text>
         ) : null}
         {!isLoadingDetail && !hasDetailLoadError
           ? connectors.map((connector) => (
@@ -183,9 +202,9 @@ export function StationBottomSheet({
             ))
           : null}
 
-        <Text style={styles.sectionTitle}>{t('stations.map.sheet.reviewsTitle')}</Text>
+        <Text className={SECTION_TITLE_CLASS}>{t('stations.map.sheet.reviewsTitle')}</Text>
         {!isLoadingDetail && !hasDetailLoadError ? (
-          <Text style={styles.reviewSummary}>
+          <Text className="mt-0.5 text-xs text-neutral-700">
             {resolveReviewSummary(
               stationDetail?.averageRating,
               stationDetail?.reviewCount ?? reviews.length,
@@ -194,19 +213,19 @@ export function StationBottomSheet({
           </Text>
         ) : null}
         {!isLoadingDetail && !hasDetailLoadError && reviews.length === 0 ? (
-          <Text style={styles.sectionMessage}>{t('stations.map.sheet.noReviews')}</Text>
+          <Text className={SECTION_MESSAGE_CLASS}>{t('stations.map.sheet.noReviews')}</Text>
         ) : null}
         {!isLoadingDetail && !hasDetailLoadError
           ? reviewPreview.map((review) => (
               <View
                 key={review.id}
-                style={styles.reviewCard}
+                className="mt-2 rounded-md border border-border bg-neutral-50 px-3 py-2.5"
                 testID={`station-review-card-${review.id}`}
               >
-                <Text style={styles.reviewRating}>
+                <Text className="text-xs font-bold text-neutral-900">
                   {'\u2605'} {review.rating.toFixed(1)}
                 </Text>
-                <Text style={styles.reviewComment}>
+                <Text className="mt-1.5 text-xs text-neutral-700">
                   {review.comment ?? t('stations.map.sheet.reviewWithoutComment')}
                 </Text>
               </View>
@@ -214,18 +233,14 @@ export function StationBottomSheet({
           : null}
       </ScrollView>
 
-      <Pressable
-        accessibilityRole="button"
+      <Button
+        className="mt-3"
         onPress={(): void => {
           onNavigateToDetail(station.id);
         }}
-        style={({ pressed }) => {
-          return [styles.detailButton, pressed ? styles.detailButtonPressed : null];
-        }}
         testID="station-bottom-sheet-detail-button"
-      >
-        <Text style={styles.detailButtonText}>{t('stations.map.sheet.viewDetails')}</Text>
-      </Pressable>
+        title={t('stations.map.sheet.viewDetails')}
+      />
     </Animated.View>
   );
 }
@@ -242,20 +257,25 @@ function StationConnectorCard({
   const { t } = useAppTranslation();
 
   return (
-    <View style={styles.connectorCard} testID={`station-connector-card-${connector.id}`}>
-      <View style={styles.connectorHeader}>
-        <Text style={styles.connectorType}>
+    <View
+      className="mt-2 rounded-md border border-border bg-neutral-50 px-3 py-2.5"
+      testID={`station-connector-card-${connector.id}`}
+    >
+      <View className="flex-row items-center justify-between">
+        <Text className="text-[13px] font-bold text-neutral-900">
           {resolveConnectorTypeLabel(connector.connectorType, t)} · {connector.powerKw} kW
         </Text>
-        <Text style={styles.connectorStatus}>{resolveStationStatusLabel(connector.status, t)}</Text>
+        <Text className="text-xs font-semibold text-neutral-700">
+          {resolveStationStatusLabel(connector.status, t)}
+        </Text>
       </View>
-      <Text style={styles.pricingPlanName}>
+      <Text className="mt-1.5 text-xs font-semibold text-neutral-700">
         {pricingPlan?.name ?? t('stations.map.sheet.noPricing')}
       </Text>
-      <Text style={styles.pricingText}>{formatPricingDetails(pricingPlan, t)}</Text>
+      <Text className="mt-1 text-xs text-neutral-900">{formatPricingDetails(pricingPlan, t)}</Text>
       {communityStatus !== null ? (
         <Text
-          style={styles.communityStatusText}
+          className="mt-1 text-[11px] font-semibold text-accent"
           testID={`station-connector-community-status-${connector.id}`}
         >
           {formatCommunityStatusHint(
@@ -408,209 +428,3 @@ function resolveReviewSummary(
     rating: averageRating.toFixed(1),
   });
 }
-
-const styles = StyleSheet.create({
-  bottomSheet: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    bottom: 0,
-    left: 0,
-    maxHeight: '62%',
-    paddingBottom: 16,
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    position: 'absolute',
-    right: 0,
-    shadowColor: '#000000',
-    shadowOffset: {
-      height: -2,
-      width: 0,
-    },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-  },
-  bottomSheetCloseButton: {
-    backgroundColor: '#E5E7EB',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  bottomSheetCloseButtonPressed: {
-    opacity: 0.75,
-  },
-  bottomSheetCloseText: {
-    color: '#111827',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  bottomSheetDetail: {
-    color: '#374151',
-    fontSize: 13,
-    marginTop: 8,
-  },
-  bottomSheetHandle: {
-    alignSelf: 'center',
-    backgroundColor: '#D1D5DB',
-    borderRadius: 999,
-    height: 4,
-    marginBottom: 12,
-    width: 56,
-  },
-  bottomSheetHeader: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  bottomSheetHeaderActions: {
-    alignItems: 'flex-end',
-    gap: 8,
-  },
-  bottomSheetHeaderContent: {
-    flex: 1,
-    marginRight: 10,
-  },
-  bottomSheetStatus: {
-    color: '#4B5563',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  bottomSheetTitle: {
-    color: '#111827',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  communityStatusText: {
-    color: '#6D28D9',
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  connectorCard: {
-    backgroundColor: '#F9FAFB',
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    borderWidth: 1,
-    marginTop: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  connectorHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  connectorStatus: {
-    color: '#4B5563',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  connectorType: {
-    color: '#111827',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  filteredBadge: {
-    backgroundColor: '#ECFDF5',
-    borderRadius: 999,
-    color: '#065F46',
-    fontSize: 11,
-    fontWeight: '700',
-    overflow: 'hidden',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  detailButton: {
-    alignItems: 'center',
-    backgroundColor: '#14532D',
-    borderRadius: 10,
-    marginTop: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  detailButtonPressed: {
-    opacity: 0.8,
-  },
-  detailButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  favoriteButton: {
-    backgroundColor: '#ECFDF5',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  favoriteButtonPressed: {
-    opacity: 0.75,
-  },
-  favoriteButtonText: {
-    color: '#065F46',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  pricingPlanName: {
-    color: '#374151',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 6,
-  },
-  pricingText: {
-    color: '#1F2937',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  reviewCard: {
-    backgroundColor: '#F9FAFB',
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    borderWidth: 1,
-    marginTop: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  reviewComment: {
-    color: '#374151',
-    fontSize: 12,
-    marginTop: 6,
-  },
-  reviewRating: {
-    color: '#111827',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  reviewSummary: {
-    color: '#4B5563',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  sectionErrorMessage: {
-    color: '#B91C1C',
-    fontSize: 12,
-    marginTop: 8,
-  },
-  sectionMessage: {
-    color: '#4B5563',
-    fontSize: 12,
-    marginTop: 8,
-  },
-  sectionTitle: {
-    color: '#111827',
-    fontSize: 14,
-    fontWeight: '700',
-    marginTop: 12,
-  },
-  sectionTitleRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-  sheetScrollContent: {
-    paddingBottom: 6,
-  },
-  sheetScrollView: {
-    marginTop: 4,
-  },
-});

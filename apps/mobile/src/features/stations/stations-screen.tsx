@@ -10,10 +10,17 @@ import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import Mapbox from '@rnmapbox/maps';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, Text, View } from 'react-native';
 
 import { resolveMapboxAccessToken } from '../../config/runtime';
 import { useAppTranslation } from '../../i18n/use-app-translation';
+import {
+  MAP_CLUSTER_HIGH,
+  MAP_CLUSTER_LOW,
+  MAP_CLUSTER_MID,
+  NEUTRAL_0,
+  NEUTRAL_900,
+} from '../../theme/colors';
 import { favoritesStorage, type FavoritesStorage } from '../favorites/favorites-storage';
 import { createFavoritesSync, type FavoritesSync } from '../favorites/favorites-sync';
 import { configureMapboxSdk } from './map/mapbox-sdk';
@@ -66,14 +73,21 @@ const UNCLUSTERED_FILTER = ['!', ['has', 'point_count']] as const;
 const CLUSTER_COLOR_EXPRESSION = [
   'step',
   ['get', 'point_count'],
-  '#A7F3D0',
+  MAP_CLUSTER_LOW,
   15,
-  '#4ADE80',
+  MAP_CLUSTER_MID,
   40,
-  '#16A34A',
+  MAP_CLUSTER_HIGH,
 ] as const;
 const CLUSTER_RADIUS_EXPRESSION = ['step', ['get', 'point_count'], 18, 15, 24, 40, 30] as const;
 const CLUSTER_COUNT_EXPRESSION = ['get', 'point_count_abbreviated'] as const;
+
+/** Mapbox `MapView` takes a JS style object (not a className); fill the map surface. */
+const MAP_VIEW_STYLE = { flex: 1 } as const;
+
+/** Shared translucent white status pill shown over the map overlay. */
+const STATUS_PILL_CLASS =
+  'mb-1.5 overflow-hidden rounded-full bg-neutral-0/90 px-2.5 py-1 text-[11px] text-neutral-900';
 
 type OfflineDownloadStatus = 'ERROR' | 'IDLE' | 'IN_PROGRESS' | 'SUCCESS';
 
@@ -423,22 +437,24 @@ export function StationsScreen({
   });
 
   return (
-    <View style={styles.container} testID="stations-screen">
-      <View style={styles.headerContainer}>
-        <Text accessibilityRole="header" style={styles.title}>
+    <View className="flex-1 bg-background" testID="stations-screen">
+      <View className="border-b border-border bg-neutral-0 px-5 py-4">
+        <Text accessibilityRole="header" className="mb-1.5 text-[22px] font-bold text-neutral-900">
           {t('stations.title')}
         </Text>
-        <Text style={styles.subtitle}>{t('stations.subtitle')}</Text>
+        <Text className="text-sm text-neutral-700">{t('stations.subtitle')}</Text>
       </View>
 
       {!resolvedMapboxToken ? (
-        <View style={styles.messageContainer}>
-          <Text style={styles.messageText}>{t('stations.map.missingToken')}</Text>
+        <View className="flex-1 items-center justify-center px-6">
+          <Text className="text-center text-[15px] text-neutral-900">
+            {t('stations.map.missingToken')}
+          </Text>
         </View>
       ) : (
-        <View style={styles.mapContainer}>
+        <View className="flex-1">
           <Mapbox.MapView
-            style={styles.map}
+            style={MAP_VIEW_STYLE}
             styleURL={Mapbox.StyleURL.Street}
             testID="stations-map"
           >
@@ -467,7 +483,7 @@ export function StationsScreen({
                 filter={CLUSTER_FILTER}
                 id="station-clusters-count"
                 style={{
-                  textColor: '#FFFFFF',
+                  textColor: NEUTRAL_0,
                   textField: CLUSTER_COUNT_EXPRESSION as unknown as string,
                   textSize: 12,
                 }}
@@ -479,7 +495,7 @@ export function StationsScreen({
                 style={{
                   circleColor: stationStatusColorExpression as unknown as string,
                   circleRadius: 14,
-                  circleStrokeColor: '#FFFFFF',
+                  circleStrokeColor: NEUTRAL_0,
                   circleStrokeWidth: 2,
                 }}
               />
@@ -489,7 +505,7 @@ export function StationsScreen({
                 id="station-marker-power-tier"
                 style={{
                   textAllowOverlap: true,
-                  textColor: '#FFFFFF',
+                  textColor: NEUTRAL_0,
                   textField: ['get', 'powerTier'] as unknown as string,
                   textFont: ['DIN Pro Bold', 'Arial Unicode MS Bold'],
                   textSize: 9,
@@ -501,10 +517,10 @@ export function StationsScreen({
                 id="station-marker-connector-count"
                 style={{
                   textAllowOverlap: true,
-                  textColor: '#111827',
+                  textColor: NEUTRAL_900,
                   textField: connectorCountTextExpression as unknown as string,
                   textFont: ['DIN Pro Bold', 'Arial Unicode MS Bold'],
-                  textHaloColor: '#FFFFFF',
+                  textHaloColor: NEUTRAL_0,
                   textHaloWidth: 1.5,
                   textOffset: [0.9, -0.9] as unknown as number[],
                   textSize: 9,
@@ -528,33 +544,29 @@ export function StationsScreen({
               </Mapbox.MarkerView>
             ) : null}
           </Mapbox.MapView>
-          <View style={styles.mapOverlay}>
+          <View className="absolute left-4 right-4 top-4 items-start">
             <StationSearchInput value={searchInputValue} onChangeText={setSearchInputValue} />
             <Pressable
               accessibilityRole="button"
               onPress={handleToggleFilterPanel}
-              style={({ pressed }) => {
-                return [
-                  styles.filterToggleButton,
-                  pressed ? styles.filterToggleButtonPressed : null,
-                ];
-              }}
+              className="mb-2 flex-row items-center rounded-full border border-border bg-neutral-0/95 px-3.5 py-2 active:opacity-75"
               testID="station-filter-toggle-button"
             >
-              <Text style={styles.filterToggleButtonText}>
+              <Text className="text-[13px] font-bold text-neutral-900">
                 {isFilterPanelVisible
                   ? t('stations.map.filters.toggleHide')
                   : t('stations.map.filters.toggle')}
               </Text>
               {!isFilterPanelVisible && hasAnyActiveFilters(stationFilters) ? (
-                <View style={styles.filterActiveDot} testID="station-filter-active-dot" />
+                <View
+                  className="ml-1.5 h-2.5 w-2.5 rounded-full bg-success"
+                  testID="station-filter-active-dot"
+                />
               ) : null}
             </Pressable>
             <Animated.View
-              style={[
-                styles.filterPanelAnimated,
-                { maxHeight: filterPanelMaxHeight, opacity: filterPanelOpacity },
-              ]}
+              className="w-full overflow-hidden"
+              style={{ maxHeight: filterPanelMaxHeight, opacity: filterPanelOpacity }}
             >
               <StationFilters
                 filters={stationFilters}
@@ -566,65 +578,61 @@ export function StationsScreen({
               accessibilityRole="button"
               disabled={offlineDownloadStatus === 'IN_PROGRESS'}
               onPress={handleOfflineDownloadPress}
-              style={({ pressed }) => {
-                return [
-                  styles.offlineButton,
-                  pressed ? styles.offlineButtonPressed : null,
-                  offlineDownloadStatus === 'IN_PROGRESS' ? styles.offlineButtonDisabled : null,
-                ];
-              }}
+              className={`mb-2 rounded-full bg-neutral-900 px-3.5 py-2 active:opacity-75 ${
+                offlineDownloadStatus === 'IN_PROGRESS' ? 'opacity-60' : ''
+              }`}
             >
-              <Text style={styles.offlineButtonText}>{t('stations.map.offline.download')}</Text>
+              <Text className="text-xs font-bold text-neutral-0">
+                {t('stations.map.offline.download')}
+              </Text>
             </Pressable>
-            <Text style={styles.statusText}>
+            <Text className={STATUS_PILL_CLASS}>
               {resolveOfflineStatusLabel(offlineDownloadStatus, t)}
             </Text>
             {isRefreshingStations ? (
-              <Text style={styles.statusText} testID="stations-loading-indicator">
+              <Text className={STATUS_PILL_CLASS} testID="stations-loading-indicator">
                 {t('stations.map.loading')}
               </Text>
             ) : null}
             {hasStationLoadError ? (
-              <Text style={styles.statusText} testID="stations-load-error">
+              <Text className={STATUS_PILL_CLASS} testID="stations-load-error">
                 {t('stations.map.refreshError')}
               </Text>
             ) : null}
             {!isRefreshingStations && !hasStationLoadError && stations.length === 0 ? (
-              <Text style={styles.statusText} testID="stations-empty-state">
+              <Text className={STATUS_PILL_CLASS} testID="stations-empty-state">
                 {t('stations.map.empty')}
               </Text>
             ) : null}
             {hasFavoriteSyncError ? (
-              <Text style={styles.statusText} testID="favorites-sync-error">
+              <Text className={STATUS_PILL_CLASS} testID="favorites-sync-error">
                 {t('favorites.sync.error')}
               </Text>
             ) : null}
           </View>
-          <View style={styles.cameraControlsContainer}>
+          <View className="absolute bottom-[120px] right-4 items-end">
             <Pressable
               accessibilityRole="button"
               disabled={selectedStation === null}
               onPress={handleFocusSelectedStationPress}
-              style={({ pressed }) => {
-                return [
-                  styles.cameraButton,
-                  pressed ? styles.cameraButtonPressed : null,
-                  selectedStation === null ? styles.cameraButtonDisabled : null,
-                ];
-              }}
+              className={`mb-2 rounded-full bg-neutral-900/95 px-3.5 py-2 active:opacity-75 ${
+                selectedStation === null ? 'opacity-50' : ''
+              }`}
               testID="station-focus-camera-button"
             >
-              <Text style={styles.cameraButtonText}>{t('stations.map.camera.focusSelected')}</Text>
+              <Text className="text-xs font-bold text-neutral-0">
+                {t('stations.map.camera.focusSelected')}
+              </Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
               onPress={handleRecenterMapPress}
-              style={({ pressed }) => {
-                return [styles.cameraButton, pressed ? styles.cameraButtonPressed : null];
-              }}
+              className="mb-2 rounded-full bg-neutral-900/95 px-3.5 py-2 active:opacity-75"
               testID="station-recenter-camera-button"
             >
-              <Text style={styles.cameraButtonText}>{t('stations.map.camera.recenter')}</Text>
+              <Text className="text-xs font-bold text-neutral-0">
+                {t('stations.map.camera.recenter')}
+              </Text>
             </Pressable>
           </View>
           {selectedStation ? (
@@ -776,6 +784,7 @@ function resolveOfflineStatusLabel(
   }
 }
 
+
 /**
  * Builds the default map camera state centered on the device position when available,
  * falling back to the Yerevan city center.
@@ -800,133 +809,3 @@ function buildFocusedStationCameraState(station: StationNearbyResponse): MapCame
     zoomLevel: FOCUSED_STATION_CAMERA_ZOOM_LEVEL,
   };
 }
-
-const styles = StyleSheet.create({
-  cameraButton: {
-    backgroundColor: 'rgba(17,24,39,0.95)',
-    borderRadius: 999,
-    marginBottom: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  cameraButtonDisabled: {
-    opacity: 0.5,
-  },
-  cameraButtonPressed: {
-    opacity: 0.75,
-  },
-  cameraButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  cameraControlsContainer: {
-    alignItems: 'flex-end',
-    bottom: 120,
-    position: 'absolute',
-    right: 16,
-  },
-  container: {
-    backgroundColor: '#F3F4F6',
-    flex: 1,
-  },
-  filterActiveDot: {
-    backgroundColor: '#16A34A',
-    borderRadius: 5,
-    height: 10,
-    marginLeft: 6,
-    width: 10,
-  },
-  filterPanelAnimated: {
-    overflow: 'hidden',
-    width: '100%',
-  },
-  filterToggleButton: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.96)',
-    borderColor: '#E2E8F0',
-    borderRadius: 999,
-    borderWidth: 1,
-    flexDirection: 'row',
-    marginBottom: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  filterToggleButtonPressed: {
-    opacity: 0.75,
-  },
-  filterToggleButtonText: {
-    color: '#0F172A',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  headerContainer: {
-    backgroundColor: '#FFFFFF',
-    borderBottomColor: '#E5E7EB',
-    borderBottomWidth: 1,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-  },
-  map: {
-    flex: 1,
-  },
-  mapContainer: {
-    flex: 1,
-  },
-  mapOverlay: {
-    alignItems: 'flex-start',
-    left: 16,
-    position: 'absolute',
-    right: 16,
-    top: 16,
-  },
-  messageContainer: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  messageText: {
-    color: '#1F2937',
-    fontSize: 15,
-    textAlign: 'center',
-  },
-  offlineButton: {
-    backgroundColor: '#111827',
-    borderRadius: 999,
-    marginBottom: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  offlineButtonDisabled: {
-    opacity: 0.6,
-  },
-  offlineButtonPressed: {
-    opacity: 0.75,
-  },
-  offlineButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  statusText: {
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    borderRadius: 999,
-    color: '#111827',
-    fontSize: 11,
-    marginBottom: 6,
-    overflow: 'hidden',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  subtitle: {
-    color: '#374151',
-    fontSize: 14,
-  },
-  title: {
-    color: '#111827',
-    fontSize: 22,
-    fontWeight: '700',
-    marginBottom: 6,
-  },
-});
