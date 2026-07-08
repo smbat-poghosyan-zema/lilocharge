@@ -2,9 +2,14 @@ import type { SessionMonitorUpdateEvent, SessionResponse } from '@lilocharge/sha
 import { SessionStatus } from '@lilocharge/shared-types';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Text, View } from 'react-native';
 
+import { Button } from '../../components/ui/button';
+import { Card } from '../../components/ui/card';
+import { ScreenContainer } from '../../components/ui/screen-container';
+import { StatusBadge } from '../../components/ui/status-badge';
 import { useAppTranslation } from '../../i18n/use-app-translation';
+import { NEUTRAL_0, PRIMARY } from '../../theme/colors';
 import { normalizeRouteParam } from '../../utils/route-params';
 import { useOnboardingSession } from '../onboarding/onboarding-session';
 import {
@@ -182,8 +187,11 @@ export function ActiveSessionScreen({
 
   if (sessionId === null || userId === null) {
     return (
-      <View style={styles.centeredContainer}>
-        <Text style={styles.errorText} testID="active-load-error">
+      <View className="flex-1 items-center justify-center gap-3 bg-background px-6">
+        <Text
+          className="mx-4 text-center text-sm font-semibold text-danger"
+          testID="active-load-error"
+        >
           {t('sessions.active.loadError')}
         </Text>
       </View>
@@ -192,15 +200,21 @@ export function ActiveSessionScreen({
 
   if (session === null) {
     return (
-      <View style={styles.centeredContainer} testID="active-loading">
+      <View
+        className="flex-1 items-center justify-center gap-3 bg-background px-6"
+        testID="active-loading"
+      >
         {hasLoadError ? (
-          <Text style={styles.errorText} testID="active-load-error">
+          <Text
+            className="mx-4 text-center text-sm font-semibold text-danger"
+            testID="active-load-error"
+          >
             {t('sessions.active.loadError')}
           </Text>
         ) : (
           <>
-            <ActivityIndicator color="#0F766E" size="large" />
-            <Text style={styles.mutedText}>{t('sessions.active.loading')}</Text>
+            <ActivityIndicator color={PRIMARY} size="large" />
+            <Text className="text-sm text-neutral-500">{t('sessions.active.loading')}</Text>
           </>
         )}
       </View>
@@ -212,165 +226,80 @@ export function ActiveSessionScreen({
   const totalCostCents = liveUpdate?.totalCost ?? session.totalCost;
 
   return (
-    <View style={styles.container}>
-      <View style={styles.headerContainer}>
-        <Text accessibilityRole="header" style={styles.title}>
+    <ScreenContainer>
+      <View className="items-start border-b border-border bg-neutral-0 px-[18px] pb-3.5 pt-[22px]">
+        <Text accessibilityRole="header" className="text-2xl font-bold text-text">
           {t('sessions.active.title')}
         </Text>
-        <Text style={styles.statusBadge} testID="active-status">
-          {t(`sessions.status.${session.status}`)}
-        </Text>
+        <StatusBadge
+          className="mt-2"
+          label={t(`sessions.status.${session.status}`)}
+          testID="active-status"
+          variant="primary"
+        />
       </View>
 
-      <View style={styles.metricsGrid}>
-        <View style={styles.metricCard}>
-          <Text style={styles.metricLabel}>{t('sessions.active.energyLabel')}</Text>
-          <Text style={styles.metricValue} testID="active-energy">
+      <View className="flex-row flex-wrap gap-3 p-4">
+        <Card className="grow basis-[47%]">
+          <Text className="text-xs font-bold uppercase text-neutral-500">
+            {t('sessions.active.energyLabel')}
+          </Text>
+          <Text className="mt-1.5 text-[22px] font-bold text-text" testID="active-energy">
             {t('sessions.units.energy', { value: formatEnergyKwh(energyKwh) })}
           </Text>
-        </View>
-        <View style={styles.metricCard}>
-          <Text style={styles.metricLabel}>{t('sessions.active.powerLabel')}</Text>
-          <Text style={styles.metricValue} testID="active-power">
+        </Card>
+        <Card className="grow basis-[47%]">
+          <Text className="text-xs font-bold uppercase text-neutral-500">
+            {t('sessions.active.powerLabel')}
+          </Text>
+          <Text className="mt-1.5 text-[22px] font-bold text-text" testID="active-power">
             {t('sessions.units.power', { value: formatPowerKw(powerKw) })}
           </Text>
-        </View>
-        <View style={styles.metricCard}>
-          <Text style={styles.metricLabel}>{t('sessions.active.durationLabel')}</Text>
-          <Text style={styles.metricValue} testID="active-duration">
+        </Card>
+        <Card className="grow basis-[47%]">
+          <Text className="text-xs font-bold uppercase text-neutral-500">
+            {t('sessions.active.durationLabel')}
+          </Text>
+          <Text className="mt-1.5 text-[22px] font-bold text-text" testID="active-duration">
             {formatDurationSeconds(durationSeconds)}
           </Text>
-        </View>
-        <View style={styles.metricCard}>
-          <Text style={styles.metricLabel}>{t('sessions.active.costLabel')}</Text>
-          <Text style={styles.metricValue} testID="active-cost">
+        </Card>
+        <Card className="grow basis-[47%]">
+          <Text className="text-xs font-bold uppercase text-neutral-500">
+            {t('sessions.active.costLabel')}
+          </Text>
+          <Text className="mt-1.5 text-[22px] font-bold text-text" testID="active-cost">
             {t('sessions.units.amd', { amount: formatAmdFromCents(totalCostCents) })}
           </Text>
-        </View>
+        </Card>
       </View>
 
       {hasStopError ? (
-        <Text style={styles.errorText} testID="active-stop-error">
+        <Text
+          className="mx-4 text-center text-sm font-semibold text-danger"
+          testID="active-stop-error"
+        >
           {t('sessions.active.errors.stopFailed')}
         </Text>
       ) : null}
 
-      <View style={styles.footerContainer}>
-        <Pressable
-          accessibilityRole="button"
+      <View className="mt-auto p-4">
+        <Button
+          accessibilityLabel={
+            isStopping ? t('sessions.active.stopping') : t('sessions.active.stop')
+          }
+          className="gap-2"
           disabled={isStopping}
           onPress={handleStopPress}
-          style={({ pressed }) => {
-            return [styles.stopButton, pressed || isStopping ? styles.buttonPressed : null];
-          }}
           testID="active-stop"
+          variant="danger"
         >
-          {isStopping ? <ActivityIndicator color="#FFFFFF" /> : null}
-          <Text style={styles.stopButtonText}>
+          {isStopping ? <ActivityIndicator color={NEUTRAL_0} /> : null}
+          <Text className="text-[15px] font-bold text-neutral-0">
             {isStopping ? t('sessions.active.stopping') : t('sessions.active.stop')}
           </Text>
-        </Pressable>
+        </Button>
       </View>
-    </View>
+    </ScreenContainer>
   );
 }
-
-
-const styles = StyleSheet.create({
-  buttonPressed: {
-    opacity: 0.75,
-  },
-  centeredContainer: {
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    flex: 1,
-    gap: 12,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  container: {
-    backgroundColor: '#F3F4F6',
-    flex: 1,
-  },
-  errorText: {
-    color: '#991B1B',
-    fontSize: 14,
-    fontWeight: '600',
-    marginHorizontal: 16,
-    textAlign: 'center',
-  },
-  footerContainer: {
-    marginTop: 'auto',
-    padding: 16,
-  },
-  headerContainer: {
-    alignItems: 'flex-start',
-    backgroundColor: '#FFFFFF',
-    borderBottomColor: '#E5E7EB',
-    borderBottomWidth: 1,
-    paddingBottom: 14,
-    paddingHorizontal: 18,
-    paddingTop: 22,
-  },
-  metricCard: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E5E7EB',
-    borderRadius: 14,
-    borderWidth: 1,
-    flexBasis: '47%',
-    flexGrow: 1,
-    padding: 16,
-  },
-  metricLabel: {
-    color: '#6B7280',
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  metricValue: {
-    color: '#111827',
-    fontSize: 22,
-    fontWeight: '700',
-    marginTop: 6,
-  },
-  metricsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    padding: 16,
-  },
-  mutedText: {
-    color: '#4B5563',
-    fontSize: 14,
-  },
-  statusBadge: {
-    backgroundColor: '#CCFBF1',
-    borderRadius: 999,
-    color: '#0F766E',
-    fontSize: 13,
-    fontWeight: '700',
-    marginTop: 8,
-    overflow: 'hidden',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-  },
-  stopButton: {
-    alignItems: 'center',
-    backgroundColor: '#B91C1C',
-    borderRadius: 14,
-    flexDirection: 'row',
-    gap: 8,
-    justifyContent: 'center',
-    paddingVertical: 16,
-  },
-  stopButtonText: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  title: {
-    color: '#111827',
-    fontSize: 24,
-    fontWeight: '700',
-  },
-});

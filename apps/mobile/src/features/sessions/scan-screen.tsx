@@ -1,8 +1,11 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Text, TextInput, View } from 'react-native';
 
+import { Button } from '../../components/ui/button';
+import { Card } from '../../components/ui/card';
+import { ScreenContainer } from '../../components/ui/screen-container';
 import { useAppTranslation } from '../../i18n/use-app-translation';
 import { parseChargeQrPayload, type ChargeQrPayload } from './charge-qr';
 
@@ -58,187 +61,75 @@ export function ScanScreen(): JSX.Element {
   };
 
   return (
-    <View style={styles.container} testID="scan-screen">
-      <View style={styles.headerContainer}>
-        <Text accessibilityRole="header" style={styles.title}>
+    <ScreenContainer keyboardAvoiding testID="scan-screen">
+      <View className="border-b border-border bg-neutral-0 px-[18px] pb-3.5 pt-[22px]">
+        <Text accessibilityRole="header" className="text-2xl font-bold text-text">
           {t('sessions.scan.title')}
         </Text>
-        <Text style={styles.subtitle}>{t('sessions.scan.subtitle')}</Text>
+        <Text className="mt-1.5 text-sm text-neutral-500">{t('sessions.scan.subtitle')}</Text>
       </View>
 
-      <View style={styles.cameraContainer}>
+      <View className="m-4 flex-1 overflow-hidden rounded-xl bg-neutral-900">
         {permission?.granted === true ? (
           <CameraView
             barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
             onBarcodeScanned={({ data }): void => {
               handleRawPayload(data);
             }}
-            style={styles.camera}
+            style={{ flex: 1 }}
             testID="scan-camera"
           />
         ) : (
-          <View style={styles.permissionContainer} testID="scan-permission">
-            <Text style={styles.permissionTitle}>{t('sessions.scan.permission.title')}</Text>
-            <Text style={styles.permissionMessage}>{t('sessions.scan.permission.message')}</Text>
-            <Pressable
-              accessibilityRole="button"
+          <View className="flex-1 items-center justify-center px-6" testID="scan-permission">
+            <Text className="text-center text-[17px] font-bold text-neutral-0">
+              {t('sessions.scan.permission.title')}
+            </Text>
+            <Text className="mt-2 text-center text-sm text-neutral-200">
+              {t('sessions.scan.permission.message')}
+            </Text>
+            <Button
+              className="mt-4"
               onPress={(): void => {
                 void requestPermission();
               }}
-              style={({ pressed }) => {
-                return [styles.permissionButton, pressed ? styles.buttonPressed : null];
-              }}
               testID="scan-permission-grant"
-            >
-              <Text style={styles.permissionButtonText}>{t('sessions.scan.permission.grant')}</Text>
-            </Pressable>
+              title={t('sessions.scan.permission.grant')}
+            />
           </View>
         )}
       </View>
 
-      <View style={styles.manualContainer}>
-        <Text style={styles.manualLabel}>{t('sessions.scan.manual.label')}</Text>
+      <Card className="mx-4 mb-4 p-3.5">
+        <Text className="text-sm font-semibold text-neutral-700">
+          {t('sessions.scan.manual.label')}
+        </Text>
         <TextInput
           accessibilityLabel={t('sessions.scan.manual.label')}
           autoCapitalize="none"
           autoCorrect={false}
+          className="mt-2 rounded-sm border border-border bg-neutral-50 px-3 py-2.5 text-sm text-text"
           onChangeText={(value: string): void => {
             setManualValue(value);
             setHasInvalidPayload(false);
           }}
           placeholder={t('sessions.scan.manual.placeholder')}
-          style={styles.manualInput}
           testID="scan-manual-input"
           value={manualValue}
         />
         {hasInvalidPayload ? (
-          <Text style={styles.errorText} testID="scan-error">
+          <Text className="mt-2 text-[13px] text-danger" testID="scan-error">
             {t('sessions.scan.errors.invalidCode')}
           </Text>
         ) : null}
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          className="mt-3"
           onPress={(): void => {
             handleRawPayload(manualValue);
           }}
-          style={({ pressed }) => {
-            return [styles.manualButton, pressed ? styles.buttonPressed : null];
-          }}
           testID="scan-manual-submit"
-        >
-          <Text style={styles.manualButtonText}>{t('sessions.scan.manual.submit')}</Text>
-        </Pressable>
-      </View>
-    </View>
+          title={t('sessions.scan.manual.submit')}
+        />
+      </Card>
+    </ScreenContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  buttonPressed: {
-    opacity: 0.75,
-  },
-  camera: {
-    flex: 1,
-  },
-  cameraContainer: {
-    backgroundColor: '#111827',
-    borderRadius: 18,
-    flex: 1,
-    margin: 16,
-    overflow: 'hidden',
-  },
-  container: {
-    backgroundColor: '#F3F4F6',
-    flex: 1,
-  },
-  errorText: {
-    color: '#B91C1C',
-    fontSize: 13,
-    marginTop: 8,
-  },
-  headerContainer: {
-    backgroundColor: '#FFFFFF',
-    borderBottomColor: '#E5E7EB',
-    borderBottomWidth: 1,
-    paddingBottom: 14,
-    paddingHorizontal: 18,
-    paddingTop: 22,
-  },
-  manualButton: {
-    alignItems: 'center',
-    backgroundColor: '#0F766E',
-    borderRadius: 12,
-    marginTop: 12,
-    paddingVertical: 12,
-  },
-  manualButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  manualContainer: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E5E7EB',
-    borderRadius: 14,
-    borderWidth: 1,
-    margin: 16,
-    marginTop: 0,
-    padding: 14,
-  },
-  manualInput: {
-    backgroundColor: '#F9FAFB',
-    borderColor: '#D1D5DB',
-    borderRadius: 10,
-    borderWidth: 1,
-    color: '#111827',
-    fontSize: 14,
-    marginTop: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  manualLabel: {
-    color: '#374151',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  permissionButton: {
-    backgroundColor: '#0F766E',
-    borderRadius: 999,
-    marginTop: 16,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-  },
-  permissionButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  permissionContainer: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  permissionMessage: {
-    color: '#D1D5DB',
-    fontSize: 14,
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  permissionTitle: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  subtitle: {
-    color: '#4B5563',
-    fontSize: 14,
-    marginTop: 6,
-  },
-  title: {
-    color: '#111827',
-    fontSize: 24,
-    fontWeight: '700',
-  },
-});

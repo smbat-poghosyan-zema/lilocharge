@@ -5,10 +5,14 @@ import type {
 } from '@lilocharge/shared-types';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
 
 import { ApiClientError } from '../../api';
+import { Button } from '../../components/ui/button';
+import { Card } from '../../components/ui/card';
+import { ScreenContainer } from '../../components/ui/screen-container';
 import { useAppTranslation } from '../../i18n/use-app-translation';
+import { NEUTRAL_0 } from '../../theme/colors';
 import { normalizeRouteParam } from '../../utils/route-params';
 import { useOnboardingSession } from '../onboarding/onboarding-session';
 import { stationsApi, type StationsApi } from '../stations/stations-api';
@@ -109,44 +113,42 @@ export function ChargeConfirmScreen({
 
   if (connectorId === null) {
     return (
-      <View style={styles.centeredContainer}>
-        <Text style={styles.errorText} testID="confirm-missing-connector">
+      <View className="flex-1 items-center justify-center gap-3 bg-background px-6">
+        <Text
+          className="text-center text-sm font-semibold text-danger"
+          testID="confirm-missing-connector"
+        >
           {t('sessions.confirm.errors.missingConnector')}
         </Text>
-        <Pressable
-          accessibilityRole="button"
+        <Button
           onPress={(): void => {
             router.replace('/(tabs)/charge');
           }}
-          style={({ pressed }) => {
-            return [styles.secondaryButton, pressed ? styles.buttonPressed : null];
-          }}
           testID="confirm-rescan"
-        >
-          <Text style={styles.secondaryButtonText}>{t('sessions.actions.rescan')}</Text>
-        </Pressable>
+          title={t('sessions.actions.rescan')}
+          variant="secondary"
+        />
       </View>
     );
   }
 
   if (userId === null) {
     return (
-      <View style={styles.centeredContainer}>
-        <Text style={styles.errorText} testID="confirm-unauthenticated">
+      <View className="flex-1 items-center justify-center gap-3 bg-background px-6">
+        <Text
+          className="text-center text-sm font-semibold text-danger"
+          testID="confirm-unauthenticated"
+        >
           {t('sessions.confirm.errors.unauthenticated')}
         </Text>
-        <Pressable
-          accessibilityRole="button"
+        <Button
           onPress={(): void => {
             router.replace('/onboarding/login');
           }}
-          style={({ pressed }) => {
-            return [styles.secondaryButton, pressed ? styles.buttonPressed : null];
-          }}
           testID="confirm-sign-in"
-        >
-          <Text style={styles.secondaryButtonText}>{t('sessions.actions.signIn')}</Text>
-        </Pressable>
+          title={t('sessions.actions.signIn')}
+          variant="secondary"
+        />
       </View>
     );
   }
@@ -161,95 +163,99 @@ export function ChargeConfirmScreen({
       : null;
 
   return (
-    <View style={styles.container}>
-      <View style={styles.headerContainer}>
-        <Text accessibilityRole="header" style={styles.title}>
+    <ScreenContainer>
+      <View className="border-b border-border bg-neutral-0 px-[18px] pb-3.5 pt-[22px]">
+        <Text accessibilityRole="header" className="text-2xl font-bold text-text">
           {t('sessions.confirm.title')}
         </Text>
-        <Text style={styles.subtitle}>{t('sessions.confirm.subtitle')}</Text>
+        <Text className="mt-1.5 text-sm text-neutral-500">{t('sessions.confirm.subtitle')}</Text>
       </View>
 
-      <View style={styles.card} testID="confirm-target">
+      <Card className="m-4 gap-1" testID="confirm-target">
         {stationDetailState.status === 'loading' ? (
-          <Text style={styles.mutedText}>{t('sessions.confirm.stationLoading')}</Text>
+          <Text className="mt-1 text-[13px] text-neutral-500">
+            {t('sessions.confirm.stationLoading')}
+          </Text>
         ) : null}
         {stationDetailState.status === 'error' ? (
-          <Text style={styles.mutedText} testID="confirm-station-error">
+          <Text className="mt-1 text-[13px] text-neutral-500" testID="confirm-station-error">
             {t('sessions.confirm.stationError')}
           </Text>
         ) : null}
 
         {stationDetailState.status === 'loaded' ? (
           <View testID="confirm-station-detail">
-            <Text style={styles.fieldLabel}>{t('sessions.confirm.stationLabel')}</Text>
-            <Text style={styles.stationName}>{stationDetailState.detail.name}</Text>
-            <Text style={styles.mutedText}>
+            <Text className="mt-2.5 text-xs font-bold uppercase text-neutral-500">
+              {t('sessions.confirm.stationLabel')}
+            </Text>
+            <Text className="text-[17px] font-bold text-text">
+              {stationDetailState.detail.name}
+            </Text>
+            <Text className="mt-1 text-[13px] text-neutral-500">
               {stationDetailState.detail.address}, {stationDetailState.detail.city}
             </Text>
           </View>
         ) : null}
 
-        <Text style={styles.fieldLabel}>{t('sessions.confirm.connectorLabel')}</Text>
+        <Text className="mt-2.5 text-xs font-bold uppercase text-neutral-500">
+          {t('sessions.confirm.connectorLabel')}
+        </Text>
         {matchedConnector === null ? (
           <View>
-            <Text style={styles.connectorValue} testID="confirm-connector-generic">
+            <Text className="text-[17px] font-bold text-text" testID="confirm-connector-generic">
               {t('sessions.confirm.connectorGeneric', { connectorId })}
             </Text>
-            <Text style={styles.mutedText}>{t('sessions.confirm.genericMessage')}</Text>
+            <Text className="mt-1 text-[13px] text-neutral-500">
+              {t('sessions.confirm.genericMessage')}
+            </Text>
           </View>
         ) : (
           <View testID="confirm-connector-detail">
-            <Text style={styles.connectorValue}>
+            <Text className="text-[17px] font-bold text-text">
               {t(`onboarding.vehicle.connectorTypes.${matchedConnector.connectorType}`)} ·{' '}
               {matchedConnector.powerKw} kW
             </Text>
-            <Text style={styles.mutedText}>
+            <Text className="mt-1 text-[13px] text-neutral-500">
               {t('sessions.confirm.pricingLabel')}: {formatPricingDetails(matchedPricingPlan, t)}
             </Text>
           </View>
         )}
-      </View>
+      </Card>
 
       {startErrorKey !== null ? (
-        <View style={styles.errorContainer} testID="confirm-error">
-          <Text style={styles.errorText}>{t(startErrorKey)}</Text>
-          <Pressable
-            accessibilityRole="button"
+        <View className="mx-4 items-start rounded-lg bg-danger-bg p-3.5" testID="confirm-error">
+          <Text className="text-center text-sm font-semibold text-danger">{t(startErrorKey)}</Text>
+          <Button
+            className="mt-3"
             onPress={(): void => {
               void handleStartCharging();
             }}
-            style={({ pressed }) => {
-              return [styles.secondaryButton, pressed ? styles.buttonPressed : null];
-            }}
             testID="confirm-retry"
-          >
-            <Text style={styles.secondaryButtonText}>{t('sessions.actions.retry')}</Text>
-          </Pressable>
+            title={t('sessions.actions.retry')}
+            variant="secondary"
+          />
         </View>
       ) : null}
 
-      <View style={styles.footerContainer}>
-        <Pressable
-          accessibilityRole="button"
+      <View className="mt-auto p-4">
+        <Button
+          accessibilityLabel={
+            isSubmitting ? t('sessions.confirm.starting') : t('sessions.confirm.start')
+          }
+          className="gap-2"
           disabled={isSubmitting}
           onPress={(): void => {
             void handleStartCharging();
           }}
-          style={({ pressed }) => {
-            return [
-              styles.primaryButton,
-              pressed || isSubmitting ? styles.buttonPressed : null,
-            ];
-          }}
           testID="confirm-start"
         >
-          {isSubmitting ? <ActivityIndicator color="#FFFFFF" /> : null}
-          <Text style={styles.primaryButtonText}>
+          {isSubmitting ? <ActivityIndicator color={NEUTRAL_0} /> : null}
+          <Text className="text-[15px] font-bold text-neutral-0">
             {isSubmitting ? t('sessions.confirm.starting') : t('sessions.confirm.start')}
           </Text>
-        </Pressable>
+        </Button>
       </View>
-    </View>
+    </ScreenContainer>
   );
 }
 
@@ -335,114 +341,3 @@ function resolveStartErrorKey(error: unknown): string {
 
   return 'sessions.confirm.errors.startFailed';
 }
-
-const styles = StyleSheet.create({
-  buttonPressed: {
-    opacity: 0.75,
-  },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E5E7EB',
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 4,
-    margin: 16,
-    padding: 16,
-  },
-  centeredContainer: {
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  connectorValue: {
-    color: '#111827',
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  container: {
-    backgroundColor: '#F3F4F6',
-    flex: 1,
-  },
-  errorContainer: {
-    alignItems: 'flex-start',
-    backgroundColor: '#FEE2E2',
-    borderRadius: 14,
-    marginHorizontal: 16,
-    padding: 14,
-  },
-  errorText: {
-    color: '#991B1B',
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  fieldLabel: {
-    color: '#6B7280',
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 10,
-    textTransform: 'uppercase',
-  },
-  footerContainer: {
-    marginTop: 'auto',
-    padding: 16,
-  },
-  headerContainer: {
-    backgroundColor: '#FFFFFF',
-    borderBottomColor: '#E5E7EB',
-    borderBottomWidth: 1,
-    paddingBottom: 14,
-    paddingHorizontal: 18,
-    paddingTop: 22,
-  },
-  mutedText: {
-    color: '#4B5563',
-    fontSize: 13,
-    marginTop: 4,
-  },
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#0F766E',
-    borderRadius: 14,
-    flexDirection: 'row',
-    gap: 8,
-    justifyContent: 'center',
-    paddingVertical: 16,
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#0F766E',
-    borderRadius: 999,
-    borderWidth: 1,
-    marginTop: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 9,
-  },
-  secondaryButtonText: {
-    color: '#0F766E',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  stationName: {
-    color: '#111827',
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  subtitle: {
-    color: '#4B5563',
-    fontSize: 14,
-    marginTop: 6,
-  },
-  title: {
-    color: '#111827',
-    fontSize: 24,
-    fontWeight: '700',
-  },
-});
