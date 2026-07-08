@@ -190,7 +190,7 @@ export function PaymentMethodScreen({
               >
                 <Text
                   className={`text-base font-semibold ${
-                    selected ? 'text-neutral-0' : 'text-text'
+                    selected ? 'text-white' : 'text-text'
                   }`}
                 >
                   {t(`onboarding.payment.methods.${gateway}`)}

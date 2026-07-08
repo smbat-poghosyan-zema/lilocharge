@@ -89,6 +89,15 @@ export const LOCALES = ['hy', 'ru', 'en'] as const;
 export type Locale = (typeof LOCALES)[number];
 
 /**
+ * Color schemes to capture (UX-P2-04). The screenshot suite iterates schemes × locales so
+ * the App Store / Play assets — and the visual-regression review — cover both light and
+ * dark mode (UX-P2-02). `light` is listed first so a scheme-unaware consumer keeps the
+ * historical light-only output.
+ */
+export const COLOR_SCHEMES = ['light', 'dark'] as const;
+export type ScreenshotColorScheme = (typeof COLOR_SCHEMES)[number];
+
+/**
  * Screen definitions for screenshot capture.
  *
  * These map onto screens that are reachable without a backend: the tab
@@ -137,8 +146,17 @@ export const SCREENS: ScreenDefinition[] = [
  * @param locale - Screenshot locale
  * @returns Output directory path
  */
-export function getScreenshotOutputDir(platform: 'ios' | 'android', locale: Locale): string {
-  return `store-assets/screenshots/${platform}/${locale}`;
+export function getScreenshotOutputDir(
+  platform: 'ios' | 'android',
+  locale: Locale,
+  colorScheme?: ScreenshotColorScheme,
+): string {
+  const base = `store-assets/screenshots/${platform}/${locale}`;
+
+  // Backward-compatible: omitting the scheme keeps the historical light-only path so
+  // existing consumers (and the config test) are unaffected; passing one nests a
+  // per-scheme subdirectory for the UX-P2-04 light × dark capture.
+  return colorScheme === undefined ? base : `${base}/${colorScheme}`;
 }
 
 /**

@@ -1,0 +1,613 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`primitive visual regression matches the dark-scheme snapshot 1`] = `
+<RNCSafeAreaView
+  className="flex-1 bg-background"
+  edges={
+    {
+      "bottom": "additive",
+      "left": "additive",
+      "right": "additive",
+      "top": "additive",
+    }
+  }
+  testID="screen"
+>
+  <RCTScrollView
+    className="flex-1 "
+    keyboardShouldPersistTaps="handled"
+  >
+    <View>
+      <View
+        className="rounded-lg border border-border bg-neutral-0 p-4 "
+        testID="card"
+      >
+        <Text
+          className="self-start rounded-full px-3 py-1 text-[13px] font-bold bg-primary-100 text-primary-900 "
+          testID="badge-primary"
+        >
+          Completed
+        </Text>
+        <Text
+          className="self-start rounded-full px-3 py-1 text-[13px] font-bold bg-danger-bg text-danger dark:text-danger-100 "
+          testID="badge-danger"
+        >
+          Failed
+        </Text>
+        <Text
+          className="self-start rounded-full px-3 py-1 text-[13px] font-bold bg-neutral-200 text-neutral-700 "
+          testID="badge-neutral"
+        >
+          Occupied
+        </Text>
+        <View
+          className="gap-1.5 "
+        >
+          <Text
+            className="text-[13px] font-semibold text-text-muted"
+          >
+            Email
+          </Text>
+          <TextInput
+            accessibilityLabel="Email"
+            className="min-h-11 rounded-md border bg-neutral-0 px-3.5 py-3 text-base text-text focus:border-primary border-border"
+            placeholder="you@example.com"
+            placeholderTextColor="#9CA3AF"
+            testID="field"
+          />
+        </View>
+        <View
+          accessibilityLabel="Start charging"
+          accessibilityRole="button"
+          accessibilityState={
+            {
+              "busy": false,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          className="min-h-11 flex-row items-center justify-center rounded-lg px-4 active:opacity-70 bg-primary py-3.5  "
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          testID="btn-primary"
+        >
+          <Text
+            className="text-[15px] font-bold text-white"
+          >
+            Start charging
+          </Text>
+        </View>
+        <View
+          accessibilityLabel="View receipt"
+          accessibilityRole="button"
+          accessibilityState={
+            {
+              "busy": false,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          className="min-h-11 flex-row items-center justify-center rounded-lg px-4 active:opacity-70 border border-primary bg-neutral-0 py-3.5  "
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          testID="btn-secondary"
+        >
+          <Text
+            className="text-[15px] font-bold text-primary dark:text-primary-900"
+          >
+            View receipt
+          </Text>
+        </View>
+        <View
+          accessibilityLabel="Stop"
+          accessibilityRole="button"
+          accessibilityState={
+            {
+              "busy": false,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          className="min-h-11 flex-row items-center justify-center rounded-lg px-4 active:opacity-70 bg-danger py-3.5  "
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          testID="btn-danger"
+        >
+          <Text
+            className="text-[15px] font-bold text-white"
+          >
+            Stop
+          </Text>
+        </View>
+        <View
+          accessibilityLabel="Link"
+          accessibilityRole="button"
+          accessibilityState={
+            {
+              "busy": false,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          className="min-h-11 flex-row items-center justify-center rounded-lg px-4 active:opacity-70 bg-transparent py-2  "
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          testID="btn-link"
+        >
+          <Text>
+            Link
+          </Text>
+        </View>
+        <View
+          className="flex-1 items-center justify-center gap-3 bg-background px-6"
+          testID="loading"
+        >
+          <ActivityIndicator
+            color="#0F766E"
+            size="large"
+          />
+          <Text
+            className="text-sm text-text-muted"
+          >
+            Loading
+          </Text>
+        </View>
+        <View
+          className="flex-1 items-center justify-center gap-3 bg-background px-6"
+          testID="error"
+        >
+          <Text
+            className="text-center text-sm font-semibold text-danger"
+          >
+            Failed
+          </Text>
+          <View
+            accessibilityLabel="Retry"
+            accessibilityRole="button"
+            accessibilityState={
+              {
+                "busy": false,
+                "checked": undefined,
+                "disabled": false,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessibilityValue={
+              {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
+              }
+            }
+            accessible={true}
+            className="min-h-11 flex-row items-center justify-center rounded-lg px-4 active:opacity-70 border border-primary bg-neutral-0 py-3.5  "
+            collapsable={false}
+            focusable={true}
+            onBlur={[Function]}
+            onClick={[Function]}
+            onFocus={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+            testID="error-retry"
+          >
+            <Text
+              className="text-[15px] font-bold text-primary dark:text-primary-900"
+            >
+              Retry
+            </Text>
+          </View>
+        </View>
+        <View
+          className="flex-1 items-center justify-center gap-3 bg-background px-6"
+          testID="empty"
+        >
+          <Text
+            accessibilityElementsHidden={true}
+            className="text-4xl"
+            testID="empty-icon"
+          >
+            🔌
+          </Text>
+          <Text
+            className="text-center text-sm text-text-muted"
+          >
+            Nothing here
+          </Text>
+        </View>
+      </View>
+    </View>
+  </RCTScrollView>
+</RNCSafeAreaView>
+`;
+
+exports[`primitive visual regression matches the light-scheme snapshot 1`] = `
+<RNCSafeAreaView
+  className="flex-1 bg-background"
+  edges={
+    {
+      "bottom": "additive",
+      "left": "additive",
+      "right": "additive",
+      "top": "additive",
+    }
+  }
+  testID="screen"
+>
+  <RCTScrollView
+    className="flex-1 "
+    keyboardShouldPersistTaps="handled"
+  >
+    <View>
+      <View
+        className="rounded-lg border border-border bg-neutral-0 p-4 "
+        testID="card"
+      >
+        <Text
+          className="self-start rounded-full px-3 py-1 text-[13px] font-bold bg-primary-100 text-primary-900 "
+          testID="badge-primary"
+        >
+          Completed
+        </Text>
+        <Text
+          className="self-start rounded-full px-3 py-1 text-[13px] font-bold bg-danger-bg text-danger dark:text-danger-100 "
+          testID="badge-danger"
+        >
+          Failed
+        </Text>
+        <Text
+          className="self-start rounded-full px-3 py-1 text-[13px] font-bold bg-neutral-200 text-neutral-700 "
+          testID="badge-neutral"
+        >
+          Occupied
+        </Text>
+        <View
+          className="gap-1.5 "
+        >
+          <Text
+            className="text-[13px] font-semibold text-text-muted"
+          >
+            Email
+          </Text>
+          <TextInput
+            accessibilityLabel="Email"
+            className="min-h-11 rounded-md border bg-neutral-0 px-3.5 py-3 text-base text-text focus:border-primary border-border"
+            placeholder="you@example.com"
+            placeholderTextColor="#626B78"
+            testID="field"
+          />
+        </View>
+        <View
+          accessibilityLabel="Start charging"
+          accessibilityRole="button"
+          accessibilityState={
+            {
+              "busy": false,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          className="min-h-11 flex-row items-center justify-center rounded-lg px-4 active:opacity-70 bg-primary py-3.5  "
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          testID="btn-primary"
+        >
+          <Text
+            className="text-[15px] font-bold text-white"
+          >
+            Start charging
+          </Text>
+        </View>
+        <View
+          accessibilityLabel="View receipt"
+          accessibilityRole="button"
+          accessibilityState={
+            {
+              "busy": false,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          className="min-h-11 flex-row items-center justify-center rounded-lg px-4 active:opacity-70 border border-primary bg-neutral-0 py-3.5  "
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          testID="btn-secondary"
+        >
+          <Text
+            className="text-[15px] font-bold text-primary dark:text-primary-900"
+          >
+            View receipt
+          </Text>
+        </View>
+        <View
+          accessibilityLabel="Stop"
+          accessibilityRole="button"
+          accessibilityState={
+            {
+              "busy": false,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          className="min-h-11 flex-row items-center justify-center rounded-lg px-4 active:opacity-70 bg-danger py-3.5  "
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          testID="btn-danger"
+        >
+          <Text
+            className="text-[15px] font-bold text-white"
+          >
+            Stop
+          </Text>
+        </View>
+        <View
+          accessibilityLabel="Link"
+          accessibilityRole="button"
+          accessibilityState={
+            {
+              "busy": false,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          className="min-h-11 flex-row items-center justify-center rounded-lg px-4 active:opacity-70 bg-transparent py-2  "
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          testID="btn-link"
+        >
+          <Text>
+            Link
+          </Text>
+        </View>
+        <View
+          className="flex-1 items-center justify-center gap-3 bg-background px-6"
+          testID="loading"
+        >
+          <ActivityIndicator
+            color="#0F766E"
+            size="large"
+          />
+          <Text
+            className="text-sm text-text-muted"
+          >
+            Loading
+          </Text>
+        </View>
+        <View
+          className="flex-1 items-center justify-center gap-3 bg-background px-6"
+          testID="error"
+        >
+          <Text
+            className="text-center text-sm font-semibold text-danger"
+          >
+            Failed
+          </Text>
+          <View
+            accessibilityLabel="Retry"
+            accessibilityRole="button"
+            accessibilityState={
+              {
+                "busy": false,
+                "checked": undefined,
+                "disabled": false,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessibilityValue={
+              {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
+              }
+            }
+            accessible={true}
+            className="min-h-11 flex-row items-center justify-center rounded-lg px-4 active:opacity-70 border border-primary bg-neutral-0 py-3.5  "
+            collapsable={false}
+            focusable={true}
+            onBlur={[Function]}
+            onClick={[Function]}
+            onFocus={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+            testID="error-retry"
+          >
+            <Text
+              className="text-[15px] font-bold text-primary dark:text-primary-900"
+            >
+              Retry
+            </Text>
+          </View>
+        </View>
+        <View
+          className="flex-1 items-center justify-center gap-3 bg-background px-6"
+          testID="empty"
+        >
+          <Text
+            accessibilityElementsHidden={true}
+            className="text-4xl"
+            testID="empty-icon"
+          >
+            🔌
+          </Text>
+          <Text
+            className="text-center text-sm text-text-muted"
+          >
+            Nothing here
+          </Text>
+        </View>
+      </View>
+    </View>
+  </RCTScrollView>
+</RNCSafeAreaView>
+`;

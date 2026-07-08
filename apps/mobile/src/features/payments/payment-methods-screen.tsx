@@ -22,7 +22,8 @@ const CENTERED_CLASS = 'flex-1 items-center justify-center gap-3 bg-background p
 const FIELD_LABEL_CLASS = 'mt-3 text-xs font-bold uppercase text-text-muted';
 const TEXT_INPUT_CLASS =
   'mt-1.5 min-h-11 rounded-sm border border-border bg-neutral-50 px-3 py-2.5 text-sm text-text';
-const OPTION_CLASS = 'rounded-sm border border-border bg-neutral-50 px-3 py-2.5';
+const OPTION_CLASS =
+  'min-h-11 justify-center rounded-sm border border-border bg-neutral-50 px-3 py-2.5';
 const OPTION_SELECTED_CLASS = 'border-primary bg-primary-50';
 const OPTION_TEXT_CLASS = 'text-sm font-semibold text-text';
 const OPTION_TEXT_SELECTED_CLASS = 'text-sm font-semibold text-primary-900';
@@ -374,7 +375,7 @@ function PaymentMethodRow({ method, onDelete, onSetDefault }: PaymentMethodRowPr
               method.gateway,
             )}`}
           >
-            <Text className="text-base font-bold text-neutral-0">{gatewayLabel.slice(0, 1)}</Text>
+            <Text className="text-base font-bold text-white">{gatewayLabel.slice(0, 1)}</Text>
           </View>
           <View className="shrink">
             <Text className="text-sm font-bold text-text">
@@ -435,6 +436,6 @@ function resolveGatewayBadgeClass(gateway: PaymentGatewayCode): string {
     case 'APPLE_PAY':
     case 'GOOGLE_PAY':
     default:
-      return 'bg-neutral-900';
+      return 'bg-ink';
   }
 }

@@ -14,8 +14,12 @@ export const PRIMARY = '#0F766E';
 /** Surface white — `neutral-0`. Used for spinners/icons rendered on colored surfaces. */
 export const NEUTRAL_0 = '#FFFFFF';
 
-/** Muted body text — `text-muted` / `neutral-500`. */
-export const NEUTRAL_500 = '#6B7280';
+/**
+ * Muted body text — `text-muted` / `neutral-500`. Darkened from the original #6B7280
+ * (4.39:1 on the #F3F4F6 background — below WCAG AA) to #626B78 (~4.9:1) so muted text and
+ * input placeholders pass AA. Mirrors `--color-neutral-500` / `--color-text-muted` (light).
+ */
+export const NEUTRAL_500 = '#626B78';
 
 /** Primary text / darkest neutral — `neutral-900` / `text`. */
 export const NEUTRAL_900 = '#111827';

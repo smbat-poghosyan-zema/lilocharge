@@ -69,7 +69,7 @@ export function ScanScreen(): JSX.Element {
         <Text className="mt-1.5 text-sm text-neutral-500">{t('sessions.scan.subtitle')}</Text>
       </View>
 
-      <View className="m-4 flex-1 overflow-hidden rounded-xl bg-neutral-900">
+      <View className="m-4 flex-1 overflow-hidden rounded-xl bg-ink">
         {permission?.granted === true ? (
           <CameraView
             barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
@@ -81,10 +81,10 @@ export function ScanScreen(): JSX.Element {
           />
         ) : (
           <View className="flex-1 items-center justify-center px-6" testID="scan-permission">
-            <Text className="text-center text-[17px] font-bold text-neutral-0">
+            <Text className="text-center text-[17px] font-bold text-white">
               {t('sessions.scan.permission.title')}
             </Text>
-            <Text className="mt-2 text-center text-sm text-neutral-200">
+            <Text className="mt-2 text-center text-sm text-white">
               {t('sessions.scan.permission.message')}
             </Text>
             <Button

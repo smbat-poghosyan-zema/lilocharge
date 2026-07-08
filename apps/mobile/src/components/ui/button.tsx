@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, Text } from 'react-native';
 
-import { NEUTRAL_0, PRIMARY } from '../../theme/colors';
+import { useThemeColors } from '../../theme/use-theme-colors';
 
 /** Visual/semantic variants a {@link Button} can render as. */
 export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'link';
@@ -43,18 +43,12 @@ const CONTAINER_BY_VARIANT: Record<ButtonVariant, string> = {
 };
 
 const TEXT_BY_VARIANT: Record<ButtonVariant, string> = {
-  primary: 'text-[15px] font-bold text-neutral-0',
-  secondary: 'text-[15px] font-bold text-primary',
-  danger: 'text-[15px] font-bold text-neutral-0',
-  link: 'text-[15px] font-semibold text-primary',
-};
-
-/** Spinner color has to be a literal (RN `ActivityIndicator` takes `color`, not a class). */
-const SPINNER_COLOR_BY_VARIANT: Record<ButtonVariant, string> = {
-  primary: NEUTRAL_0,
-  secondary: PRIMARY,
-  danger: NEUTRAL_0,
-  link: PRIMARY,
+  primary: 'text-[15px] font-bold text-white',
+  // `dark:text-primary-900` lifts the teal label to a light teal on dark surfaces where
+  // the brand teal itself would be too low-contrast.
+  secondary: 'text-[15px] font-bold text-primary dark:text-primary-900',
+  danger: 'text-[15px] font-bold text-white',
+  link: 'text-[15px] font-semibold text-primary dark:text-primary-900',
 };
 
 /**
@@ -77,6 +71,12 @@ export function Button(props: ButtonProps): JSX.Element {
   } = props;
   const isBlocked = disabled || loading;
   const label = 'title' in props && props.title !== undefined ? props.title : accessibilityLabel;
+  const themeColors = useThemeColors();
+  // Spinner color is a literal (RN `ActivityIndicator` takes `color`, not a class) and is
+  // resolved per scheme: white on the filled primary/danger surfaces, brand teal on the
+  // outline/link variants.
+  const spinnerColor =
+    variant === 'primary' || variant === 'danger' ? themeColors.onColor : themeColors.primary;
 
   return (
     <Pressable
@@ -92,7 +92,7 @@ export function Button(props: ButtonProps): JSX.Element {
     >
       {loading ? (
         <ActivityIndicator
-          color={SPINNER_COLOR_BY_VARIANT[variant]}
+          color={spinnerColor}
           testID={testID === undefined ? undefined : `${testID}-loading`}
         />
       ) : 'title' in props && props.title !== undefined ? (

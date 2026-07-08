@@ -23,7 +23,8 @@ const CENTERED_CLASS = 'flex-1 items-center justify-center gap-3 bg-background p
 const FIELD_LABEL_CLASS = 'mt-3 text-xs font-bold uppercase text-text-muted';
 const TEXT_INPUT_CLASS =
   'mt-1.5 min-h-11 rounded-sm border border-border bg-neutral-50 px-3 py-2.5 text-sm text-text';
-const OPTION_CLASS = 'rounded-sm border border-border bg-neutral-50 px-3 py-2.5';
+const OPTION_CLASS =
+  'min-h-11 justify-center rounded-sm border border-border bg-neutral-50 px-3 py-2.5';
 const OPTION_SELECTED_CLASS = 'border-primary bg-primary-50';
 const OPTION_TEXT_CLASS = 'text-sm font-semibold text-text';
 const OPTION_TEXT_SELECTED_CLASS = 'text-sm font-semibold text-primary-900';
@@ -251,7 +252,7 @@ export function WalletScreen({
           <Text className="text-[13px] font-semibold uppercase text-primary-100">
             {t('wallet.balanceTitle')}
           </Text>
-          <Text className="mt-1.5 text-[32px] font-bold text-neutral-0" testID="wallet-balance">
+          <Text className="mt-1.5 text-[32px] font-bold text-white" testID="wallet-balance">
             {t('sessions.units.amd', { amount: formatAmdFromCents(wallet.balance) })}
           </Text>
         </View>

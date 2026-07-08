@@ -40,13 +40,13 @@ export function StationMarker({
     >
       <View className="relative mr-2">
         <View
-          className="h-5 w-5 items-center justify-center rounded-full border-2 border-neutral-0"
+          className="h-5 w-5 items-center justify-center rounded-full border-2 border-white"
           style={{ backgroundColor: getStationStatusColor(status) }}
         >
-          <Text className="text-[7px] font-bold text-neutral-0">{powerTier}</Text>
+          <Text className="text-[7px] font-bold text-white">{powerTier}</Text>
         </View>
-        <View className="absolute -right-1.5 -top-1.5 h-3.5 min-w-[14px] items-center justify-center rounded-full border border-neutral-0 bg-neutral-900">
-          <Text className="text-[8px] font-bold text-neutral-0">{connectorCount}</Text>
+        <View className="absolute -right-1.5 -top-1.5 h-3.5 min-w-[14px] items-center justify-center rounded-full border border-white bg-ink">
+          <Text className="text-[8px] font-bold text-white">{connectorCount}</Text>
         </View>
       </View>
       <Text className="max-w-[160px] text-xs font-bold text-neutral-900" numberOfLines={1}>

@@ -64,7 +64,7 @@ const SECTION_TITLE_CLASS = 'text-[15px] font-bold text-neutral-900';
 const ROW_CARD_CLASS = 'mt-2.5 rounded-md border border-border bg-neutral-50 px-3 py-2.5';
 const ROW_TITLE_CLASS = 'text-sm font-bold text-neutral-900';
 const COMMUNITY_ACTION_BUTTON_CLASS =
-  'grow items-center rounded-full border border-primary bg-neutral-0 px-3.5 py-[9px] active:opacity-75';
+  'min-h-11 grow items-center justify-center rounded-full border border-primary bg-neutral-0 px-3.5 py-[9px] active:opacity-75';
 
 /**
  * Full-page station detail screen: station facts, connectors with per-connector
@@ -201,6 +201,7 @@ export function StationDetailScreen({
         </Text>
         <View className="mt-3 flex-row gap-2">
           <Pressable
+            accessibilityLabel={t('stations.detail.writeReview')}
             accessibilityRole="button"
             onPress={(): void => {
               router.push(`/stations/${detail.id}/review`);
@@ -208,11 +209,12 @@ export function StationDetailScreen({
             className={COMMUNITY_ACTION_BUTTON_CLASS}
             testID="station-detail-write-review"
           >
-            <Text className="text-[13px] font-bold text-primary">
+            <Text className="text-[13px] font-bold text-primary dark:text-primary-900">
               {t('stations.detail.writeReview')}
             </Text>
           </Pressable>
           <Pressable
+            accessibilityLabel={t('stations.detail.reportProblem')}
             accessibilityRole="button"
             onPress={(): void => {
               router.push(`/stations/${detail.id}/report`);
@@ -220,7 +222,7 @@ export function StationDetailScreen({
             className={COMMUNITY_ACTION_BUTTON_CLASS}
             testID="station-detail-report-problem"
           >
-            <Text className="text-[13px] font-bold text-primary">
+            <Text className="text-[13px] font-bold text-primary dark:text-primary-900">
               {t('stations.detail.reportProblem')}
             </Text>
           </Pressable>
@@ -378,9 +380,10 @@ function StationConnectorRow({
         title={t('stations.detail.chargeHere')}
       />
       <Pressable
+        accessibilityLabel={t('stations.detail.communityReport.action')}
         accessibilityRole="button"
         onPress={handleToggleStatusPicker}
-        className="mt-2 items-center rounded-sm border border-accent bg-neutral-0 py-[9px] active:opacity-75"
+        className="mt-2 min-h-11 items-center justify-center rounded-sm border border-accent bg-neutral-0 py-[9px] active:opacity-75"
         testID={`station-detail-report-status-${connector.id}`}
       >
         <Text className="text-[13px] font-bold text-accent">
@@ -393,12 +396,13 @@ function StationConnectorRow({
           <View className="mt-2 flex-row flex-wrap gap-2">
             {REPORTABLE_STATUSES.map((reportableStatus) => (
               <Pressable
+                accessibilityLabel={resolveStationStatusLabel(reportableStatus, t)}
                 accessibilityRole="button"
                 key={reportableStatus}
                 onPress={(): void => {
                   handleSelectStatus(reportableStatus);
                 }}
-                className="rounded-full border border-accent bg-accent/10 px-3 py-[7px] active:opacity-75"
+                className="min-h-11 items-center justify-center rounded-full border border-accent bg-accent/10 px-3 py-[7px] active:opacity-75"
                 testID={`station-detail-report-status-option-${connector.id}-${reportableStatus}`}
               >
                 <Text className="text-xs font-bold text-accent">

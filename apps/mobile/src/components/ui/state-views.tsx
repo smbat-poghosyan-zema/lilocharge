@@ -1,6 +1,6 @@
 import { ActivityIndicator, Text, View } from 'react-native';
 
-import { PRIMARY } from '../../theme/colors';
+import { useThemeColors } from '../../theme/use-theme-colors';
 import { Button } from './button';
 
 const CENTERED = 'flex-1 items-center justify-center gap-3 bg-background px-6';
@@ -16,12 +16,14 @@ interface LoadingViewProps {
  * Centered loading state: a `primary`-tinted spinner with an optional message. Replaces
  * the 8 hand-rolled `centeredContainer` + `ActivityIndicator color="#0F766E"` blocks.
  * The spinner color is a literal because RN `ActivityIndicator` takes `color`, not a
- * class; it mirrors the `primary` token from `tailwind.config.js` via `theme/colors.ts`.
+ * class; it mirrors the `primary` token from `tailwind.config.js` via `useThemeColors`.
  */
 export function LoadingView({ message, testID }: LoadingViewProps): JSX.Element {
+  const themeColors = useThemeColors();
+
   return (
     <View className={CENTERED} testID={testID}>
-      <ActivityIndicator color={PRIMARY} size="large" />
+      <ActivityIndicator color={themeColors.primary} size="large" />
       {message !== undefined ? <Text className="text-sm text-text-muted">{message}</Text> : null}
     </View>
   );

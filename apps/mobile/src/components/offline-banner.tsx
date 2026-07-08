@@ -26,7 +26,7 @@ export function OfflineBanner(): JSX.Element | null {
 
   return (
     <View accessibilityRole="alert" className="items-center bg-danger px-4 py-1.5" testID="offline-banner">
-      <Text className="text-[13px] font-semibold text-neutral-0">{t('offline.banner')}</Text>
+      <Text className="text-[13px] font-semibold text-white">{t('offline.banner')}</Text>
     </View>
   );
 }

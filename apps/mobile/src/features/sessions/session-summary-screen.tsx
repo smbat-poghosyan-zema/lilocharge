@@ -183,7 +183,7 @@ export function SessionSummaryScreen({
           className="items-center rounded-lg bg-primary py-4"
           testID="summary-done"
         >
-          <Text className="text-[17px] font-bold text-neutral-0">{t('sessions.summary.done')}</Text>
+          <Text className="text-[17px] font-bold text-white">{t('sessions.summary.done')}</Text>
         </Pressable>
       </View>
     </View>

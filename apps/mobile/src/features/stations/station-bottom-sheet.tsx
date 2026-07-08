@@ -118,11 +118,17 @@ export function StationBottomSheet({
         </View>
         <View className="items-end gap-2">
           <Pressable
+            accessibilityLabel={
+              isFavorite
+                ? t('stations.map.sheet.removeFavorite')
+                : t('stations.map.sheet.saveFavorite')
+            }
             accessibilityRole="button"
+            accessibilityState={{ selected: isFavorite }}
             onPress={(): void => {
               onToggleFavorite(station);
             }}
-            className="rounded-full bg-primary-50 px-3 py-[7px] active:opacity-75"
+            className="min-h-11 items-center justify-center rounded-full bg-primary-50 px-3 py-[7px] active:opacity-75"
             testID="station-bottom-sheet-favorite-button"
           >
             <Text className="text-xs font-bold text-primary-900">
@@ -132,9 +138,10 @@ export function StationBottomSheet({
             </Text>
           </Pressable>
           <Pressable
+            accessibilityLabel={t('stations.map.sheet.close')}
             accessibilityRole="button"
             onPress={onClose}
-            className="rounded-full bg-neutral-200 px-3 py-[7px] active:opacity-75"
+            className="min-h-11 items-center justify-center rounded-full bg-neutral-200 px-3 py-[7px] active:opacity-75"
             testID="station-bottom-sheet-close-button"
           >
             <Text className="text-xs font-bold text-neutral-900">

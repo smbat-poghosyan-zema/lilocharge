@@ -547,9 +547,15 @@ export function StationsScreen({
           <View className="absolute left-4 right-4 top-4 items-start">
             <StationSearchInput value={searchInputValue} onChangeText={setSearchInputValue} />
             <Pressable
+              accessibilityLabel={
+                isFilterPanelVisible
+                  ? t('stations.map.filters.toggleHide')
+                  : t('stations.map.filters.toggle')
+              }
               accessibilityRole="button"
+              accessibilityState={{ expanded: isFilterPanelVisible }}
               onPress={handleToggleFilterPanel}
-              className="mb-2 flex-row items-center rounded-full border border-border bg-neutral-0/95 px-3.5 py-2 active:opacity-75"
+              className="mb-2 min-h-11 flex-row items-center rounded-full border border-border bg-neutral-0/95 px-3.5 py-2 active:opacity-75"
               testID="station-filter-toggle-button"
             >
               <Text className="text-[13px] font-bold text-neutral-900">
@@ -575,14 +581,15 @@ export function StationsScreen({
               />
             </Animated.View>
             <Pressable
+              accessibilityLabel={t('stations.map.offline.download')}
               accessibilityRole="button"
               disabled={offlineDownloadStatus === 'IN_PROGRESS'}
               onPress={handleOfflineDownloadPress}
-              className={`mb-2 rounded-full bg-neutral-900 px-3.5 py-2 active:opacity-75 ${
+              className={`mb-2 min-h-11 items-center justify-center rounded-full bg-ink px-3.5 py-2 active:opacity-75 ${
                 offlineDownloadStatus === 'IN_PROGRESS' ? 'opacity-60' : ''
               }`}
             >
-              <Text className="text-xs font-bold text-neutral-0">
+              <Text className="text-xs font-bold text-white">
                 {t('stations.map.offline.download')}
               </Text>
             </Pressable>
@@ -612,25 +619,27 @@ export function StationsScreen({
           </View>
           <View className="absolute bottom-[120px] right-4 items-end">
             <Pressable
+              accessibilityLabel={t('stations.map.camera.focusSelected')}
               accessibilityRole="button"
               disabled={selectedStation === null}
               onPress={handleFocusSelectedStationPress}
-              className={`mb-2 rounded-full bg-neutral-900/95 px-3.5 py-2 active:opacity-75 ${
+              className={`mb-2 min-h-11 items-center justify-center rounded-full bg-ink/95 px-3.5 py-2 active:opacity-75 ${
                 selectedStation === null ? 'opacity-50' : ''
               }`}
               testID="station-focus-camera-button"
             >
-              <Text className="text-xs font-bold text-neutral-0">
+              <Text className="text-xs font-bold text-white">
                 {t('stations.map.camera.focusSelected')}
               </Text>
             </Pressable>
             <Pressable
+              accessibilityLabel={t('stations.map.camera.recenter')}
               accessibilityRole="button"
               onPress={handleRecenterMapPress}
-              className="mb-2 rounded-full bg-neutral-900/95 px-3.5 py-2 active:opacity-75"
+              className="mb-2 min-h-11 items-center justify-center rounded-full bg-ink/95 px-3.5 py-2 active:opacity-75"
               testID="station-recenter-camera-button"
             >
-              <Text className="text-xs font-bold text-neutral-0">
+              <Text className="text-xs font-bold text-white">
                 {t('stations.map.camera.recenter')}
               </Text>
             </Pressable>

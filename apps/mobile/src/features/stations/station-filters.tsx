@@ -21,8 +21,9 @@ const AVAILABILITY_FILTER_OPTIONS: readonly StationStatus[] = [
 
 const POWER_FILTER_STEPS_KW: readonly number[] = [0, 22, 50, 120, 180, 240, 350];
 
-const CHIP_ROW_CONTENT_CLASS = 'pb-1 pr-0.5';
-const CHIP_BASE = 'mr-2 rounded-full border px-2.5 py-1.5 active:opacity-75';
+const CHIP_ROW_CONTENT_CLASS = 'items-center pb-1 pr-0.5';
+const CHIP_BASE =
+  'mr-2 min-h-11 flex-row items-center justify-center rounded-full border px-3 py-1.5 active:opacity-75';
 const CHIP_UNSELECTED = 'border-border bg-neutral-0';
 const CHIP_SELECTED = 'border-primary bg-primary';
 
@@ -65,8 +66,9 @@ export function StationFilters({ filters, operators, onChange }: StationFiltersP
           {t('stations.map.filters.title')}
         </Text>
         <Pressable
+          accessibilityLabel={t('stations.map.filters.clear')}
           accessibilityRole="button"
-          className={`rounded-full bg-neutral-200 px-2.5 py-[5px] active:opacity-75 ${
+          className={`min-h-11 items-center justify-center rounded-full bg-neutral-200 px-3 py-[5px] active:opacity-75 ${
             hasActiveFilters ? '' : 'opacity-60'
           }`}
           disabled={!hasActiveFilters}
@@ -91,7 +93,9 @@ export function StationFilters({ filters, operators, onChange }: StationFiltersP
           return (
             <Pressable
               key={option}
+              accessibilityLabel={t(`onboarding.vehicle.connectorTypes.${option}`)}
               accessibilityRole="button"
+              accessibilityState={{ selected: isSelected }}
               className={`${CHIP_BASE} ${isSelected ? CHIP_SELECTED : CHIP_UNSELECTED}`}
               onPress={(): void => {
                 onChange({
@@ -102,7 +106,7 @@ export function StationFilters({ filters, operators, onChange }: StationFiltersP
               testID={`station-filter-connector-${option}`}
             >
               <Text
-                className={`text-xs font-semibold ${isSelected ? 'text-neutral-0' : 'text-neutral-700'}`}
+                className={`text-xs font-semibold ${isSelected ? 'text-white' : 'text-neutral-700'}`}
               >
                 {t(`onboarding.vehicle.connectorTypes.${option}`)}
               </Text>
@@ -131,8 +135,10 @@ export function StationFilters({ filters, operators, onChange }: StationFiltersP
           return (
             <Pressable
               key={step}
+              accessibilityLabel={resolvePowerLabel(step === 0 ? undefined : step, t)}
               accessibilityRole="button"
-              className="flex-1 items-center active:opacity-75"
+              accessibilityState={{ selected: isSelectedStep }}
+              className="min-h-11 flex-1 items-center justify-center active:opacity-75"
               onPress={(): void => {
                 onChange({
                   ...filters,
@@ -164,7 +170,9 @@ export function StationFilters({ filters, operators, onChange }: StationFiltersP
           return (
             <Pressable
               key={status}
+              accessibilityLabel={t(`stations.map.sheet.status.${status.toLowerCase()}`)}
               accessibilityRole="button"
+              accessibilityState={{ selected: isSelected }}
               className={`${CHIP_BASE} ${isSelected ? CHIP_SELECTED : CHIP_UNSELECTED}`}
               onPress={(): void => {
                 onChange({
@@ -175,7 +183,7 @@ export function StationFilters({ filters, operators, onChange }: StationFiltersP
               testID={`station-filter-availability-${status}`}
             >
               <Text
-                className={`text-xs font-semibold ${isSelected ? 'text-neutral-0' : 'text-neutral-700'}`}
+                className={`text-xs font-semibold ${isSelected ? 'text-white' : 'text-neutral-700'}`}
               >
                 {t(`stations.map.sheet.status.${status.toLowerCase()}`)}
               </Text>
@@ -194,7 +202,9 @@ export function StationFilters({ filters, operators, onChange }: StationFiltersP
           return (
             <Pressable
               key={operator.id}
+              accessibilityLabel={operator.name}
               accessibilityRole="button"
+              accessibilityState={{ selected: isSelected }}
               className={`${CHIP_BASE} ${isSelected ? CHIP_SELECTED : CHIP_UNSELECTED}`}
               onPress={(): void => {
                 onChange({
@@ -205,7 +215,7 @@ export function StationFilters({ filters, operators, onChange }: StationFiltersP
               testID={`station-filter-operator-${operator.id}`}
             >
               <Text
-                className={`text-xs font-semibold ${isSelected ? 'text-neutral-0' : 'text-neutral-700'}`}
+                className={`text-xs font-semibold ${isSelected ? 'text-white' : 'text-neutral-700'}`}
               >
                 {operator.name}
               </Text>

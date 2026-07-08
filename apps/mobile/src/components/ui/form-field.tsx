@@ -1,7 +1,7 @@
 import type { TextInputProps } from 'react-native';
 import { Text, TextInput, View } from 'react-native';
 
-import { NEUTRAL_500 } from '../../theme/colors';
+import { useThemeColors } from '../../theme/use-theme-colors';
 
 interface FormFieldProps extends Omit<TextInputProps, 'accessibilityLabel'> {
   /** Visible field label rendered above the input. */
@@ -34,6 +34,7 @@ export function FormField({
   ...textInputProps
 }: FormFieldProps): JSX.Element {
   const hasError = typeof error === 'string' && error.length > 0;
+  const themeColors = useThemeColors();
 
   return (
     <View className={`gap-1.5 ${className ?? ''}`}>
@@ -43,7 +44,7 @@ export function FormField({
         className={`min-h-11 rounded-md border bg-neutral-0 px-3.5 py-3 text-base text-text focus:border-primary ${
           hasError ? 'border-danger' : 'border-border'
         }`}
-        placeholderTextColor={NEUTRAL_500}
+        placeholderTextColor={themeColors.muted}
         testID={testID}
         {...textInputProps}
       />

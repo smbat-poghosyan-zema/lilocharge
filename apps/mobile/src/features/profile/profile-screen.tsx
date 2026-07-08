@@ -32,9 +32,9 @@ const MUTED_TEXT_CLASS = 'mt-1.5 text-[13px] text-text-muted';
 const FIELD_LABEL_CLASS = 'mt-2.5 text-xs font-bold uppercase text-text-muted';
 const FIELD_VALUE_CLASS = 'mt-0.5 text-[15px] font-semibold text-text';
 const NAV_ROW_CLASS =
-  'mt-2 flex-row items-center justify-between rounded-sm border border-border bg-neutral-50 px-3 py-3 active:opacity-75';
+  'mt-2 min-h-11 flex-row items-center justify-between rounded-sm border border-border bg-neutral-50 px-3 py-3 active:opacity-75';
 const OPTION_CLASS =
-  'mt-2 rounded-sm border border-border bg-neutral-50 px-3 py-2.5 active:opacity-75';
+  'mt-2 min-h-11 justify-center rounded-sm border border-border bg-neutral-50 px-3 py-2.5 active:opacity-75';
 const OPTION_SELECTED_CLASS = 'border-primary bg-primary-50';
 const OPTION_TEXT_CLASS = 'text-sm font-semibold text-text';
 
@@ -149,6 +149,7 @@ export function ProfileScreen({ profileApiClient = profileApi }: ProfileScreenPr
         <Card>
           <Text className={SECTION_TITLE_CLASS}>{t('profile.navigation.title')}</Text>
           <Pressable
+            accessibilityLabel={t('profile.navigation.paymentMethods')}
             accessibilityRole="button"
             onPress={(): void => {
               router.push('/payment-methods');
@@ -162,6 +163,7 @@ export function ProfileScreen({ profileApiClient = profileApi }: ProfileScreenPr
             <Text className="text-lg font-bold text-text-muted">›</Text>
           </Pressable>
           <Pressable
+            accessibilityLabel={t('profile.navigation.wallet')}
             accessibilityRole="button"
             onPress={(): void => {
               router.push('/wallet');
@@ -181,6 +183,7 @@ export function ProfileScreen({ profileApiClient = profileApi }: ProfileScreenPr
 
             return (
               <Pressable
+                accessibilityLabel={option.nativeLabel}
                 accessibilityRole="button"
                 accessibilityState={{ selected: isSelected }}
                 key={option.code}
@@ -200,12 +203,15 @@ export function ProfileScreen({ profileApiClient = profileApi }: ProfileScreenPr
 
         {userId !== null ? (
           <Pressable
+            accessibilityLabel={t('profile.logout')}
             accessibilityRole="button"
             onPress={handleLogout}
-            className="mt-1 items-center rounded-md bg-danger-bg py-3.5 active:opacity-75"
+            className="mt-1 min-h-11 items-center justify-center rounded-md bg-danger-bg py-3.5 active:opacity-75"
             testID="profile-logout"
           >
-            <Text className="text-[15px] font-bold text-danger">{t('profile.logout')}</Text>
+            <Text className="text-[15px] font-bold text-danger dark:text-danger-100">
+              {t('profile.logout')}
+            </Text>
           </Pressable>
         ) : null}
       </View>

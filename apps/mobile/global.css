@@ -1,3 +1,86 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * Design-token color channels (UX-P2-02 dark mode).
+ *
+ * Values are space-separated sRGB channels so tailwind.config.js can wrap them as
+ * `rgb(var(--token) / <alpha-value>)` and keep Tailwind opacity modifiers (e.g.
+ * `bg-neutral-0/95`) working. The `:root` block is the light theme; the
+ * `@media (prefers-color-scheme: dark)` block overrides the same variables for dark.
+ * Because only the values change (not the token names), every className in the app flips
+ * automatically — no per-screen `dark:` edits required. NativeWind maps this media query
+ * onto the device color scheme (React Native `useColorScheme` / `Appearance`).
+ *
+ * Contrast: `--color-text-muted` / `--color-neutral-500` were darkened from the original
+ * #6B7280 (which measured 4.39:1 on the #F3F4F6 background — below WCAG AA) to #626B78
+ * (~4.9:1). Their dark-mode value #9CA3AF measures ~7:1 on the dark background.
+ */
+@layer base {
+  :root {
+    --color-primary: 15 118 110; /* #0F766E brand teal */
+    --color-primary-50: 236 253 245; /* #ECFDF5 */
+    --color-primary-100: 204 251 241; /* #CCFBF1 */
+    --color-primary-900: 6 95 70; /* #065F46 */
+
+    --color-neutral-0: 255 255 255; /* #FFFFFF surface */
+    --color-neutral-50: 249 250 251; /* #F9FAFB */
+    --color-neutral-100: 243 244 246; /* #F3F4F6 */
+    --color-neutral-200: 229 231 235; /* #E5E7EB */
+    --color-neutral-400: 156 163 175; /* #9CA3AF */
+    --color-neutral-500: 98 107 120; /* #626B78 muted (AA-tuned) */
+    --color-neutral-700: 55 65 81; /* #374151 */
+    --color-neutral-900: 17 24 39; /* #111827 body text */
+
+    --color-success: 22 163 74; /* #16A34A */
+    --color-success-bg: 220 252 231; /* #DCFCE7 */
+    --color-danger: 220 38 38; /* #DC2626 */
+    --color-danger-bg: 254 226 226; /* #FEE2E2 */
+    --color-warning: 217 119 6; /* #D97706 */
+    --color-warning-bg: 254 243 199; /* #FEF3C7 */
+    --color-info: 29 78 216; /* #1D4ED8 */
+    --color-accent: 109 40 217; /* #6D28D9 */
+
+    --color-background: 243 244 246; /* #F3F4F6 */
+    --color-border: 229 231 235; /* #E5E7EB */
+    --color-text: 17 24 39; /* #111827 */
+    --color-text-muted: 98 107 120; /* #626B78 (AA-tuned) */
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      /* Brand teal stays dark enough for white button text; its tints/900 flip. */
+      --color-primary: 15 118 110; /* #0F766E */
+      --color-primary-50: 19 78 74; /* #134E4A deep teal surface */
+      --color-primary-100: 17 94 89; /* #115E59 */
+      --color-primary-900: 153 246 228; /* #99F6E4 light teal text */
+
+      /* Neutral scale inverts: surfaces darken, body/secondary/muted text lighten. */
+      --color-neutral-0: 31 41 55; /* #1F2937 elevated surface */
+      --color-neutral-50: 39 50 68; /* #273244 */
+      --color-neutral-100: 17 24 39; /* #111827 */
+      --color-neutral-200: 55 65 81; /* #374151 chips/dividers */
+      --color-neutral-400: 107 114 128; /* #6B7280 */
+      --color-neutral-500: 156 163 175; /* #9CA3AF muted text */
+      --color-neutral-700: 209 213 219; /* #D1D5DB secondary text */
+      --color-neutral-900: 249 250 251; /* #F9FAFB body text */
+
+      /* Saturated colors stay solid (white text pairs on buttons/banners/dots); their
+         tints go dark so tinted chips are not glaring, paired with dark: light text. */
+      --color-success: 22 163 74; /* #16A34A */
+      --color-success-bg: 20 83 45; /* #14532D */
+      --color-danger: 220 38 38; /* #DC2626 */
+      --color-danger-bg: 127 29 29; /* #7F1D1D */
+      --color-warning: 217 119 6; /* #D97706 */
+      --color-warning-bg: 120 53 15; /* #78350F */
+      --color-info: 96 165 250; /* #60A5FA */
+      --color-accent: 196 181 253; /* #C4B5FD */
+
+      --color-background: 17 24 39; /* #111827 */
+      --color-border: 55 65 81; /* #374151 */
+      --color-text: 249 250 251; /* #F9FAFB */
+      --color-text-muted: 156 163 175; /* #9CA3AF */
+    }
+  }
+}

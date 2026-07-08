@@ -268,7 +268,7 @@ export function ReviewFormScreen({
                   onPress={(): void => {
                     setRating(starValue);
                   }}
-                  className="p-1 active:opacity-75"
+                  className="min-h-11 min-w-11 items-center justify-center p-1 active:opacity-75"
                   testID={`review-form-star-${starValue}`}
                 >
                   <Text className={`text-3xl ${isFilled ? 'text-warning' : 'text-neutral-400'}`}>
@@ -306,14 +306,15 @@ export function ReviewFormScreen({
             >
               <Image source={{ uri: photo.localUri }} className="h-14 w-14 rounded-[8px]" />
               <Pressable
+                accessibilityLabel={t('reviews.form.removePhoto')}
                 accessibilityRole="button"
                 onPress={(): void => {
                   handleRemovePhoto(photoIndex);
                 }}
-                className="rounded-full bg-danger-bg px-3.5 py-[7px] active:opacity-75"
+                className="min-h-11 items-center justify-center rounded-full bg-danger-bg px-3.5 py-[7px] active:opacity-75"
                 testID={`review-form-remove-photo-${photoIndex}`}
               >
-                <Text className="text-[13px] font-bold text-danger">
+                <Text className="text-[13px] font-bold text-danger dark:text-danger-100">
                   {t('reviews.form.removePhoto')}
                 </Text>
               </Pressable>

@@ -183,7 +183,7 @@ export function VehicleSetupScreen({ api }: VehicleSetupScreenProps): JSX.Elemen
                 >
                   <Text
                     className={`text-[13px] font-semibold ${
-                      selected ? 'text-neutral-0' : 'text-neutral-700'
+                      selected ? 'text-white' : 'text-neutral-700'
                     }`}
                   >
                     {t(`onboarding.vehicle.connectorTypes.${option}`)}

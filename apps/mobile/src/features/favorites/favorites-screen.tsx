@@ -105,14 +105,15 @@ export function FavoritesScreen({
                   {resolveStationStatusLabel(favorite.station.status, t)}
                 </Text>
                 <Pressable
+                  accessibilityLabel={t('favorites.actions.remove')}
                   accessibilityRole="button"
                   onPress={(): void => {
                     void handleRemoveFavorite(favorite.stationId);
                   }}
-                  className="mt-3 self-start rounded-full bg-danger-bg px-3 py-[7px] active:opacity-75"
+                  className="mt-3 min-h-11 items-center justify-center self-start rounded-full bg-danger-bg px-3 py-[7px] active:opacity-75"
                   testID={`favorite-remove-${favorite.stationId}`}
                 >
-                  <Text className="text-xs font-bold text-danger">
+                  <Text className="text-xs font-bold text-danger dark:text-danger-100">
                     {t('favorites.actions.remove')}
                   </Text>
                 </Pressable>

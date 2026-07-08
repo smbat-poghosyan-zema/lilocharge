@@ -295,7 +295,7 @@ export function ActiveSessionScreen({
           variant="danger"
         >
           {isStopping ? <ActivityIndicator color={NEUTRAL_0} /> : null}
-          <Text className="text-[15px] font-bold text-neutral-0">
+          <Text className="text-[15px] font-bold text-white">
             {isStopping ? t('sessions.active.stopping') : t('sessions.active.stop')}
           </Text>
         </Button>

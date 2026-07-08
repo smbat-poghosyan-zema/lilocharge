@@ -14,11 +14,14 @@ interface StatusBadgeProps {
   readonly className?: string;
 }
 
+// In dark mode the tint backgrounds (`*-bg`, `primary-100`) flip to deep shades, so the
+// badge text is lifted to a light shade (`dark:text-*-100`, and `text-primary-900` which
+// is light in dark) to stay legible. The `neutral` pair flips automatically via the scale.
 const CLASS_BY_VARIANT: Record<StatusBadgeVariant, string> = {
-  primary: 'bg-primary-100 text-primary',
-  success: 'bg-success-bg text-success',
-  danger: 'bg-danger-bg text-danger',
-  warning: 'bg-warning-bg text-warning',
+  primary: 'bg-primary-100 text-primary-900',
+  success: 'bg-success-bg text-success dark:text-success-100',
+  danger: 'bg-danger-bg text-danger dark:text-danger-100',
+  warning: 'bg-warning-bg text-warning dark:text-warning-100',
   neutral: 'bg-neutral-200 text-neutral-700',
 };
 

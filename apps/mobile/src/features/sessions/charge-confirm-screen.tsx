@@ -250,7 +250,7 @@ export function ChargeConfirmScreen({
           testID="confirm-start"
         >
           {isSubmitting ? <ActivityIndicator color={NEUTRAL_0} /> : null}
-          <Text className="text-[15px] font-bold text-neutral-0">
+          <Text className="text-[15px] font-bold text-white">
             {isSubmitting ? t('sessions.confirm.starting') : t('sessions.confirm.start')}
           </Text>
         </Button>
